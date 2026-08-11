@@ -162,6 +162,27 @@ const ARTS: Record<string, Art> = {
   gold_ingot: ingot("#f5d442"),
   rotten_flesh: blob("#6b7d3a"),
   porkchop: blob("#e88a94"),
+  bone: gem("#e8e8d8"),
+  arrow: {
+    rows: [
+      "........",
+      "......F.",
+      ".....S..",
+      "....S...",
+      "...S....",
+      "..S.....",
+      ".H......",
+      "........",
+    ],
+    palette: { S: "#8a6234", H: "#c8c8cc", F: "#e8e8e8" },
+  },
+  gunpowder: blob("#5a5a5e"),
+  leather: blob("#8a5a30"),
+  beef: blob("#b04040"),
+  wool: blob("#ececec"),
+  chicken: blob("#e8c890"),
+  feather: gem("#f0f0ec"),
+  gold_nugget: gem("#f5d442"),
   flint: gem("#3c3c40"),
   backpack: {
     rows: [

@@ -99,6 +99,10 @@ describe("combat", () => {
       sim.tick([{ player, command: { type: "attack", entity: pig.id } }]);
     }
     expect(sim.entities.has(pig.id)).toBe(false);
+    // Step onto the dropped loot (knockback may have pushed the pig away).
+    const drop = [...sim.entities.values()].find((e) => e.kind === "item");
+    expect(drop).toBeDefined();
+    state.x = drop!.x;
     settle(sim, 40);
     expect(countInInventory(state.inventory, "porkchop")).toBeGreaterThanOrEqual(1);
   });

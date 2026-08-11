@@ -502,14 +502,47 @@ export class Renderer {
       return container;
     }
     const gfx = new Graphics();
-    if (kind === "zombie") {
-      gfx.rect(0, 0, 0.6 * TILE_PX, 1.8 * TILE_PX).fill({ color: 0x4e9e4e });
-      gfx.rect(0, 0, 0.6 * TILE_PX, 0.45 * TILE_PX).fill({ color: 0x3c7a3c });
-    } else if (kind === "pig") {
-      gfx.rect(0, 0, 0.9 * TILE_PX, 0.9 * TILE_PX).fill({ color: 0xefa4a8 });
-      gfx.rect(0.65 * TILE_PX, 0.25 * TILE_PX, 0.25 * TILE_PX, 0.2 * TILE_PX).fill({ color: 0xd98488 });
-    } else {
-      gfx.rect(0, 0, TILE_PX, TILE_PX).fill({ color: 0xff00ff });
+    const humanoid = (body: number, head: number): void => {
+      gfx.rect(0, 0, 0.6 * TILE_PX, 1.8 * TILE_PX).fill({ color: body });
+      gfx.rect(0, 0, 0.6 * TILE_PX, 0.45 * TILE_PX).fill({ color: head });
+    };
+    const animal = (w: number, h: number, body: number, snout: number): void => {
+      gfx.rect(0, 0, w * TILE_PX, h * TILE_PX).fill({ color: body });
+      gfx.rect((w - 0.25) * TILE_PX, 0.25 * TILE_PX, 0.25 * TILE_PX, 0.2 * TILE_PX).fill({ color: snout });
+    };
+    switch (kind) {
+      case "zombie":
+        humanoid(0x4e9e4e, 0x3c7a3c);
+        break;
+      case "skeleton":
+        humanoid(0xd8d8d0, 0xb8b8b0);
+        break;
+      case "zombified_piglin":
+        humanoid(0xd88a8a, 0x8a9e4e);
+        break;
+      case "creeper":
+        gfx.rect(0, 0, 0.6 * TILE_PX, 1.5 * TILE_PX).fill({ color: 0x58c25a });
+        gfx.rect(0.1 * TILE_PX, 0.15 * TILE_PX, 0.12 * TILE_PX, 0.15 * TILE_PX).fill({ color: 0x1a1a1a });
+        gfx.rect(0.38 * TILE_PX, 0.15 * TILE_PX, 0.12 * TILE_PX, 0.15 * TILE_PX).fill({ color: 0x1a1a1a });
+        gfx.rect(0.22 * TILE_PX, 0.3 * TILE_PX, 0.16 * TILE_PX, 0.25 * TILE_PX).fill({ color: 0x1a1a1a });
+        break;
+      case "pig":
+        animal(0.9, 0.9, 0xefa4a8, 0xd98488);
+        break;
+      case "cow":
+        animal(0.9, 1.2, 0x6b4a34, 0xe8e8e0);
+        break;
+      case "sheep":
+        animal(0.9, 1.1, 0xe8e8e2, 0xd0b8a8);
+        break;
+      case "chicken":
+        animal(0.5, 0.6, 0xf0f0e8, 0xe8a030);
+        break;
+      case "arrow":
+        gfx.rect(0, 0, 0.3 * TILE_PX, 0.12 * TILE_PX).fill({ color: 0x9a9a9a });
+        break;
+      default:
+        gfx.rect(0, 0, TILE_PX, TILE_PX).fill({ color: 0xff00ff });
     }
     return gfx;
   }
