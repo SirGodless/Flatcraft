@@ -15,6 +15,7 @@ import {
   type SlotRef,
 } from "@flatcraft/sim";
 import { Camera } from "./camera.js";
+import { FogOfWar } from "./fog.js";
 import { itemTexture } from "./icons.js";
 import { createBlockTextures, TILE_PX } from "./textures.js";
 import {
@@ -114,6 +115,10 @@ export class Renderer {
   private readonly playerDims = new Map<PlayerId, string>();
   /** Called when the local player switches dimension (world reset). */
   onDimensionChanged: (() => void) | null = null;
+  /** Fog of war (disable via ?nofog for debugging/screenshots). */
+  fogEnabled = true;
+  private fog!: FogOfWar;
+  private fogUpdatedAt = 0;
 
   async init(container: HTMLElement): Promise<void> {
     await this.app.init({ resizeTo: container, background: "#87b9e7" });
@@ -124,6 +129,7 @@ export class Renderer {
     this.worldView = new WorldView(this.app.renderer, blockTextures);
     this.worldContainer.addChild(this.worldView.container);
     this.app.stage.addChild(this.worldContainer);
+    this.fog = new FogOfWar(blockTextures);
 
     // Night darkness: a full-screen veil above the world, below the UI.
     this.darkness = new Graphics();
@@ -710,6 +716,18 @@ export class Renderer {
     }
 
     this.camera.apply(this.worldContainer, this.screenWidth, this.screenHeight);
+
+    // Fog of war: recompute at a low rate, keep it above all world content.
+    if (this.fogEnabled && localX !== null && localY !== null) {
+      this.fog.container.visible = true;
+      this.worldContainer.addChild(this.fog.container); // re-add = move to top
+      if (now - this.fogUpdatedAt > 120) {
+        this.fogUpdatedAt = now;
+        this.fog.update(localX, localY - 0.9, this.worldView, this.effects["miner"] !== undefined);
+      }
+    } else {
+      this.fog.container.visible = false;
+    }
 
     this.hotbar.container.position.set(
       (this.screenWidth - this.hotbar.width) / 2,

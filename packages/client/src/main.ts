@@ -1,5 +1,5 @@
 import { GameServer, createLoopbackPair } from "@flatcraft/server";
-import { buildPortal, chunkKey, findSpawnX, Simulation, surfaceHeight } from "@flatcraft/sim";
+import { addToInventory, buildPortal, chunkKey, findSpawnX, Simulation, surfaceHeight } from "@flatcraft/sim";
 import { attachInput } from "./input/input.js";
 import { Renderer } from "./render/renderer.js";
 import { deleteWorld, loadWorld, saveWorld } from "./save.js";
@@ -51,6 +51,7 @@ async function start(): Promise<void> {
 
   const renderer = new Renderer();
   renderer.localPlayerId = playerId;
+  renderer.fogEnabled = !params.has("nofog");
   await renderer.init(document.getElementById("app")!);
 
   connection.onEvents((events) => {
@@ -105,6 +106,20 @@ async function start(): Promise<void> {
   });
 
   connection.send({ type: "join", name: "Player" });
+
+  // Debug: ?give=item:count,item:count seeds the inventory (singleplayer).
+  const give = params.get("give");
+  if (give) {
+    setTimeout(() => {
+      const p = server.simulation.players.get(playerId);
+      if (!p) return;
+      for (const part of give.split(",")) {
+        const [item, count] = part.split(":");
+        if (item) addToInventory(p.inventory, item, Number(count ?? "1"));
+      }
+      connection.send({ type: "select_slot", index: 0 }); // force a sync
+    }, 500);
+  }
 
   // Chunks already asked for; in multiplayer this would need re-request on
   // timeout, in singleplayer the loopback server always answers.
