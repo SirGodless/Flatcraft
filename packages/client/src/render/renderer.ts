@@ -117,8 +117,8 @@ export class Renderer {
   private readonly playerDims = new Map<PlayerId, string>();
   /** Called when the local player switches dimension (world reset). */
   onDimensionChanged: (() => void) | null = null;
-  /** Fog of war (disable via ?nofog for debugging/screenshots). */
-  fogEnabled = true;
+  /** Fog of war - currently off by default, enabled via ?fog. */
+  fogEnabled = false;
   private fog!: FogOfWar;
   private fogUpdatedAt = 0;
 

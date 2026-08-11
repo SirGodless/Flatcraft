@@ -61,7 +61,8 @@ async function start(): Promise<void> {
 
   const renderer = new Renderer();
   renderer.localPlayerId = playerId;
-  renderer.fogEnabled = !params.has("nofog");
+  // Fog of war is fully built but disabled for now; ?fog turns it on.
+  renderer.fogEnabled = params.has("fog");
   await renderer.init(document.getElementById("app")!);
   const explored = params.has("fresh") ? null : await loadExplored();
   if (explored) renderer.importFogMemory(explored);
