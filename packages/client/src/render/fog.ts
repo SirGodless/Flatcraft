@@ -1,12 +1,15 @@
-import { Container, Sprite, Texture } from "pixi.js";
+import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import { blockDef, BlockId, CHUNK_HEIGHT, CHUNK_WIDTH } from "@flatcraft/sim";
 import { TILE_PX } from "./textures.js";
 import type { WorldView } from "./worldView.js";
 
 /**
- * Fog of war: simple line-of-sight visibility around the player, capped
- * at FOG_RADIUS tiles. Computed as a BFS through non-solid tiles (solid
- * tiles at the boundary stay visible, so cave walls read correctly).
+ * Fog of war: full 360-degree line-of-sight vision around the player,
+ * capped at FOG_RADIUS tiles. A tile is visible when the straight ray
+ * from the player's eye to it crosses no solid tile - so the whole
+ * panorama opens up (it's 2D, the player sees in every direction), while
+ * cave walls still occlude what lies behind them. The first solid tile a
+ * ray hits stays visible, so wall faces and ores in them read correctly.
  * Purely cosmetic and client-side.
  *
  * Tiles seen once are remembered per dimension: explored-but-not-visible
@@ -42,9 +45,12 @@ export class FogOfWar {
   private readonly sprite: Sprite;
   private readonly oreLayer = new Container();
   private readonly dist = new Float64Array(SIZE * SIZE);
-  private readonly queue = new Int32Array(SIZE * SIZE * 2);
+  /** Solidity of the window's tiles, sampled once per update. */
+  private readonly solid = new Uint8Array(SIZE * SIZE);
   /** Explored tiles per chunk, keyed "dim:cx,cy" (1 byte per tile). */
   private explored = new Map<string, Uint8Array>();
+
+  private readonly border = new Graphics();
 
   constructor(private readonly blockTextures: Map<BlockId, Texture>) {
     this.canvas.width = SIZE;
@@ -54,6 +60,17 @@ export class FogOfWar {
     // 1 canvas pixel = 1 tile; linear filtering gives soft fog edges.
     this.sprite.scale.set(TILE_PX);
     this.container.addChild(this.sprite);
+    // Full veil outside the fog window, so zooming far out never shows
+    // uncovered world beyond the canvas edges.
+    const w = SIZE * TILE_PX;
+    const b = 20000;
+    this.border
+      .rect(-b, -b, w + 2 * b, b)
+      .rect(-b, w, w + 2 * b, b)
+      .rect(-b, 0, b, w)
+      .rect(w, 0, b, w)
+      .fill({ color: 0x04040a, alpha: UNSEEN_ALPHA });
+    this.container.addChild(this.border);
     this.container.addChild(this.oreLayer);
   }
 
@@ -85,36 +102,50 @@ export class FogOfWar {
     return chunk !== undefined && chunk[(wy - cy * CHUNK_HEIGHT) * CHUNK_WIDTH + (wx - cx * CHUNK_WIDTH)] === 1;
   }
 
-  /** Recompute visibility around the player (feet-center tile coords). */
+  /** Recompute visibility around the player (eye position, tile coords). */
   update(px: number, py: number, world: WorldView, minerActive: boolean, dim: string): void {
     const cx = Math.floor(px);
     const cy = Math.floor(py);
     const dist = this.dist;
     dist.fill(Infinity);
 
-    // BFS from the player through passable tiles.
-    let head = 0;
-    let tail = 0;
-    const push = (gx: number, gy: number, d: number): void => {
-      dist[gy * SIZE + gx] = d;
-      this.queue[tail * 2] = gx;
-      this.queue[tail * 2 + 1] = gy;
-      tail++;
-    };
-    push(FOG_RADIUS, FOG_RADIUS, 0);
-    while (head < tail) {
-      const gx = this.queue[head * 2]!;
-      const gy = this.queue[head * 2 + 1]!;
-      head++;
-      const d = dist[gy * SIZE + gx]!;
-      if (d >= FOG_RADIUS) continue;
-      const block = world.getBlock(cx - FOG_RADIUS + gx, cy - FOG_RADIUS + gy);
-      // Solid tiles are visible but light doesn't pass through them.
-      if (blockDef(block).solid && !(gx === FOG_RADIUS && gy === FOG_RADIUS)) continue;
-      if (gx > 0 && dist[gy * SIZE + gx - 1] === Infinity) push(gx - 1, gy, d + 1);
-      if (gx < SIZE - 1 && dist[gy * SIZE + gx + 1] === Infinity) push(gx + 1, gy, d + 1);
-      if (gy > 0 && dist[(gy - 1) * SIZE + gx] === Infinity) push(gx, gy - 1, d + 1);
-      if (gy < SIZE - 1 && dist[(gy + 1) * SIZE + gx] === Infinity) push(gx, gy + 1, d + 1);
+    // Sample the window's solidity once, so the rays below only touch a
+    // flat array instead of doing a map lookup per step.
+    const solid = this.solid;
+    for (let gy = 0; gy < SIZE; gy++) {
+      for (let gx = 0; gx < SIZE; gx++) {
+        const block = world.getBlock(cx - FOG_RADIUS + gx, cy - FOG_RADIUS + gy);
+        solid[gy * SIZE + gx] = blockDef(block).solid ? 1 : 0;
+      }
+    }
+
+    // 360-degree vision: march a straight ray from the player's eye to
+    // every tile in the radius. The tile is visible unless a solid tile
+    // lies strictly between - the first solid tile a ray reaches is
+    // itself visible (wall faces, ores in them).
+    const ox = px - (cx - FOG_RADIUS); // eye position in window coords
+    const oy = py - (cy - FOG_RADIUS);
+    const STEP = 0.3;
+    for (let gy = 0; gy < SIZE; gy++) {
+      for (let gx = 0; gx < SIZE; gx++) {
+        const dx = gx + 0.5 - ox;
+        const dy = gy + 0.5 - oy;
+        const d = Math.hypot(dx, dy);
+        if (d > FOG_RADIUS) continue;
+        let visible = true;
+        const steps = Math.ceil(d / STEP);
+        for (let s = 1; s < steps; s++) {
+          const t = (s * STEP) / d;
+          const sx = Math.floor(ox + dx * t);
+          const sy = Math.floor(oy + dy * t);
+          if (sx === gx && sy === gy) break; // reached the target cell
+          if (solid[sy * SIZE + sx] === 1) {
+            visible = false;
+            break;
+          }
+        }
+        if (visible) dist[gy * SIZE + gx] = d;
+      }
     }
 
     // Paint the veil: never seen = near-black, explored = dimmed,
@@ -142,6 +173,7 @@ export class FogOfWar {
     }
     this.texture.source.update();
     this.sprite.position.set((cx - FOG_RADIUS) * TILE_PX, (cy - FOG_RADIUS) * TILE_PX);
+    this.border.position.copyFrom(this.sprite.position);
 
     // Miner potion: ores glow through the fog.
     this.oreLayer.removeChildren().forEach((c) => c.destroy());
