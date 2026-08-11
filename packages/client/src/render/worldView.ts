@@ -7,6 +7,7 @@ export const CHUNK_PX_H = CHUNK_HEIGHT * TILE_PX;
 
 interface ChunkView {
   tiles: Uint16Array;
+  walls: Uint16Array;
   sprite: Sprite;
   target: RenderTexture;
 }
@@ -50,7 +51,7 @@ export class WorldView {
     return (view.tiles[ly * CHUNK_WIDTH + lx] ?? 0) as BlockId;
   }
 
-  setChunk(cx: number, cy: number, tiles: readonly number[]): void {
+  setChunk(cx: number, cy: number, tiles: readonly number[], walls?: readonly number[]): void {
     const key = chunkKey(cx, cy);
     let view = this.chunks.get(key);
     if (!view) {
@@ -59,10 +60,16 @@ export class WorldView {
       const sprite = new Sprite(target);
       sprite.position.set(cx * CHUNK_PX_W, cy * CHUNK_PX_H);
       this.container.addChild(sprite);
-      view = { tiles: new Uint16Array(tiles), sprite, target };
+      view = {
+        tiles: new Uint16Array(tiles),
+        walls: walls ? new Uint16Array(walls) : new Uint16Array(tiles.length),
+        sprite,
+        target,
+      };
       this.chunks.set(key, view);
     } else {
       view.tiles.set(tiles);
+      if (walls) view.walls.set(walls);
     }
     this.bake(view);
   }
@@ -80,6 +87,19 @@ export class WorldView {
 
   private bake(view: ChunkView): void {
     const scratch = new Container();
+    // Background walls first, darkened, so caves show earth instead of sky.
+    for (let ly = 0; ly < CHUNK_HEIGHT; ly++) {
+      for (let lx = 0; lx < CHUNK_WIDTH; lx++) {
+        const wall = (view.walls[ly * CHUNK_WIDTH + lx] ?? 0) as BlockId;
+        if (wall === BlockId.Air) continue;
+        const texture = this.blockTextures.get(wall);
+        if (!texture) continue;
+        const sprite = new Sprite(texture);
+        sprite.tint = 0x5a5a66;
+        sprite.position.set(lx * TILE_PX, ly * TILE_PX);
+        scratch.addChild(sprite);
+      }
+    }
     for (let ly = 0; ly < CHUNK_HEIGHT; ly++) {
       for (let lx = 0; lx < CHUNK_WIDTH; lx++) {
         const id = (view.tiles[ly * CHUNK_WIDTH + lx] ?? 0) as BlockId;

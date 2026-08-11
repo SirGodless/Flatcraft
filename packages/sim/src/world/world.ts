@@ -70,17 +70,20 @@ export class World {
   }
 
   /** All generated chunks as plain data (for saves). */
-  serializeChunks(): Array<{ cx: number; cy: number; tiles: number[] }> {
+  serializeChunks(): Array<{ cx: number; cy: number; tiles: number[]; walls?: number[] }> {
     return [...this.chunks.values()].map((c) => ({
       cx: c.cx,
       cy: c.cy,
       tiles: Array.from(c.tiles),
+      walls: Array.from(c.walls),
     }));
   }
 
-  loadChunks(data: Array<{ cx: number; cy: number; tiles: number[] }>): void {
+  loadChunks(data: Array<{ cx: number; cy: number; tiles: number[]; walls?: number[] }>): void {
     for (const c of data) {
-      this.setChunk(new Chunk(c.cx, c.cy, new Uint16Array(c.tiles)));
+      this.setChunk(
+        new Chunk(c.cx, c.cy, new Uint16Array(c.tiles), c.walls ? new Uint16Array(c.walls) : undefined),
+      );
     }
   }
 }

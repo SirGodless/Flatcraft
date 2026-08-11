@@ -132,3 +132,25 @@ describe("world generation", () => {
     expect(snowChecked).toBe(true);
   });
 });
+
+describe("background walls", () => {
+  it("caves have earth walls behind them, sky has none", () => {
+    const world = new World(SEED);
+    let cavesWithWalls = 0;
+    for (let x = 0; x < 64; x++) {
+      const surface = surfaceHeight(SEED, x);
+      const chunkAbove = world.ensureChunk(Math.floor(x / 32), Math.floor((surface - 3) / 32));
+      const lx = x - Math.floor(x / 32) * 32;
+      const lyAbove = surface - 3 - Math.floor((surface - 3) / 32) * 32;
+      expect(chunkAbove.getWall(lx, lyAbove)).toBe(BlockId.Air); // sky
+      for (let y = surface + 8; y < 200; y++) {
+        const chunk = world.ensureChunk(Math.floor(x / 32), Math.floor(y / 32));
+        const ly = y - Math.floor(y / 32) * 32;
+        if (chunk.getBlock(lx, ly) === BlockId.Air && chunk.getWall(lx, ly) !== BlockId.Air) {
+          cavesWithWalls++;
+        }
+      }
+    }
+    expect(cavesWithWalls).toBeGreaterThan(50);
+  });
+});

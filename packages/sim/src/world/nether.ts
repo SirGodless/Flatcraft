@@ -45,6 +45,9 @@ export function generateNetherChunk(seed: number, cx: number, cy: number): Chunk
         }
       }
       chunk.setBlock(lx, ly, block);
+      if (y > NETHER_CEILING && y < NETHER_FLOOR) {
+        chunk.setWall(lx, ly, BlockId.Netherrack);
+      }
     }
   }
   return chunk;

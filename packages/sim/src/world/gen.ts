@@ -261,7 +261,19 @@ export function generateChunk(seed: number, cx: number, cy: number): Chunk {
   for (let lx = 0; lx < CHUNK_WIDTH; lx++) {
     const col = cols[lx]!;
     for (let ly = 0; ly < CHUNK_HEIGHT; ly++) {
-      chunk.setBlock(lx, ly, terrainBlock(cy * CHUNK_HEIGHT + ly, col));
+      const y = cy * CHUNK_HEIGHT + ly;
+      chunk.setBlock(lx, ly, terrainBlock(y, col));
+      // Background walls: caves show earth instead of sky.
+      if (y >= col.surface && y < BEDROCK_Y) {
+        const depth = y - col.surface;
+        const wall =
+          col.biome === Biome.Desert && depth <= 7
+            ? BlockId.Sandstone
+            : depth <= DIRT_DEPTH && col.biome !== Biome.Mountains
+              ? BlockId.Dirt
+              : BlockId.Stone;
+        chunk.setWall(lx, ly, wall);
+      }
     }
   }
 

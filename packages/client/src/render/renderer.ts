@@ -398,7 +398,7 @@ export class Renderer {
       }
       case "chunk_data":
         if (event.dim === this.localDim) {
-          this.worldView.setChunk(event.cx, event.cy, event.tiles);
+          this.worldView.setChunk(event.cx, event.cy, event.tiles, event.walls);
         }
         break;
       case "inventory_changed":

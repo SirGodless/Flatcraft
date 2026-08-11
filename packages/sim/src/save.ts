@@ -17,8 +17,8 @@ export interface SimSave {
   nextPlayerId: number;
   nextEntityId: number;
   worlds: {
-    overworld: Array<{ cx: number; cy: number; tiles: number[] }>;
-    nether: Array<{ cx: number; cy: number; tiles: number[] }>;
+    overworld: Array<{ cx: number; cy: number; tiles: number[]; walls?: number[] }>;
+    nether: Array<{ cx: number; cy: number; tiles: number[]; walls?: number[] }>;
   };
   furnaces: FurnaceState[];
   chests?: Array<{ dimension: Dimension; x: number; y: number; slots: (ItemStack | null)[] }>;

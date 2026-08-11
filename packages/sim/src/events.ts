@@ -27,7 +27,7 @@ export type SimEvent =
   | { type: "block_changed"; dim: Dimension; x: number; y: number; block: BlockId }
   /** Mining progress for crack overlays; total 0 clears the overlay. */
   | { type: "mining_progress"; player: PlayerId; x: number; y: number; progress: number; total: number }
-  | { type: "chunk_data"; dim: Dimension; cx: number; cy: number; tiles: number[] }
+  | { type: "chunk_data"; dim: Dimension; cx: number; cy: number; tiles: number[]; walls: number[] }
   /** Full inventory sync for its owner (small enough to send whole),
    * including the cursor stack and crafting grid. */
   | {

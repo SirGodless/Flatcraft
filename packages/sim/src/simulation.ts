@@ -1009,7 +1009,14 @@ export class Simulation {
           break;
         }
         const chunk = this.worldOf(p.dimension).ensureChunk(cx, cy);
-        reply({ type: "chunk_data", dim: p.dimension, cx, cy, tiles: Array.from(chunk.tiles) });
+        reply({
+          type: "chunk_data",
+          dim: p.dimension,
+          cx,
+          cy,
+          tiles: Array.from(chunk.tiles),
+          walls: Array.from(chunk.walls),
+        });
         break;
       }
       case "start_mining": {
