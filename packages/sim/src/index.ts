@@ -6,6 +6,7 @@ export * from "./crafting/match.js";
 export * from "./crafting/recipe.js";
 export * from "./furnace.js";
 export * from "./slots.js";
+export * from "./time.js";
 export * from "./data/recipes/index.js";
 export * from "./events.js";
 export * from "./inventory.js";

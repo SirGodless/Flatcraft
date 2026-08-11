@@ -13,6 +13,9 @@ export type SimEvent =
   | { type: "player_left"; player: PlayerId }
   | { type: "player_moved"; player: PlayerId; x: number; y: number }
   | { type: "player_health"; player: PlayerId; health: number; max: number }
+  /** Time-of-day sync, sent on join and periodically (clients advance it
+   * locally between updates). */
+  | { type: "time_changed"; time: number }
   /** stack is present for item entities so clients can render the icon. */
   | { type: "entity_spawned"; id: EntityId; kind: string; x: number; y: number; stack?: ItemStack }
   | { type: "entity_moved"; id: EntityId; x: number; y: number }

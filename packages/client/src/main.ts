@@ -16,6 +16,13 @@ const CHUNK_REQUESTS_PER_FRAME = 12;
 async function start(): Promise<void> {
   const server = new GameServer(/* seed */ 1337);
 
+  // Debug helpers for the embedded server (singleplayer only), e.g. ?time=18000
+  const params = new URLSearchParams(location.search);
+  const debugTime = params.get("time");
+  if (debugTime !== null) {
+    server.simulation.timeOfDay = Number(debugTime);
+  }
+
   const playerId = server.simulation.allocatePlayerId();
   const { server: serverEnd, client: connection } = createLoopbackPair(playerId);
   server.addConnection(serverEnd);

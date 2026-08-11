@@ -56,6 +56,7 @@ import {
   WALK_SPEED,
 } from "./physics.js";
 import { clickStack } from "./slots.js";
+import { DAY_LENGTH, daylightFactor, isNight } from "./time.js";
 import { blockDef, blockDrops, BlockId } from "./world/block.js";
 import { Biome, biomeAt, findSpawnX, surfaceHeight } from "./world/gen.js";
 import { World } from "./world/world.js";
@@ -111,6 +112,8 @@ export class Simulation {
   readonly furnaces = new Map<string, FurnaceState>();
   readonly entities = new Map<EntityId, Entity>();
   tickCount = 0;
+  /** Time of day in ticks, 0..DAY_LENGTH (writable, e.g. for tests). */
+  timeOfDay = 0;
 
   private readonly rng: Rng;
   private nextPlayerId: PlayerId = 1;
@@ -142,6 +145,10 @@ export class Simulation {
     this.stepPlayers(out);
     this.stepSpawning(out);
     this.tickCount++;
+    this.timeOfDay = (this.timeOfDay + 1) % DAY_LENGTH;
+    if (this.tickCount % 100 === 0) {
+      out.push({ event: { type: "time_changed", time: this.timeOfDay } });
+    }
     return out;
   }
 
@@ -226,6 +233,15 @@ export class Simulation {
 
         let dir: -1 | 0 | 1 = 0;
         if (entity.kind === "zombie") {
+          // Zombies burn in daylight when exposed on the surface.
+          if (
+            this.tickCount % 40 === 0 &&
+            daylightFactor(this.timeOfDay) > 0.5 &&
+            entity.y <= surfaceHeight(this.world.seed, Math.floor(entity.x))
+          ) {
+            this.hurtMob(entity, 1, out);
+            if (!this.entities.has(entity.id)) continue;
+          }
           const target = this.nearestPlayer(entity.x, entity.y);
           if (target && Math.abs(target.p.x - entity.x) <= ZOMBIE_FOLLOW_RANGE && target.dist <= ZOMBIE_FOLLOW_RANGE * 1.5) {
             const dx = target.p.x - entity.x;
@@ -283,14 +299,24 @@ export class Simulation {
     const x = Math.floor(anchor.x) + (this.rng() < 0.5 ? -offset : offset);
     const surface = surfaceHeight(this.world.seed, x);
 
+    const night = isNight(this.timeOfDay);
     if (this.rng() < 0.5) {
-      // Pig on a grassy surface.
+      if (night) {
+        // At night, zombies rise on the surface instead of pigs.
+        const feetFree = this.world.getBlockGenerating(x, surface - 1) === BlockId.Air;
+        const headFree = this.world.getBlockGenerating(x, surface - 2) === BlockId.Air;
+        if (feetFree && headFree && blockDef(this.world.getBlockGenerating(x, surface)).solid) {
+          this.spawnMob("zombie", x + 0.5, surface, out);
+        }
+        return;
+      }
+      // Pigs only in daylight, on a grassy surface.
       if (this.world.getBlockGenerating(x, surface) !== BlockId.Grass) return;
       const biome = biomeAt(this.world.seed, x);
       if (biome !== Biome.Plains && biome !== Biome.Forest) return;
       this.spawnMob("pig", x + 0.5, surface, out);
     } else {
-      // Zombie in a cave: find an air pocket below ground.
+      // Zombie in a cave: find an air pocket below ground (any time of day).
       const yStart = surface + 6 + Math.floor(this.rng() * 40);
       for (let y = yStart; y < yStart + 12; y++) {
         const feetFree = this.world.getBlockGenerating(x, y - 1) === BlockId.Air;
@@ -302,6 +328,29 @@ export class Simulation {
         }
       }
     }
+  }
+
+  private hurtMob(entity: MobEntity, amount: number, out: OutboundEvent[], fromX?: number): void {
+    if (amount <= 0 || entity.hurtCooldown > 0) return;
+    entity.hurtCooldown = HURT_COOLDOWN_TICKS;
+    entity.health -= amount;
+    if (fromX !== undefined) {
+      entity.vx += (entity.x >= fromX ? 1 : -1) * 0.3;
+      entity.vy = Math.min(entity.vy, -0.2);
+    }
+    if (entity.health > 0) {
+      out.push({ event: { type: "entity_hurt", id: entity.id, health: entity.health } });
+      return;
+    }
+    // Death drops.
+    if (entity.kind === "zombie") {
+      const count = Math.floor(this.rng() * 3); // 0-2 rotten flesh
+      if (count > 0) this.spawnItem(entity.x, entity.y - 0.5, { item: "rotten_flesh", count }, out);
+    } else {
+      const count = 1 + Math.floor(this.rng() * 2); // 1-2 porkchops
+      this.spawnItem(entity.x, entity.y - 0.5, { item: "porkchop", count }, out);
+    }
+    this.removeEntity(entity.id, out);
   }
 
   private nearestPlayer(x: number, y: number): { p: PlayerState; dist: number } | null {
@@ -570,6 +619,7 @@ export class Simulation {
         broadcast({ type: "player_joined", player, name: state.name, x, y });
         syncInventory(state);
         reply({ type: "player_health", player, health: state.health, max: PLAYER_MAX_HEALTH });
+        reply({ type: "time_changed", time: this.timeOfDay });
         // Catch the new client up on existing entities.
         for (const entity of this.entities.values()) {
           reply({
@@ -764,26 +814,7 @@ export class Simulation {
           break;
         }
         p.attackCooldown = PLAYER_ATTACK_COOLDOWN;
-        if (entity.hurtCooldown > 0) {
-          break; // still invulnerable from the last hit
-        }
-        entity.hurtCooldown = HURT_COOLDOWN_TICKS;
-        entity.health -= attackDamage(p.inventory[p.selected] ?? null);
-        entity.vx += (entity.x >= p.x ? 1 : -1) * 0.3;
-        entity.vy = Math.min(entity.vy, -0.2);
-        if (entity.health > 0) {
-          broadcast({ type: "entity_hurt", id: entity.id, health: entity.health });
-          break;
-        }
-        // Death drops.
-        if (entity.kind === "zombie") {
-          const count = Math.floor(this.rng() * 3); // 0-2 rotten flesh
-          if (count > 0) this.spawnItem(entity.x, entity.y - 0.5, { item: "rotten_flesh", count }, out);
-        } else {
-          const count = 1 + Math.floor(this.rng() * 2); // 1-2 porkchops
-          this.spawnItem(entity.x, entity.y - 0.5, { item: "porkchop", count }, out);
-        }
-        this.removeEntity(entity.id, out);
+        this.hurtMob(entity, attackDamage(p.inventory[p.selected] ?? null), out, p.x);
         break;
       }
       case "place_block": {

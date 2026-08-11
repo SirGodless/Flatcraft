@@ -72,6 +72,7 @@ describe("combat", () => {
   it("kills a zombie with a sword, respecting invulnerability frames", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
+    sim.timeOfDay = 18000; // night, so daylight burning doesn't interfere
     const zombie = spawnZombieNear(sim, state, 2);
     state.inventory[0] = { item: "iron_sword", count: 1 }; // 6 damage
 

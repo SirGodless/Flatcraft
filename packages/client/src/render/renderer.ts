@@ -1,6 +1,7 @@
 import { Application, Container, Graphics, Sprite, Text, type Texture } from "pixi.js";
 import {
   BlockId,
+  daylightFactor,
   ENTITY_SIZES,
   PLAYER_HEIGHT,
   PLAYER_MAX_HEALTH,
@@ -83,6 +84,8 @@ export class Renderer {
   private pointerY = 0;
   private inventory: InventorySlots = [];
   private selectedSlot = 0;
+  private darkness!: Graphics;
+  private timeOfDay = 0;
 
   async init(container: HTMLElement): Promise<void> {
     await this.app.init({ resizeTo: container, background: "#87b9e7" });
@@ -93,6 +96,10 @@ export class Renderer {
     this.worldView = new WorldView(this.app.renderer, blockTextures);
     this.worldContainer.addChild(this.worldView.container);
     this.app.stage.addChild(this.worldContainer);
+
+    // Night darkness: a full-screen veil above the world, below the UI.
+    this.darkness = new Graphics();
+    this.app.stage.addChild(this.darkness);
 
     this.hud = new Text({
       text: "",
@@ -311,6 +318,9 @@ export class Renderer {
       case "furnace_changed":
         this.furnacePanel.update(event);
         break;
+      case "time_changed":
+        this.timeOfDay = event.time;
+        break;
       case "block_changed": {
         this.worldView.setBlock(event.x, event.y, event.block);
         // The furnace we were using got broken: close its screen.
@@ -418,6 +428,18 @@ export class Renderer {
 
   draw(dtMs: number): void {
     const now = performance.now();
+
+    // Advance local time between server syncs (1 tick per 50 ms) and
+    // shade the world: sky color blends toward night, plus a veil.
+    this.timeOfDay += dtMs / TICK_MS;
+    const light = daylightFactor(this.timeOfDay);
+    const lerp = (a: number, b: number): number => Math.round(a + (b - a) * light);
+    this.app.renderer.background.color =
+      (lerp(0x10, 0x87) << 16) | (lerp(0x12, 0xb9) << 8) | lerp(0x24, 0xe7);
+    this.darkness
+      .clear()
+      .rect(0, 0, this.screenWidth, this.screenHeight)
+      .fill({ color: 0x060612, alpha: (1 - light) * 0.45 });
     let localX: number | null = null;
     let localY: number | null = null;
 
