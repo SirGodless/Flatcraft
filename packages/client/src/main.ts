@@ -1,8 +1,17 @@
 import { GameServer, createLoopbackPair } from "@flatcraft/server";
-import { addToInventory, buildPortal, chunkKey, findSpawnX, Simulation, surfaceHeight } from "@flatcraft/sim";
+import {
+  addToInventory,
+  buildPortal,
+  chunkKey,
+  findSpawnX,
+  itemDef,
+  PLAYER_HEIGHT,
+  Simulation,
+  surfaceHeight,
+} from "@flatcraft/sim";
 import { attachInput } from "./input/input.js";
 import { Renderer } from "./render/renderer.js";
-import { deleteWorld, loadWorld, saveWorld } from "./save.js";
+import { deleteWorld, loadExplored, loadWorld, saveExplored, saveWorld } from "./save.js";
 
 /** Max chunk requests sent per frame, to keep event batches small. */
 const CHUNK_REQUESTS_PER_FRAME = 12;
@@ -25,6 +34,7 @@ async function start(): Promise<void> {
   const server = new GameServer(save ? Simulation.deserialize(save) : /* seed */ 1337);
   const persist = (): void => {
     void saveWorld(server.simulation.serialize());
+    void saveExplored(renderer.exportFogMemory());
   };
   setInterval(persist, 10_000);
   document.addEventListener("visibilitychange", () => {
@@ -53,6 +63,8 @@ async function start(): Promise<void> {
   renderer.localPlayerId = playerId;
   renderer.fogEnabled = !params.has("nofog");
   await renderer.init(document.getElementById("app")!);
+  const explored = params.has("fresh") ? null : await loadExplored();
+  if (explored) renderer.importFogMemory(explored);
 
   connection.onEvents((events) => {
     for (const event of events) {
@@ -84,12 +96,21 @@ async function start(): Promise<void> {
       }
       return false;
     },
-    onUseItem: () => {
-      if (renderer.selectedItem() === "backpack") {
+    onUseItem: (x, y) => {
+      const item = renderer.selectedItem();
+      if (item === "backpack") {
         renderer.openBackpack();
         return true;
       }
-      if (renderer.selectedItem()?.startsWith("potion_")) {
+      if (item === "bow") {
+        // Shoot toward the cursor, from the player's chest height.
+        const pos = renderer.localPlayerPos();
+        if (pos) {
+          connection.send({ type: "shoot", dx: x - pos.x, dy: y - (pos.y - PLAYER_HEIGHT * 0.6) });
+        }
+        return true;
+      }
+      if (item !== null && (item.startsWith("potion_") || itemDef(item)?.food !== undefined)) {
         connection.send({ type: "use_item" });
         return true;
       }

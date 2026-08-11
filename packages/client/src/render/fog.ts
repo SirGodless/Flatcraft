@@ -1,5 +1,5 @@
 import { Container, Sprite, Texture } from "pixi.js";
-import { blockDef, BlockId } from "@flatcraft/sim";
+import { blockDef, BlockId, CHUNK_HEIGHT, CHUNK_WIDTH } from "@flatcraft/sim";
 import { TILE_PX } from "./textures.js";
 import type { WorldView } from "./worldView.js";
 
@@ -9,9 +9,17 @@ import type { WorldView } from "./worldView.js";
  * tiles at the boundary stay visible, so cave walls read correctly).
  * Purely cosmetic and client-side.
  *
+ * Tiles seen once are remembered per dimension: explored-but-not-visible
+ * areas render dimmed instead of black (persisted alongside the world).
+ *
  * The active miner potion effect reveals ore tiles through the fog.
  */
 export const FOG_RADIUS = 40;
+
+/** Veil alpha over never-seen tiles. */
+const UNSEEN_ALPHA = 0.96;
+/** Veil alpha over explored tiles that are out of sight right now. */
+const EXPLORED_ALPHA = 0.8;
 
 const REVEALED_ORES = new Set<number>([
   BlockId.CoalOre,
@@ -35,6 +43,8 @@ export class FogOfWar {
   private readonly oreLayer = new Container();
   private readonly dist = new Float64Array(SIZE * SIZE);
   private readonly queue = new Int32Array(SIZE * SIZE * 2);
+  /** Explored tiles per chunk, keyed "dim:cx,cy" (1 byte per tile). */
+  private explored = new Map<string, Uint8Array>();
 
   constructor(private readonly blockTextures: Map<BlockId, Texture>) {
     this.canvas.width = SIZE;
@@ -47,8 +57,36 @@ export class FogOfWar {
     this.container.addChild(this.oreLayer);
   }
 
+  /** The exploration memory, for persisting (typed arrays survive IndexedDB). */
+  get memory(): Map<string, Uint8Array> {
+    return this.explored;
+  }
+
+  setMemory(data: Map<string, Uint8Array>): void {
+    this.explored = data;
+  }
+
+  private markExplored(dim: string, wx: number, wy: number): void {
+    const cx = Math.floor(wx / CHUNK_WIDTH);
+    const cy = Math.floor(wy / CHUNK_HEIGHT);
+    const key = `${dim}:${cx},${cy}`;
+    let chunk = this.explored.get(key);
+    if (!chunk) {
+      chunk = new Uint8Array(CHUNK_WIDTH * CHUNK_HEIGHT);
+      this.explored.set(key, chunk);
+    }
+    chunk[(wy - cy * CHUNK_HEIGHT) * CHUNK_WIDTH + (wx - cx * CHUNK_WIDTH)] = 1;
+  }
+
+  private isExplored(dim: string, wx: number, wy: number): boolean {
+    const cx = Math.floor(wx / CHUNK_WIDTH);
+    const cy = Math.floor(wy / CHUNK_HEIGHT);
+    const chunk = this.explored.get(`${dim}:${cx},${cy}`);
+    return chunk !== undefined && chunk[(wy - cy * CHUNK_HEIGHT) * CHUNK_WIDTH + (wx - cx * CHUNK_WIDTH)] === 1;
+  }
+
   /** Recompute visibility around the player (feet-center tile coords). */
-  update(px: number, py: number, world: WorldView, minerActive: boolean): void {
+  update(px: number, py: number, world: WorldView, minerActive: boolean, dim: string): void {
     const cx = Math.floor(px);
     const cy = Math.floor(py);
     const dist = this.dist;
@@ -79,18 +117,22 @@ export class FogOfWar {
       if (gy < SIZE - 1 && dist[(gy + 1) * SIZE + gx] === Infinity) push(gx, gy + 1, d + 1);
     }
 
-    // Paint the veil: unseen = near-black, visible fades in near the rim.
+    // Paint the veil: never seen = near-black, explored = dimmed,
+    // visible fades in near the rim.
     const ctx = this.canvas.getContext("2d")!;
     ctx.clearRect(0, 0, SIZE, SIZE);
     for (let gy = 0; gy < SIZE; gy++) {
       for (let gx = 0; gx < SIZE; gx++) {
         const d = dist[gy * SIZE + gx]!;
+        const wx = cx - FOG_RADIUS + gx;
+        const wy = cy - FOG_RADIUS + gy;
         let alpha: number;
         if (d === Infinity) {
-          alpha = 0.96;
+          alpha = this.isExplored(dim, wx, wy) ? EXPLORED_ALPHA : UNSEEN_ALPHA;
         } else {
+          this.markExplored(dim, wx, wy);
           const rim = d / FOG_RADIUS;
-          alpha = rim < 0.7 ? 0 : Math.min(0.96, ((rim - 0.7) / 0.3) * 0.96);
+          alpha = rim < 0.7 ? 0 : Math.min(UNSEEN_ALPHA, ((rim - 0.7) / 0.3) * UNSEEN_ALPHA);
         }
         if (alpha > 0.01) {
           ctx.fillStyle = `rgba(4,4,10,${alpha.toFixed(3)})`;

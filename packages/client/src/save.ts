@@ -7,6 +7,8 @@ import type { SimSave } from "@flatcraft/sim";
 const DB_NAME = "flatcraft";
 const STORE = "saves";
 const SLOT = "world";
+/** Client-only fog-of-war exploration memory, saved beside the world. */
+const EXPLORED_SLOT = "explored";
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -48,4 +50,21 @@ export async function loadWorld(): Promise<SimSave | null> {
 
 export async function deleteWorld(): Promise<void> {
   await withStore("readwrite", (store) => store.delete(SLOT));
+  await withStore("readwrite", (store) => store.delete(EXPLORED_SLOT));
+}
+
+/** Maps and typed arrays survive IndexedDB's structured clone natively. */
+export async function saveExplored(data: Map<string, Uint8Array>): Promise<void> {
+  await withStore("readwrite", (store) => store.put(data, EXPLORED_SLOT));
+}
+
+export async function loadExplored(): Promise<Map<string, Uint8Array> | null> {
+  try {
+    const result = await withStore<Map<string, Uint8Array> | undefined>("readonly", (store) =>
+      store.get(EXPLORED_SLOT),
+    );
+    return result ?? null;
+  } catch {
+    return null;
+  }
 }

@@ -1,8 +1,13 @@
 import { parseRecipe, type Recipe, type RecipeJson } from "../../crafting/recipe.js";
 
+import arrow from "./arrow.json";
 import backpack from "./backpack.json";
+import bow from "./bow.json";
 import brewingStand from "./brewing_stand.json";
 import chest from "./chest.json";
+import cookedBeef from "./cooked_beef.json";
+import cookedChicken from "./cooked_chicken.json";
+import cookedPorkchop from "./cooked_porkchop.json";
 import craftingTable from "./crafting_table.json";
 import diamondAxe from "./diamond_axe.json";
 import enchantingTable from "./enchanting_table.json";
@@ -32,6 +37,7 @@ import oakPlanks from "./oak_planks.json";
 import sandstone from "./sandstone.json";
 import stick from "./stick.json";
 import stone from "./stone.json";
+import string from "./string.json";
 import stoneAxe from "./stone_axe.json";
 import stonePickaxe from "./stone_pickaxe.json";
 import stoneShovel from "./stone_shovel.json";
@@ -87,6 +93,12 @@ const sources: Record<string, RecipeJson> = {
   potion_regeneration: potionRegeneration,
   potion_strength: potionStrength,
   potion_miner: potionMiner,
+  string,
+  bow,
+  arrow,
+  cooked_porkchop: cookedPorkchop,
+  cooked_beef: cookedBeef,
+  cooked_chicken: cookedChicken,
 };
 
 export const RECIPES: ReadonlyMap<string, Recipe> = new Map(

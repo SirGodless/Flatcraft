@@ -23,6 +23,8 @@ export interface ItemDef {
   readonly block?: BlockId;
   /** Set for tools. */
   readonly tool?: ToolDef;
+  /** Set for edible items: hunger points restored on eating. */
+  readonly food?: number;
 }
 
 const defs = new Map<string, ItemDef>();
@@ -38,6 +40,10 @@ function blockItem(id: string, block: BlockId): ItemDef {
 
 function material(id: string): ItemDef {
   return register({ id, name: id, maxStack: 64 });
+}
+
+function foodItem(id: string, food: number): ItemDef {
+  return register({ id, name: id, maxStack: 64, food });
 }
 
 function tool(id: string, kind: ToolKind, tier: number, speed: number): ItemDef {
@@ -70,18 +76,23 @@ export const Items = {
   coal: material("coal"),
   ironIngot: material("iron_ingot"),
   goldIngot: material("gold_ingot"),
-  rottenFlesh: material("rotten_flesh"),
-  porkchop: material("porkchop"),
+  rottenFlesh: foodItem("rotten_flesh", 2),
+  porkchop: foodItem("porkchop", 3),
+  cookedPorkchop: foodItem("cooked_porkchop", 8),
   flint: material("flint"),
   glowstoneDust: material("glowstone_dust"),
   bone: material("bone"),
   arrow: material("arrow"),
   gunpowder: material("gunpowder"),
   leather: material("leather"),
-  beef: material("beef"),
+  beef: foodItem("beef", 3),
+  cookedBeef: foodItem("cooked_beef", 8),
   wool: material("wool"),
-  chicken: material("chicken"),
+  chicken: foodItem("chicken", 2),
+  cookedChicken: foodItem("cooked_chicken", 6),
   feather: material("feather"),
+  string: material("string"),
+  bow: register({ id: "bow", name: "bow", maxStack: 1 }),
   goldNugget: material("gold_nugget"),
   flintAndSteel: register({ id: "flint_and_steel", name: "flint_and_steel", maxStack: 1 }),
   chestItem: blockItem("chest", BlockId.Chest),

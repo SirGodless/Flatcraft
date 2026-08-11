@@ -51,4 +51,8 @@ npm run build      # build all packages
 6. ~~Block interactions~~ (hold-to-mine with progress + crack overlay, Minecraft tool tiers/speeds, tier-gated drops; no durability by design)
 7. ~~Furnace & full tool chain~~ (real crafting grid UI with cursor clicks, furnace block entity with fuel/cook ticking and its own screen, smelting recipes as JSON, iron/golden/diamond tools)
 8. ~~Entities/mobs~~ (item entities with magnet pickup, zombies that chase and melee, wandering pigs, natural spawning, sword combat with knockback, hearts/fall damage/death drops/respawn)
-9. Netcode: WebSocket transport, listen server & dedicated server
+9. ~~Day/night & dimensions~~ (24000-tick day cycle with night-time surface hostiles and daylight burning; nether dimension with its own worldgen, obsidian-frame portals lit by flint and steel, 1:8 coordinate scaling)
+10. ~~Survival content~~ (skeletons/creepers/farm animals/zombified piglins, villagers with JSON-defined trades, chests + backpacks, background walls, JSON-defined structures with loot, potions/brewing, simplified enchanting, elytra gliding, world saving to IndexedDB)
+11. ~~Fog of war~~ (line-of-sight visibility with per-dimension exploration memory - explored areas stay dimly visible; the miner potion reveals ores through the fog)
+12. ~~Hunger & bow~~ (activity-driven hunger bar gating regeneration, food incl. furnace-cooked meats, bow + craftable arrows)
+13. Netcode: WebSocket transport, listen server & dedicated server

@@ -1,0 +1,9 @@
+{
+  "type": "flatcraft:crafting_shaped",
+  "pattern": [" |S", "| S", " |S"],
+  "key": {
+    "|": { "item": "flatcraft:stick" },
+    "S": { "item": "flatcraft:string" }
+  },
+  "result": { "item": "flatcraft:bow" }
+}

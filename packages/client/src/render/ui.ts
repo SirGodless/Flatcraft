@@ -121,6 +121,33 @@ export class HeartsUI {
   }
 }
 
+/** Hunger row (drumsticks) above the hotbar, mirroring the hearts. */
+export class HungerUI {
+  readonly container = new Container();
+
+  update(hunger: number, max: number): void {
+    this.container.removeChildren().forEach((c) => c.destroy({ children: true }));
+    const icons = Math.ceil(max / 2);
+    const gfx = new Graphics();
+    for (let i = 0; i < icons; i++) {
+      // Drawn right-to-left so the bar drains from the left, like Minecraft.
+      const x = (icons - 1 - i) * 18;
+      const points = hunger - i * 2;
+      gfx.rect(x, 0, 14, 12).fill({ color: 0x2e1e0e, alpha: 0.8 });
+      if (points >= 2) {
+        gfx.rect(x + 1, 1, 12, 10).fill({ color: 0xc88a3a });
+      } else if (points === 1) {
+        gfx.rect(x + 7, 1, 6, 10).fill({ color: 0xc88a3a });
+      }
+    }
+    this.container.addChild(gfx);
+  }
+
+  get width(): number {
+    return 10 * 18 - 4;
+  }
+}
+
 /** The always-visible 9-slot hotbar, bottom center of the screen. */
 export class HotbarUI {
   readonly container = new Container();

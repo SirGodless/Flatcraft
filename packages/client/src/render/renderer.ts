@@ -26,6 +26,7 @@ import {
   FurnacePanelUI,
   HeartsUI,
   HotbarUI,
+  HungerUI,
   TradePanelUI,
 } from "./ui.js";
 import { CHUNK_PX_H, CHUNK_PX_W, WorldView } from "./worldView.js";
@@ -84,6 +85,7 @@ export class Renderer {
   private readonly entities = new Map<EntityId, EntityView>();
   private readonly miningOverlays = new Map<PlayerId, Graphics>();
   private hearts!: HeartsUI;
+  private hungerBar!: HungerUI;
   private hud!: Text;
   private hotbar!: HotbarUI;
   private craftingPanel!: CraftingPanelUI;
@@ -120,6 +122,15 @@ export class Renderer {
   private fog!: FogOfWar;
   private fogUpdatedAt = 0;
 
+  /** Exploration memory, for persisting alongside the world save. */
+  exportFogMemory(): Map<string, Uint8Array> {
+    return this.fog.memory;
+  }
+
+  importFogMemory(data: Map<string, Uint8Array>): void {
+    this.fog.setMemory(data);
+  }
+
   async init(container: HTMLElement): Promise<void> {
     await this.app.init({ resizeTo: container, background: "#87b9e7" });
     container.appendChild(this.app.canvas);
@@ -149,6 +160,10 @@ export class Renderer {
     this.hearts = new HeartsUI();
     this.hearts.update(PLAYER_MAX_HEALTH, PLAYER_MAX_HEALTH);
     this.app.stage.addChild(this.hearts.container);
+
+    this.hungerBar = new HungerUI();
+    this.hungerBar.update(20, 20);
+    this.app.stage.addChild(this.hungerBar.container);
 
     this.craftingPanel = new CraftingPanelUI(blockTextures);
     this.craftingPanel.onQuickCraft = (id) => this.onCraft?.(id);
@@ -220,6 +235,13 @@ export class Renderer {
   /** The item id in the selected hotbar slot, if any. */
   selectedItem(): string | null {
     return this.inventory[this.selectedSlot]?.item ?? null;
+  }
+
+  /** The local player's last known feet-center position, in tile coords. */
+  localPlayerPos(): { x: number; y: number } | null {
+    if (this.localPlayerId === null) return null;
+    const marker = this.players.get(this.localPlayerId);
+    return marker ? { x: marker.x, y: marker.y } : null;
   }
 
   /** Open the backpack screen for the selected hotbar slot. */
@@ -369,6 +391,12 @@ export class Renderer {
       case "player_effects": {
         if (event.player === this.localPlayerId) {
           this.effects = event.effects;
+        }
+        break;
+      }
+      case "player_hunger": {
+        if (event.player === this.localPlayerId) {
+          this.hungerBar.update(event.hunger, event.max);
         }
         break;
       }
@@ -723,7 +751,7 @@ export class Renderer {
       this.worldContainer.addChild(this.fog.container); // re-add = move to top
       if (now - this.fogUpdatedAt > 120) {
         this.fogUpdatedAt = now;
-        this.fog.update(localX, localY - 0.9, this.worldView, this.effects["miner"] !== undefined);
+        this.fog.update(localX, localY - 0.9, this.worldView, this.effects["miner"] !== undefined, this.localDim);
       }
     } else {
       this.fog.container.visible = false;
@@ -735,6 +763,10 @@ export class Renderer {
     );
     this.hearts.container.position.set(
       (this.screenWidth - this.hotbar.width) / 2,
+      this.screenHeight - this.hotbar.height - 26,
+    );
+    this.hungerBar.container.position.set(
+      (this.screenWidth + this.hotbar.width) / 2 - this.hungerBar.width,
       this.screenHeight - this.hotbar.height - 26,
     );
     this.craftingPanel.container.position.set(12, 40);

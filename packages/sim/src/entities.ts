@@ -65,6 +65,8 @@ export interface ArrowEntity extends EntityBase {
   damage: number;
   /** Remaining lifetime in ticks. */
   ttl: number;
+  /** Set for player-shot arrows: they hit mobs instead of players. */
+  owner?: number;
 }
 
 export type Entity = ItemEntity | MobEntity | ArrowEntity;
@@ -134,6 +136,10 @@ export const SKELETON_RANGE = 12;
 export const SKELETON_SHOOT_COOLDOWN = 50;
 export const ARROW_DAMAGE = 3;
 export const ARROW_TTL = 100;
+/** Player bow: stronger than skeleton arrows, with its own fire rate. */
+export const BOW_DAMAGE = 6;
+export const BOW_COOLDOWN = 20;
+export const BOW_ARROW_SPEED = 0.8;
 export const CREEPER_FUSE = 30;
 export const CREEPER_TRIGGER_RANGE = 1.8;
 export const EXPLOSION_BLOCK_RADIUS = 2.5;

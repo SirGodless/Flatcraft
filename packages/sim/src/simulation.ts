@@ -9,6 +9,9 @@ import {
   ARROW_DAMAGE,
   ARROW_TTL,
   ATTACK_REACH,
+  BOW_ARROW_SPEED,
+  BOW_COOLDOWN,
+  BOW_DAMAGE,
   BURNING_MOBS,
   CREEPER_FUSE,
   CREEPER_TRIGGER_RANGE,
@@ -68,6 +71,17 @@ import {
   SPEED_MULTIPLIER,
   STRENGTH_BONUS,
 } from "./effects.js";
+import {
+  EXHAUST_JUMP,
+  EXHAUST_MINE,
+  EXHAUST_REGEN,
+  EXHAUST_WALK,
+  EXHAUSTION_PER_POINT,
+  HUNGER_REGEN_MIN,
+  PLAYER_MAX_HUNGER,
+  STARVE_INTERVAL_TICKS,
+  STARVE_MIN_HEALTH,
+} from "./hunger.js";
 import { rngNext, type Rng, type RngState } from "./math/rng.js";
 import { canHarvest, miningTicks } from "./mining.js";
 import {
@@ -127,6 +141,10 @@ export interface PlayerState {
   /** Block currently being mined, with accumulated progress ticks. */
   mining: { x: number; y: number; progress: number } | null;
   health: number;
+  /** Hunger bar, 0..PLAYER_MAX_HUNGER. */
+  hunger: number;
+  /** Accumulated activity; drains hunger at EXHAUSTION_PER_POINT. */
+  exhaustion: number;
   /** Invulnerability frames after taking a hit. */
   hurtCooldown: number;
   /** Ticks until the next melee attack is allowed. */
@@ -483,11 +501,22 @@ export class Simulation {
           this.removeEntity(entity.id, out);
           continue;
         }
-        const hit = this.playerNearBox(entity.dimension, entity.x, entity.y, 0.3);
-        if (hit) {
-          this.hurtPlayer(hit, entity.damage, out, entity.x - entity.vx * 5);
-          this.removeEntity(entity.id, out);
-          continue;
+        if (entity.owner !== undefined) {
+          // Player-shot arrows hit mobs, not players.
+          const mob = this.mobNear(entity.dimension, entity.x, entity.y, 0.3);
+          if (mob) {
+            mob.hurtCooldown = 0; // arrows always connect
+            this.hurtMob(mob, entity.damage, out, entity.x - entity.vx * 5);
+            this.removeEntity(entity.id, out);
+            continue;
+          }
+        } else {
+          const hit = this.playerNearBox(entity.dimension, entity.x, entity.y, 0.3);
+          if (hit) {
+            this.hurtPlayer(hit, entity.damage, out, entity.x - entity.vx * 5);
+            this.removeEntity(entity.id, out);
+            continue;
+          }
         }
         if (entity.x !== prevX || entity.y !== prevY) {
           out.push({ event: { type: "entity_moved", id: entity.id, x: entity.x, y: entity.y } });
@@ -708,6 +737,7 @@ export class Simulation {
       }
       if (p.input.jump && p.onGround) {
         p.vy = JUMP_VELOCITY;
+        p.exhaustion += EXHAUST_JUMP;
       }
       p.vy = Math.min(p.vy + GRAVITY, TERMINAL_VELOCITY);
 
@@ -759,10 +789,37 @@ export class Simulation {
         if (p.portalCooldown > 0) p.portalCooldown--;
       }
 
-      // Passive regeneration (no food system yet).
-      if (this.tickCount % REGEN_INTERVAL_TICKS === 0 && p.health > 0 && p.health < PLAYER_MAX_HEALTH) {
+      // Hunger: activity accumulates exhaustion, which drains the bar.
+      if (p.input.dx !== 0) p.exhaustion += EXHAUST_WALK;
+      if (p.mining) p.exhaustion += EXHAUST_MINE;
+      if (p.exhaustion >= EXHAUSTION_PER_POINT) {
+        p.exhaustion -= EXHAUSTION_PER_POINT;
+        if (p.hunger > 0) {
+          p.hunger--;
+          out.push({ to: p.id, event: { type: "player_hunger", player: p.id, hunger: p.hunger, max: PLAYER_MAX_HUNGER } });
+        }
+      }
+
+      // Passive regeneration - only on a nearly full hunger bar, and
+      // regenerating makes you hungrier (like Minecraft).
+      if (
+        this.tickCount % REGEN_INTERVAL_TICKS === 0 &&
+        p.health > 0 &&
+        p.health < PLAYER_MAX_HEALTH &&
+        p.hunger >= HUNGER_REGEN_MIN
+      ) {
         p.health++;
+        p.exhaustion += EXHAUST_REGEN;
         out.push({ event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
+      }
+
+      // Starving: an empty bar wears you down to 1 HP (never kills).
+      if (
+        p.hunger === 0 &&
+        this.tickCount % STARVE_INTERVAL_TICKS === 0 &&
+        p.health > STARVE_MIN_HEALTH
+      ) {
+        this.hurtPlayer(p, 1, out);
       }
 
       if (p.x !== prevX || p.y !== prevY) {
@@ -917,6 +974,20 @@ export class Simulation {
     return best;
   }
 
+  /** Mob whose AABB (expanded by radius) contains the point. */
+  private mobNear(dimension: Dimension, x: number, y: number, radius: number): MobEntity | null {
+    for (const entity of this.entities.values()) {
+      if (entity.kind === "item" || entity.kind === "arrow") continue;
+      if (entity.dimension !== dimension) continue;
+      const size = ENTITY_SIZES[entity.kind];
+      const dx = Math.max(0, Math.abs(x - entity.x) - size.width / 2);
+      const top = entity.y - size.height;
+      const dy = y < top ? top - y : y > entity.y ? y - entity.y : 0;
+      if (Math.hypot(dx, dy) <= radius) return entity;
+    }
+    return null;
+  }
+
   /** Player whose AABB (expanded by radius) contains the point. */
   private playerNearBox(dimension: Dimension, x: number, y: number, radius: number): PlayerState | null {
     for (const p of this.players.values()) {
@@ -965,9 +1036,12 @@ export class Simulation {
       p.kbX = 0;
       p.fallDistance = 0;
       p.health = PLAYER_MAX_HEALTH;
+      p.hunger = PLAYER_MAX_HUNGER;
+      p.exhaustion = 0;
       p.mining = null;
       p.portalTicks = 0;
       p.portalCooldown = 0;
+      out.push({ to: p.id, event: { type: "player_hunger", player: p.id, hunger: p.hunger, max: PLAYER_MAX_HUNGER } });
       if (fromDim !== "overworld") {
         out.push({ event: { type: "player_dimension", player: p.id, dim: "overworld", x: p.x, y: p.y } });
       } else {
@@ -1013,6 +1087,9 @@ export class Simulation {
         if (saved) {
           this.savedPlayers.delete(command.name);
           const state: PlayerState = { ...structuredClone(saved), id: player };
+          // Pre-hunger saves lack these fields; default them on adoption.
+          state.hunger = Number.isFinite(state.hunger) ? state.hunger : PLAYER_MAX_HUNGER;
+          state.exhaustion = Number.isFinite(state.exhaustion) ? state.exhaustion : 0;
           this.players.set(player, state);
           broadcast({
             type: "player_joined",
@@ -1024,6 +1101,7 @@ export class Simulation {
           });
           this.syncInventory(state, out);
           reply({ type: "player_health", player, health: state.health, max: PLAYER_MAX_HEALTH });
+          reply({ type: "player_hunger", player, hunger: state.hunger, max: PLAYER_MAX_HUNGER });
           reply({ type: "time_changed", time: this.timeOfDay });
           reply({ type: "player_dimension", player, dim: state.dimension, x: state.x, y: state.y });
           for (const entity of this.entities.values()) {
@@ -1058,6 +1136,8 @@ export class Simulation {
           craftGrid: new Array<ItemStack | null>(CRAFT_GRID_SIZE).fill(null),
           mining: null,
           health: PLAYER_MAX_HEALTH,
+          hunger: PLAYER_MAX_HUNGER,
+          exhaustion: 0,
           hurtCooldown: 0,
           attackCooldown: 0,
           kbX: 0,
@@ -1070,6 +1150,7 @@ export class Simulation {
         broadcast({ type: "player_joined", player, name: state.name, x, y, dim: "overworld" });
         syncInventory(state);
         reply({ type: "player_health", player, health: state.health, max: PLAYER_MAX_HEALTH });
+        reply({ type: "player_hunger", player, hunger: state.hunger, max: PLAYER_MAX_HUNGER });
         reply({ type: "time_changed", time: this.timeOfDay });
         for (const entity of this.entities.values()) {
           reply({
@@ -1341,18 +1422,89 @@ export class Simulation {
           break;
         }
         const stack = p.inventory[p.selected];
-        const effect = stack ? potionEffect(stack.item) : null;
-        if (!stack || !effect) {
+        if (!stack) {
           reject("nothing to use");
           break;
         }
-        stack.count -= 1;
-        if (stack.count === 0) p.inventory[p.selected] = null;
-        // Drinking returns the bottle.
-        addToInventory(p.inventory, "glass_bottle", 1);
-        p.effects[effect] = EFFECT_DURATION_TICKS;
+        const effect = potionEffect(stack.item);
+        const food = itemDef(stack.item)?.food;
+        if (effect) {
+          stack.count -= 1;
+          if (stack.count === 0) p.inventory[p.selected] = null;
+          // Drinking returns the bottle.
+          addToInventory(p.inventory, "glass_bottle", 1);
+          p.effects[effect] = EFFECT_DURATION_TICKS;
+          syncInventory(p);
+          reply({ type: "player_effects", player: p.id, effects: { ...p.effects } });
+          break;
+        }
+        if (food !== undefined) {
+          if (p.hunger >= PLAYER_MAX_HUNGER) {
+            reject("not hungry");
+            break;
+          }
+          stack.count -= 1;
+          if (stack.count === 0) p.inventory[p.selected] = null;
+          p.hunger = Math.min(PLAYER_MAX_HUNGER, p.hunger + food);
+          syncInventory(p);
+          reply({ type: "player_hunger", player: p.id, hunger: p.hunger, max: PLAYER_MAX_HUNGER });
+          break;
+        }
+        reject("nothing to use");
+        break;
+      }
+      case "shoot": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        const { dx, dy } = command;
+        if (typeof dx !== "number" || typeof dy !== "number" || !Number.isFinite(dx) || !Number.isFinite(dy)) {
+          reject("invalid direction");
+          break;
+        }
+        const len = Math.hypot(dx, dy);
+        if (len < 1e-6) {
+          reject("invalid direction");
+          break;
+        }
+        if (p.inventory[p.selected]?.item !== "bow") {
+          reject("no bow");
+          break;
+        }
+        if (p.attackCooldown > 0) {
+          break;
+        }
+        if (!removeFromInventory(p.inventory, "arrow", 1)) {
+          reject("no arrows");
+          break;
+        }
+        p.attackCooldown = BOW_COOLDOWN;
+        const originY = p.y - PLAYER_HEIGHT * 0.6;
+        const arrow: ArrowEntity = {
+          id: this.nextEntityId++,
+          kind: "arrow",
+          dimension: p.dimension,
+          x: p.x + (dx / len) * 0.8,
+          y: originY + (dy / len) * 0.8,
+          vx: (dx / len) * BOW_ARROW_SPEED,
+          vy: (dy / len) * BOW_ARROW_SPEED,
+          onGround: false,
+          damage: BOW_DAMAGE,
+          ttl: ARROW_TTL,
+          owner: player,
+        };
+        this.entities.set(arrow.id, arrow);
+        broadcast({
+          type: "entity_spawned",
+          id: arrow.id,
+          kind: "arrow",
+          dim: arrow.dimension,
+          x: arrow.x,
+          y: arrow.y,
+        });
         syncInventory(p);
-        reply({ type: "player_effects", player: p.id, effects: { ...p.effects } });
         break;
       }
       case "enchant": {

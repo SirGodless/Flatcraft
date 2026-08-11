@@ -20,8 +20,11 @@ export type Command =
   | { type: "attack"; entity: number }
   /** Trade with a villager: exchange the trade cost for its result. */
   | { type: "trade"; entity: number; trade: number }
-  /** Use the selected item (drink a potion). */
+  /** Use the selected item (drink a potion, eat food). */
   | { type: "use_item" }
+  /** Shoot an arrow with the held bow in the given direction (the
+   * simulation normalizes the vector and checks bow + arrows). */
+  | { type: "shoot"; dx: number; dy: number }
   /** Enchant the selected tool at a nearby enchanting table (lapis cost). */
   | { type: "enchant" }
   /** Places whatever block item is in the selected hotbar slot. */

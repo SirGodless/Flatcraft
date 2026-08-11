@@ -1,0 +1,6 @@
+{
+  "type": "flatcraft:smelting",
+  "ingredient": { "item": "flatcraft:porkchop" },
+  "result": { "item": "flatcraft:cooked_porkchop" },
+  "cookingtime": 200
+}
