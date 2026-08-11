@@ -18,6 +18,8 @@ export type Command =
   | { type: "stop_mining" }
   /** Melee-attack a mob by entity id. */
   | { type: "attack"; entity: number }
+  /** Trade with a villager: exchange the trade cost for its result. */
+  | { type: "trade"; entity: number; trade: number }
   /** Places whatever block item is in the selected hotbar slot. */
   | { type: "place_block"; x: number; y: number }
   | { type: "select_slot"; index: number }

@@ -15,12 +15,15 @@ export type MobKind =
   | "pig"
   | "cow"
   | "sheep"
-  | "chicken";
+  | "chicken"
+  | "villager";
 
 /** Mobs that walk toward players and hit on contact. */
 export const MELEE_MOBS: readonly MobKind[] = ["zombie", "zombified_piglin"];
-/** Mobs that wander idly and never attack. */
+/** Animals that wander idly and spawn on grass in daylight. */
 export const PASSIVE_MOBS: readonly MobKind[] = ["pig", "cow", "sheep", "chicken"];
+/** All idle wanderers (villagers spawn at houses, not on grass). */
+export const WANDERING_MOBS: readonly MobKind[] = [...PASSIVE_MOBS, "villager"];
 /** Mobs that burn in daylight. */
 export const BURNING_MOBS: readonly MobKind[] = ["zombie", "skeleton"];
 
@@ -81,6 +84,7 @@ export const ENTITY_SIZES: Readonly<Record<Entity["kind"], EntitySize>> = {
   cow: { width: 0.9, height: 1.2 },
   sheep: { width: 0.9, height: 1.1 },
   chicken: { width: 0.5, height: 0.6 },
+  villager: { width: 0.6, height: 1.9 },
   arrow: { width: 0.3, height: 0.15 },
 };
 
@@ -98,6 +102,7 @@ export const MOB_STATS: Readonly<Record<MobKind, { health: number; speed: number
   cow: { health: 10, speed: 0.05 },
   sheep: { health: 8, speed: 0.05 },
   chicken: { health: 4, speed: 0.05 },
+  villager: { health: 20, speed: 0.05 },
 };
 
 /** Death drops: item, max count (1..max rolled), chance. */
@@ -122,6 +127,7 @@ export const MOB_LOOT: Readonly<Record<MobKind, ReadonlyArray<{ item: string; ma
     { item: "chicken", max: 1, chance: 1 },
     { item: "feather", max: 2, chance: 0.7 },
   ],
+  villager: [],
 };
 
 export const SKELETON_RANGE = 12;

@@ -183,6 +183,19 @@ const ARTS: Record<string, Art> = {
   chicken: blob("#e8c890"),
   feather: gem("#f0f0ec"),
   gold_nugget: gem("#f5d442"),
+  elytra: {
+    rows: [
+      "........",
+      "W......W",
+      "WW....WW",
+      "WWW..WWW",
+      "WWW..WWW",
+      ".WW..WW.",
+      ".W....W.",
+      "........",
+    ],
+    palette: { W: "#b8b8c8" },
+  },
   flint: gem("#3c3c40"),
   backpack: {
     rows: [

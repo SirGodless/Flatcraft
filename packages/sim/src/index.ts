@@ -9,6 +9,8 @@ export * from "./slots.js";
 export * from "./structures/structure.js";
 export * from "./structures/place.js";
 export * from "./data/structures/index.js";
+export * from "./data/trades/index.js";
+export * from "./trading.js";
 export * from "./time.js";
 export * from "./data/recipes/index.js";
 export * from "./events.js";

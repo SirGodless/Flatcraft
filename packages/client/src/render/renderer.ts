@@ -17,7 +17,15 @@ import {
 import { Camera } from "./camera.js";
 import { itemTexture } from "./icons.js";
 import { createBlockTextures, TILE_PX } from "./textures.js";
-import { ContainerPanelUI, CraftingPanelUI, cursorWidget, FurnacePanelUI, HeartsUI, HotbarUI } from "./ui.js";
+import {
+  ContainerPanelUI,
+  CraftingPanelUI,
+  cursorWidget,
+  FurnacePanelUI,
+  HeartsUI,
+  HotbarUI,
+  TradePanelUI,
+} from "./ui.js";
 import { CHUNK_PX_H, CHUNK_PX_W, WorldView } from "./worldView.js";
 
 export interface ChunkRange {
@@ -80,6 +88,9 @@ export class Renderer {
   private furnacePanel!: FurnacePanelUI;
   private chestPanel!: ContainerPanelUI;
   private backpackPanel!: ContainerPanelUI;
+  private tradePanel!: TradePanelUI;
+  /** Wired by the bootstrap code to send trade commands. */
+  onTrade: ((villager: number, trade: number) => void) | null = null;
   private openChestPos: { x: number; y: number } | null = null;
   /** Wired by the bootstrap code to send open_chest commands. */
   onOpenChest: ((x: number, y: number) => void) | null = null;
@@ -144,6 +155,10 @@ export class Renderer {
     this.backpackPanel.onSlotClick = (slot, button) => this.onSlotClick?.(slot, button);
     this.app.stage.addChild(this.backpackPanel.container);
 
+    this.tradePanel = new TradePanelUI(blockTextures);
+    this.tradePanel.onTrade = (villager, trade) => this.onTrade?.(villager, trade);
+    this.app.stage.addChild(this.tradePanel.container);
+
     this.app.stage.addChild(this.cursorLayer);
   }
 
@@ -163,6 +178,7 @@ export class Renderer {
     this.furnacePanel.close();
     this.chestPanel.close();
     this.backpackPanel.close();
+    this.tradePanel.close();
     this.openChestPos = null;
     if (wasOpen) this.onUiClosed?.();
   }
@@ -172,7 +188,8 @@ export class Renderer {
       this.craftingPanel.visible ||
       this.furnacePanel.visible ||
       this.chestPanel.visible ||
-      this.backpackPanel.visible
+      this.backpackPanel.visible ||
+      this.tradePanel.visible
     );
   }
 
@@ -237,6 +254,7 @@ export class Renderer {
       this.furnacePanel.container,
       this.chestPanel.container,
       this.backpackPanel.container,
+      this.tradePanel.container,
       this.hotbar.container,
     ];
     for (const panel of panels) {
@@ -409,6 +427,7 @@ export class Renderer {
           this.hotbar.update(this.inventory, this.selectedSlot);
           this.craftingPanel.update(this.inventory, this.selectedSlot, event.craftGrid);
           this.refreshBackpack();
+          this.tradePanel.update(this.inventory);
           this.cursorLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
           if (this.cursorStack) {
             this.cursorLayer.addChild(cursorWidget(this.cursorStack, this.blockTextures));
@@ -538,6 +557,11 @@ export class Renderer {
       case "chicken":
         animal(0.5, 0.6, 0xf0f0e8, 0xe8a030);
         break;
+      case "villager":
+        gfx.rect(0, 0, 0.6 * TILE_PX, 1.9 * TILE_PX).fill({ color: 0x8a6a4a });
+        gfx.rect(0, 0, 0.6 * TILE_PX, 0.5 * TILE_PX).fill({ color: 0xc8a078 });
+        gfx.rect(0.22 * TILE_PX, 0.3 * TILE_PX, 0.16 * TILE_PX, 0.25 * TILE_PX).fill({ color: 0xb08858 });
+        break;
       case "arrow":
         gfx.rect(0, 0, 0.3 * TILE_PX, 0.12 * TILE_PX).fill({ color: 0x9a9a9a });
         break;
@@ -550,6 +574,23 @@ export class Renderer {
   /**
    * Mob under the given world position (in tile units), for attack clicks.
    */
+  /** Open the trading screen for a villager entity. */
+  openTrading(villagerId: EntityId): void {
+    this.craftingPanel.close();
+    this.furnacePanel.close();
+    this.chestPanel.close();
+    this.backpackPanel.close();
+    this.tradePanel.open(villagerId);
+    this.tradePanel.update(this.inventory);
+  }
+
+  /** The kind of the mob under the world point, if any. */
+  mobKindAt(tileX: number, tileY: number): { id: EntityId; kind: string } | null {
+    const id = this.mobAt(tileX, tileY);
+    if (id === null) return null;
+    return { id, kind: this.entities.get(id)!.kind };
+  }
+
   mobAt(tileX: number, tileY: number): EntityId | null {
     for (const [id, view] of this.entities) {
       if (view.kind === "item") continue;
@@ -654,6 +695,7 @@ export class Renderer {
       (this.screenWidth - this.backpackPanel.width) / 2,
       120,
     );
+    this.tradePanel.container.position.set((this.screenWidth - 340) / 2, 100);
     this.cursorLayer.position.set(this.pointerX - 16, this.pointerY - 16);
 
     const px = localX !== null ? Math.floor(localX) : Math.floor(this.camera.x / TILE_PX);

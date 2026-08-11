@@ -63,6 +63,7 @@ async function start(): Promise<void> {
   renderer.onSlotClick = (slot, button) => connection.send({ type: "slot_click", slot, button });
   renderer.onOpenFurnace = (x, y) => connection.send({ type: "open_furnace", x, y });
   renderer.onOpenChest = (x, y) => connection.send({ type: "open_chest", x, y });
+  renderer.onTrade = (villager, trade) => connection.send({ type: "trade", entity: villager, trade });
   renderer.onUiClosed = () => connection.send({ type: "return_grid" });
 
   const input = attachInput(renderer.canvas, {
@@ -73,6 +74,14 @@ async function start(): Promise<void> {
     onEscape: () => renderer.closeUI(),
     isOverUI: (x, y) => renderer.isOverUI(x, y),
     onRightClickTile: (x, y) => renderer.tryOpenBlockUI(x, y),
+    onRightClickMob: (x, y) => {
+      const mob = renderer.mobKindAt(x, y);
+      if (mob?.kind === "villager") {
+        renderer.openTrading(mob.id);
+        return true;
+      }
+      return false;
+    },
     onUseItem: () => {
       if (renderer.selectedItem() === "backpack") {
         renderer.openBackpack();

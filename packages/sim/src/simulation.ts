@@ -26,6 +26,7 @@ import {
   MOB_STATS,
   PASSIVE_MOBS,
   SKELETON_RANGE,
+  WANDERING_MOBS,
   SKELETON_SHOOT_COOLDOWN,
   ZOMBIE_ATTACK_COOLDOWN,
   ZOMBIE_DAMAGE,
@@ -79,7 +80,8 @@ import {
 } from "./portal.js";
 import type { SimSave } from "./save.js";
 import { clickStack } from "./slots.js";
-import { structureLootAt } from "./structures/place.js";
+import { placementsNear, structureLootAt } from "./structures/place.js";
+import { TRADES } from "./data/trades/index.js";
 import { DAY_LENGTH, daylightFactor, isNight } from "./time.js";
 import { blockDef, blockDrops, BlockId } from "./world/block.js";
 import { Biome, biomeAt, findSpawnX, surfaceHeight } from "./world/gen.js";
@@ -540,7 +542,7 @@ export class Simulation {
               entity.fuse = CREEPER_FUSE;
             }
           }
-        } else if (PASSIVE_MOBS.includes(entity.kind)) {
+        } else if (WANDERING_MOBS.includes(entity.kind)) {
           entity.wanderTimer--;
           if (entity.wanderTimer <= 0) {
             const roll = this.rng();
@@ -602,6 +604,29 @@ export class Simulation {
       }
       return false;
     };
+
+    // Villagers move into houses: if a house stands near the player and
+    // has no villager around, one appears.
+    if (anchor.dimension === "overworld" && this.tickCount % 200 === 0) {
+      const pcx = Math.floor(anchor.x / CHUNK_WIDTH);
+      for (let cx = pcx - 2; cx <= pcx + 2; cx++) {
+        for (let cy = -2; cy <= 3; cy++) {
+          for (const placement of placementsNear(world.seed, "overworld", cx, cy)) {
+            if (placement.structure.id !== "house") continue;
+            const homeX = placement.originX + 3.5;
+            const homeY = placement.originY + 4;
+            let occupied = false;
+            for (const e of this.entities.values()) {
+              if (e.kind === "villager" && Math.abs(e.x - homeX) < 20) occupied = true;
+            }
+            if (!occupied) {
+              this.spawnMob("villager", homeX, homeY, out);
+              return;
+            }
+          }
+        }
+      }
+    }
 
     if (anchor.dimension === "nether") {
       const yStart = 10 + Math.floor(this.rng() * 50);
@@ -1228,6 +1253,34 @@ export class Simulation {
         }
         p.attackCooldown = PLAYER_ATTACK_COOLDOWN;
         this.hurtMob(entity, attackDamage(p.inventory[p.selected] ?? null), out, p.x);
+        break;
+      }
+      case "trade": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        const villager = this.entities.get(command.entity);
+        if (!villager || villager.kind !== "villager" || villager.dimension !== p.dimension) {
+          reject("no villager");
+          break;
+        }
+        if (Math.hypot(villager.x - p.x, villager.y - p.y) > ATTACK_REACH + 1) {
+          reject("out of reach");
+          break;
+        }
+        const trade = TRADES[command.trade];
+        if (!trade) {
+          reject("unknown trade");
+          break;
+        }
+        if (!removeFromInventory(p.inventory, trade.cost.item, trade.cost.count)) {
+          reject("missing items");
+          break;
+        }
+        addToInventory(p.inventory, trade.result.item, trade.result.count);
+        syncInventory(p);
         break;
       }
       case "place_block": {

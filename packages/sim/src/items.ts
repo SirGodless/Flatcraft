@@ -87,6 +87,8 @@ export const Items = {
   chestItem: blockItem("chest", BlockId.Chest),
   /** Portable 9-slot container (a FlatCraft original, not vanilla). */
   backpack: register({ id: "backpack", name: "backpack", maxStack: 1 }),
+  /** Gliding wings; behavior lands with the elytra milestone. */
+  elytra: register({ id: "elytra", name: "elytra", maxStack: 1 }),
   lapisLazuli: material("lapis_lazuli"),
   redstone: material("redstone"),
   diamond: material("diamond"),

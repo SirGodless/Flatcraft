@@ -6,6 +6,7 @@ import {
   matchGrid,
   RECIPES,
   SMALL_GRID_INDICES,
+  TRADES,
   type InventorySlots,
   type ItemStack,
   type Recipe,
@@ -431,6 +432,95 @@ export class ContainerPanelUI {
       cell.position.set(PAD * 2 + col * (SLOT + PAD), 28 + row * (SLOT + PAD));
       this.container.addChild(cell);
     }
+  }
+}
+
+/** Villager trading screen: click a row to trade. */
+export class TradePanelUI {
+  readonly container = new Container();
+  onTrade: ((villager: number, trade: number) => void) | null = null;
+
+  private villagerId: number | null = null;
+  private slots: InventorySlots = [];
+
+  constructor(private readonly blockTextures: Map<BlockId, Texture>) {
+    this.container.visible = false;
+  }
+
+  get visible(): boolean {
+    return this.container.visible;
+  }
+
+  open(villagerId: number): void {
+    this.villagerId = villagerId;
+    this.container.visible = true;
+    this.rebuild();
+  }
+
+  close(): void {
+    this.container.visible = false;
+    this.villagerId = null;
+  }
+
+  update(slots: InventorySlots): void {
+    this.slots = slots;
+    if (this.container.visible) this.rebuild();
+  }
+
+  private rebuild(): void {
+    this.container.removeChildren().forEach((c) => c.destroy({ children: true }));
+    const rowH = 28;
+    const width = 340;
+    const height = TRADES.length * rowH + 36;
+    const background = new Graphics()
+      .rect(0, 0, width, height)
+      .fill({ color: 0x1a1a22, alpha: 0.92 })
+      .stroke({ color: 0x555566, width: 2 });
+    background.eventMode = "static";
+    this.container.addChild(background);
+
+    const title = new Text({
+      text: "Trading (click to trade)",
+      style: { fill: "#cccccc", fontSize: 13, fontFamily: "monospace" },
+    });
+    title.position.set(PAD * 2, 8);
+    this.container.addChild(title);
+
+    TRADES.forEach((trade, index) => {
+      const affordable = countInInventory(this.slots, trade.cost.item) >= trade.cost.count;
+      const row = new Container();
+      row.position.set(PAD * 2, 30 + index * rowH);
+      const bg = new Graphics().rect(0, 0, width - PAD * 4, rowH - 3).fill({
+        color: affordable ? 0x2e4e2e : 0x2a2a33,
+        alpha: 0.9,
+      });
+      row.addChild(bg);
+      for (const [i, stack] of [trade.cost, trade.result].entries()) {
+        const texture = itemTexture(stack.item, this.blockTextures);
+        if (texture) {
+          const icon = new Sprite(texture);
+          icon.width = 18;
+          icon.height = 18;
+          icon.position.set(4 + i * 150, 3);
+          row.addChild(icon);
+        }
+      }
+      const label = new Text({
+        text: `${trade.cost.count}x ${trade.cost.item}  ->  ${trade.result.count}x ${trade.result.item}`,
+        style: { fill: affordable ? "#ffffff" : "#8a8a8a", fontSize: 12, fontFamily: "monospace" },
+      });
+      label.position.set(28, 6);
+      row.addChild(label);
+      if (affordable) {
+        row.eventMode = "static";
+        row.cursor = "pointer";
+        row.on("pointerdown", (e: FederatedPointerEvent) => {
+          e.stopPropagation();
+          if (this.villagerId !== null) this.onTrade?.(this.villagerId, index);
+        });
+      }
+      this.container.addChild(row);
+    });
   }
 }
 
