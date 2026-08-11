@@ -1,7 +1,9 @@
 import type { PlayerCommand, PlayerId } from "./commands.js";
-import type { SimEvent } from "./events.js";
+import type { OutboundEvent, SimEvent } from "./events.js";
+import { CHUNK_HEIGHT, CHUNK_WIDTH } from "./constants.js";
 import { createRng, type Rng } from "./math/rng.js";
 import { blockDef, BlockId } from "./world/block.js";
+import { surfaceHeight } from "./world/gen.js";
 import { World } from "./world/world.js";
 
 export interface PlayerState {
@@ -10,6 +12,9 @@ export interface PlayerState {
   x: number;
   y: number;
 }
+
+/** Reject chunk requests absurdly far out (bad client / future cheat guard). */
+const MAX_CHUNK_COORD = 1_000_000;
 
 /**
  * The authoritative game simulation. Deterministic and tick-based:
@@ -37,50 +42,93 @@ export class Simulation {
 
   /**
    * Advance the world by exactly one tick, applying the given commands in
-   * order. Returns the events produced, for clients/transports to consume.
+   * order. Returns the outbound events for the transport layer to deliver.
    */
-  tick(commands: readonly PlayerCommand[]): SimEvent[] {
-    const events: SimEvent[] = [];
+  tick(commands: readonly PlayerCommand[]): OutboundEvent[] {
+    const out: OutboundEvent[] = [];
     for (const pc of commands) {
-      this.apply(pc, events);
+      this.apply(pc, out);
     }
     // Entity/physics updates per tick will run here once implemented.
     this.tickCount++;
-    return events;
+    return out;
   }
 
-  private apply({ player, command }: PlayerCommand, events: SimEvent[]): void {
+  private apply({ player, command }: PlayerCommand, out: OutboundEvent[]): void {
+    const broadcast = (event: SimEvent): void => {
+      out.push({ event });
+    };
+    const reply = (event: SimEvent): void => {
+      out.push({ to: player, event });
+    };
+    const reject = (reason: string): void => {
+      reply({ type: "command_rejected", player, reason });
+    };
+
     switch (command.type) {
       case "join": {
-        const state: PlayerState = { id: player, name: command.name, x: 0, y: 0 };
+        const x = 0;
+        const y = surfaceHeight(this.world.seed, x) - 2;
+        const state: PlayerState = { id: player, name: command.name, x, y };
         this.players.set(player, state);
-        events.push({ type: "player_joined", player, name: state.name, x: state.x, y: state.y });
+        broadcast({ type: "player_joined", player, name: state.name, x, y });
         break;
       }
       case "leave": {
         if (this.players.delete(player)) {
-          events.push({ type: "player_left", player });
+          broadcast({ type: "player_left", player });
         }
         break;
       }
-      case "break_block": {
-        const current = this.world.getBlock(command.x, command.y);
-        if (current === BlockId.Air || blockDef(current).hardness < 0) {
-          events.push({ type: "command_rejected", player, reason: "cannot break block" });
+      case "request_chunk": {
+        const { cx, cy } = command;
+        if (
+          !Number.isInteger(cx) ||
+          !Number.isInteger(cy) ||
+          Math.abs(cx) > MAX_CHUNK_COORD ||
+          Math.abs(cy) > MAX_CHUNK_COORD
+        ) {
+          reject("invalid chunk coordinates");
           break;
         }
-        if (this.world.setBlock(command.x, command.y, BlockId.Air)) {
-          events.push({ type: "block_changed", x: command.x, y: command.y, block: BlockId.Air });
+        const chunk = this.world.ensureChunk(cx, cy);
+        reply({ type: "chunk_data", cx, cy, tiles: Array.from(chunk.tiles) });
+        break;
+      }
+      case "break_block": {
+        const { x, y } = command;
+        if (!Number.isInteger(x) || !Number.isInteger(y)) {
+          reject("invalid coordinates");
+          break;
+        }
+        this.world.ensureChunk(Math.floor(x / CHUNK_WIDTH), Math.floor(y / CHUNK_HEIGHT));
+        const current = this.world.getBlock(x, y);
+        if (current === BlockId.Air || blockDef(current).hardness < 0) {
+          reject("cannot break block");
+          break;
+        }
+        if (this.world.setBlock(x, y, BlockId.Air)) {
+          broadcast({ type: "block_changed", x, y, block: BlockId.Air });
         }
         break;
       }
       case "place_block": {
-        if (this.world.getBlock(command.x, command.y) !== BlockId.Air) {
-          events.push({ type: "command_rejected", player, reason: "space occupied" });
+        const { x, y } = command;
+        if (!Number.isInteger(x) || !Number.isInteger(y)) {
+          reject("invalid coordinates");
           break;
         }
-        if (this.world.setBlock(command.x, command.y, command.block)) {
-          events.push({ type: "block_changed", x: command.x, y: command.y, block: command.block });
+        if (command.block === BlockId.Air || command.block === BlockId.Bedrock) {
+          reject("block not placeable");
+          break;
+        }
+        this.world.ensureChunk(Math.floor(x / CHUNK_WIDTH), Math.floor(y / CHUNK_HEIGHT));
+        if (this.world.getBlock(x, y) !== BlockId.Air) {
+          reject("space occupied");
+          break;
+        }
+        if (this.world.setBlock(x, y, command.block)) {
+          broadcast({ type: "block_changed", x, y, block: command.block });
         }
         break;
       }

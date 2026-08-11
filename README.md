@@ -43,8 +43,8 @@ npm run build      # build all packages
 
 ## Roadmap
 
-1. ~~Project scaffolding, architecture~~ (this)
-2. Tilemap/chunk system + rendering
+1. ~~Project scaffolding, architecture~~
+2. ~~Tilemap/chunk system + rendering~~ (placeholder heightmap terrain, chunk streaming via commands/events, baked-chunk PixiJS rendering, camera + break/place)
 3. World generation (overworld, caves, nether)
 4. Physics & collision
 5. Inventory & crafting

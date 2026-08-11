@@ -3,7 +3,7 @@
  * cover the full 1.16-era content set without changing the storage format.
  * Only a handful of placeholder ids exist until world generation lands.
  */
-export const enum BlockId {
+export enum BlockId {
   Air = 0,
   Stone = 1,
   Dirt = 2,

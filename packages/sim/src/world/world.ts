@@ -1,6 +1,7 @@
 import { CHUNK_HEIGHT, CHUNK_WIDTH } from "../constants.js";
 import { BlockId } from "./block.js";
 import { Chunk, chunkKey } from "./chunk.js";
+import { generateChunk } from "./gen.js";
 
 /**
  * World state: a sparse grid of chunks. Purely data + accessors; world
@@ -20,6 +21,16 @@ export class World {
 
   setChunk(chunk: Chunk): void {
     this.chunks.set(chunkKey(chunk.cx, chunk.cy), chunk);
+  }
+
+  /** Get the chunk, generating it deterministically from the seed if needed. */
+  ensureChunk(cx: number, cy: number): Chunk {
+    let chunk = this.getChunk(cx, cy);
+    if (!chunk) {
+      chunk = generateChunk(this.seed, cx, cy);
+      this.setChunk(chunk);
+    }
+    return chunk;
   }
 
   getBlock(x: number, y: number): BlockId {

@@ -13,7 +13,8 @@ export type Command =
   | { type: "leave" }
   | { type: "move"; dx: -1 | 0 | 1; jump: boolean }
   | { type: "break_block"; x: number; y: number }
-  | { type: "place_block"; x: number; y: number; block: BlockId };
+  | { type: "place_block"; x: number; y: number; block: BlockId }
+  | { type: "request_chunk"; cx: number; cy: number };
 
 /** A command attributed to the player who issued it. */
 export interface PlayerCommand {

@@ -5,4 +5,5 @@ export * from "./simulation.js";
 export * from "./math/rng.js";
 export * from "./world/block.js";
 export * from "./world/chunk.js";
+export * from "./world/gen.js";
 export * from "./world/world.js";

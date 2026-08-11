@@ -1,5 +1,10 @@
 import { GameServer, createLoopbackPair } from "@flatcraft/server";
+import { chunkKey } from "@flatcraft/sim";
+import { attachInput } from "./input/input.js";
 import { Renderer } from "./render/renderer.js";
+
+/** Max chunk requests sent per frame, to keep event batches small. */
+const CHUNK_REQUESTS_PER_FRAME = 12;
 
 /**
  * Singleplayer bootstrap: an embedded GameServer connected through the
@@ -24,13 +29,39 @@ async function start(): Promise<void> {
     }
   });
 
+  const input = attachInput(renderer.canvas, {
+    camera: renderer.camera,
+    sendCommand: (command) => connection.send(command),
+    screenSize: () => ({ width: renderer.screenWidth, height: renderer.screenHeight }),
+  });
+
   connection.send({ type: "join", name: "Player" });
+
+  // Chunks already asked for; in multiplayer this would need re-request on
+  // timeout, in singleplayer the loopback server always answers.
+  const requestedChunks = new Set<string>();
+  const requestVisibleChunks = (): void => {
+    const range = renderer.visibleChunkRange();
+    let budget = CHUNK_REQUESTS_PER_FRAME;
+    for (let cy = range.minCy; cy <= range.maxCy && budget > 0; cy++) {
+      for (let cx = range.minCx; cx <= range.maxCx && budget > 0; cx++) {
+        const key = chunkKey(cx, cy);
+        if (requestedChunks.has(key)) continue;
+        requestedChunks.add(key);
+        connection.send({ type: "request_chunk", cx, cy });
+        budget--;
+      }
+    }
+  };
 
   let last = performance.now();
   const frame = (now: number): void => {
-    // Server ticks at a fixed rate regardless of frame rate...
-    server.advance(now - last);
+    const dt = now - last;
     last = now;
+    input.update(dt);
+    requestVisibleChunks();
+    // Server ticks at a fixed rate regardless of frame rate...
+    server.advance(dt);
     // ...while rendering runs per frame on whatever state it has seen.
     renderer.draw();
     requestAnimationFrame(frame);
