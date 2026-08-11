@@ -58,6 +58,16 @@ import {
   type ItemStack,
 } from "./inventory.js";
 import { itemDef } from "./items.js";
+import {
+  EFFECT_DURATION_TICKS,
+  ENCHANT_LAPIS_COST,
+  ENCHANT_MAX_LEVEL,
+  enchantFor,
+  potionEffect,
+  REGEN_EFFECT_INTERVAL,
+  SPEED_MULTIPLIER,
+  STRENGTH_BONUS,
+} from "./effects.js";
 import { rngNext, type Rng, type RngState } from "./math/rng.js";
 import { canHarvest, miningTicks } from "./mining.js";
 import {
@@ -123,6 +133,8 @@ export interface PlayerState {
   kbX: number;
   /** Tiles fallen so far in the current fall. */
   fallDistance: number;
+  /** Active potion effects, remaining ticks by effect id. */
+  effects: Record<string, number>;
   /** Consecutive ticks standing inside a nether portal. */
   portalTicks: number;
   /** Ticks left before a portal can trigger again after arriving. */
@@ -668,7 +680,25 @@ export class Simulation {
       if (p.hurtCooldown > 0) p.hurtCooldown--;
       if (p.attackCooldown > 0) p.attackCooldown--;
 
-      p.vx = p.input.dx * WALK_SPEED + p.kbX;
+      // Potion effects tick down; expiry syncs the client.
+      let effectsChanged = false;
+      for (const key of Object.keys(p.effects)) {
+        p.effects[key]!--;
+        if (p.effects[key]! <= 0) {
+          delete p.effects[key];
+          effectsChanged = true;
+        }
+      }
+      if (effectsChanged) {
+        out.push({ to: p.id, event: { type: "player_effects", player: p.id, effects: { ...p.effects } } });
+      }
+      if (p.effects["regeneration"] !== undefined && this.tickCount % REGEN_EFFECT_INTERVAL === 0 && p.health < PLAYER_MAX_HEALTH) {
+        p.health++;
+        out.push({ event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
+      }
+
+      const speedFactor = p.effects["speed"] !== undefined ? SPEED_MULTIPLIER : 1;
+      p.vx = p.input.dx * WALK_SPEED * speedFactor + p.kbX;
       p.kbX *= 0.6;
       if (Math.abs(p.kbX) < 0.01) p.kbX = 0;
       if (world.getBlockGenerating(Math.floor(p.x), Math.floor(p.y)) === BlockId.SoulSand) {
@@ -1017,6 +1047,7 @@ export class Simulation {
           attackCooldown: 0,
           kbX: 0,
           fallDistance: 0,
+          effects: {},
           portalTicks: 0,
           portalCooldown: 0,
         };
@@ -1081,11 +1112,15 @@ export class Simulation {
           break;
         }
         const recipe = RECIPES.get(command.recipe);
-        if (!recipe || recipe.kind !== "crafting") {
+        if (!recipe || recipe.kind === "smelting") {
           reject("unknown recipe");
           break;
         }
-        if (recipe.gridSize === 3 && !this.blockNearby(p, BlockId.CraftingTable)) {
+        if (recipe.kind === "brewing" && !this.blockNearby(p, BlockId.BrewingStand)) {
+          reject("requires brewing stand");
+          break;
+        }
+        if (recipe.kind === "crafting" && recipe.gridSize === 3 && !this.blockNearby(p, BlockId.CraftingTable)) {
           reject("requires crafting table");
           break;
         }
@@ -1252,7 +1287,8 @@ export class Simulation {
           break;
         }
         p.attackCooldown = PLAYER_ATTACK_COOLDOWN;
-        this.hurtMob(entity, attackDamage(p.inventory[p.selected] ?? null), out, p.x);
+        const strength = p.effects["strength"] !== undefined ? STRENGTH_BONUS : 0;
+        this.hurtMob(entity, attackDamage(p.inventory[p.selected] ?? null) + strength, out, p.x);
         break;
       }
       case "trade": {
@@ -1280,6 +1316,60 @@ export class Simulation {
           break;
         }
         addToInventory(p.inventory, trade.result.item, trade.result.count);
+        syncInventory(p);
+        break;
+      }
+      case "use_item": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        const stack = p.inventory[p.selected];
+        const effect = stack ? potionEffect(stack.item) : null;
+        if (!stack || !effect) {
+          reject("nothing to use");
+          break;
+        }
+        stack.count -= 1;
+        if (stack.count === 0) p.inventory[p.selected] = null;
+        // Drinking returns the bottle.
+        addToInventory(p.inventory, "glass_bottle", 1);
+        p.effects[effect] = EFFECT_DURATION_TICKS;
+        syncInventory(p);
+        reply({ type: "player_effects", player: p.id, effects: { ...p.effects } });
+        break;
+      }
+      case "enchant": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        if (!this.blockNearby(p, BlockId.EnchantingTable)) {
+          reject("requires enchanting table");
+          break;
+        }
+        const stack = p.inventory[p.selected];
+        const enchId = stack ? enchantFor(stack) : null;
+        if (!stack || !enchId) {
+          reject("cannot enchant this");
+          break;
+        }
+        const existing = stack.ench?.find((e) => e.id === enchId);
+        if (existing && existing.level >= ENCHANT_MAX_LEVEL) {
+          reject("already maxed");
+          break;
+        }
+        if (!removeFromInventory(p.inventory, "lapis_lazuli", ENCHANT_LAPIS_COST)) {
+          reject("missing lapis");
+          break;
+        }
+        if (existing) {
+          existing.level++;
+        } else {
+          stack.ench = [...(stack.ench ?? []), { id: enchId, level: 1 }];
+        }
         syncInventory(p);
         break;
       }

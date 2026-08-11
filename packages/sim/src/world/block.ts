@@ -35,6 +35,8 @@ export enum BlockId {
   Lava = 29,
   Basalt = 30,
   Chest = 31,
+  BrewingStand = 32,
+  EnchantingTable = 33,
 }
 
 export interface BlockDef {
@@ -104,6 +106,8 @@ export const Blocks = {
   lava: register({ id: BlockId.Lava, name: "lava", solid: false, hardness: -1, drops: null }),
   basalt: register({ id: BlockId.Basalt, name: "basalt", solid: true, hardness: 25, tool: "pickaxe", requiredTier: 1 }),
   chest: register({ id: BlockId.Chest, name: "chest", solid: true, hardness: 25, tool: "axe" }),
+  brewingStand: register({ id: BlockId.BrewingStand, name: "brewing_stand", solid: true, hardness: 20, tool: "pickaxe" }),
+  enchantingTable: register({ id: BlockId.EnchantingTable, name: "enchanting_table", solid: true, hardness: 40, tool: "pickaxe", requiredTier: 1 }),
 } as const;
 
 export function blockDef(id: BlockId): BlockDef {

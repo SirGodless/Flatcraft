@@ -64,6 +64,18 @@ const STYLES: Partial<Record<BlockId, BlockStyle>> = {
   [BlockId.NetherPortal]: { base: [138, 48, 200], noise: 0.25, alpha: 0.75 },
   [BlockId.Lava]: { base: [224, 80, 16], noise: 0.2, specks: { color: [255, 200, 60], count: 5 } },
   [BlockId.Basalt]: { base: [74, 74, 82], noise: 0.08, stripe: true },
+  [BlockId.BrewingStand]: {
+    base: [96, 96, 100],
+    top: { color: [74, 74, 82], rows: 6 },
+    noise: 0.1,
+    specks: { color: [230, 140, 40], count: 3 },
+  },
+  [BlockId.EnchantingTable]: {
+    base: [40, 30, 60],
+    top: { color: [180, 60, 80], rows: 3 },
+    noise: 0.12,
+    specks: { color: [120, 200, 255], count: 4 },
+  },
   [BlockId.Chest]: {
     base: [158, 110, 54],
     top: { color: [130, 90, 44], rows: 5 },

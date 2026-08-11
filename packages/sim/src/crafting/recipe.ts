@@ -39,7 +39,7 @@ export interface RecipeJson {
 
 export interface Recipe {
   id: string;
-  kind: "crafting" | "smelting";
+  kind: "crafting" | "smelting" | "brewing";
   shaped: boolean;
   /** 2 = craftable in the inventory grid, 3 = needs a crafting table. */
   gridSize: 2 | 3;
@@ -120,6 +120,19 @@ export function parseRecipe(id: string, json: RecipeJson): Recipe {
     }
     const gridSize = width <= 2 && pattern.length <= 2 ? 2 : 3;
     return { id, kind: "crafting", shaped: true, gridSize, ingredients, pattern: itemPattern, result };
+  }
+
+  if (json.type === `${NAMESPACE}brewing`) {
+    const list = json.ingredients;
+    if (!list || list.length === 0) {
+      throw new Error(`recipe ${id}: brewing recipe needs ingredients`);
+    }
+    const ingredients = new Map<string, number>();
+    for (const entry of list) {
+      const item = parseItemId(entry.item, id);
+      ingredients.set(item, (ingredients.get(item) ?? 0) + 1);
+    }
+    return { id, kind: "brewing", shaped: false, gridSize: 3, ingredients, result };
   }
 
   if (json.type === `${NAMESPACE}smelting`) {

@@ -51,6 +51,7 @@ function slotWidget(
       sprite.width = ICON;
       sprite.height = ICON;
       sprite.position.set((SLOT - ICON) / 2, (SLOT - ICON) / 2);
+      if (stack.ench?.length) sprite.tint = 0xccaaff; // enchanted shimmer
       cell.addChild(sprite);
     }
     if (stack.count > 1) {
@@ -521,6 +522,84 @@ export class TradePanelUI {
       }
       this.container.addChild(row);
     });
+  }
+}
+
+/** Enchanting screen: one button, lapis cost, works on the held tool. */
+export class EnchantPanelUI {
+  readonly container = new Container();
+  onEnchant: (() => void) | null = null;
+
+  private slots: InventorySlots = [];
+  private selected = 0;
+
+  constructor(private readonly blockTextures: Map<BlockId, Texture>) {
+    this.container.visible = false;
+  }
+
+  get visible(): boolean {
+    return this.container.visible;
+  }
+
+  open(): void {
+    this.container.visible = true;
+    this.rebuild();
+  }
+
+  close(): void {
+    this.container.visible = false;
+  }
+
+  update(slots: InventorySlots, selected: number): void {
+    this.slots = slots;
+    this.selected = selected;
+    if (this.container.visible) this.rebuild();
+  }
+
+  private rebuild(): void {
+    this.container.removeChildren().forEach((c) => c.destroy({ children: true }));
+    const width = 300;
+    const height = 120;
+    const background = new Graphics()
+      .rect(0, 0, width, height)
+      .fill({ color: 0x1a1a22, alpha: 0.92 })
+      .stroke({ color: 0x555566, width: 2 });
+    background.eventMode = "static";
+    this.container.addChild(background);
+
+    const held = this.slots[this.selected];
+    const enchText = held?.ench?.map((e) => `${e.id} ${e.level}`).join(", ") ?? "none";
+    const title = new Text({
+      text: `Enchanting\nHeld: ${held?.item ?? "nothing"}\nEnchants: ${enchText}`,
+      style: { fill: "#cccccc", fontSize: 12, fontFamily: "monospace" },
+    });
+    title.position.set(10, 8);
+    this.container.addChild(title);
+
+    const lapis = countInInventory(this.slots, "lapis_lazuli");
+    const affordable = lapis >= 8;
+    const row = new Container();
+    row.position.set(10, 84);
+    const bg = new Graphics().rect(0, 0, width - 20, 26).fill({
+      color: affordable ? 0x2e4e2e : 0x2a2a33,
+      alpha: 0.9,
+    });
+    row.addChild(bg);
+    const label = new Text({
+      text: `Enchant held tool (8x lapis_lazuli, have ${lapis})`,
+      style: { fill: affordable ? "#ffffff" : "#8a8a8a", fontSize: 12, fontFamily: "monospace" },
+    });
+    label.position.set(6, 5);
+    row.addChild(label);
+    if (affordable) {
+      row.eventMode = "static";
+      row.cursor = "pointer";
+      row.on("pointerdown", (e: FederatedPointerEvent) => {
+        e.stopPropagation();
+        this.onEnchant?.();
+      });
+    }
+    this.container.addChild(row);
   }
 }
 

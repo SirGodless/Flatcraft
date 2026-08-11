@@ -13,6 +13,8 @@ export interface ItemStack {
   count: number;
   /** Nested inventory for container items (backpacks). */
   data?: { slots: (ItemStack | null)[] };
+  /** Enchantments on tools (efficiency, sharpness), by level. */
+  ench?: Array<{ id: string; level: number }>;
 }
 
 export type InventorySlots = (ItemStack | null)[];

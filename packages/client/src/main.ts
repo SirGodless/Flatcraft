@@ -64,6 +64,7 @@ async function start(): Promise<void> {
   renderer.onOpenFurnace = (x, y) => connection.send({ type: "open_furnace", x, y });
   renderer.onOpenChest = (x, y) => connection.send({ type: "open_chest", x, y });
   renderer.onTrade = (villager, trade) => connection.send({ type: "trade", entity: villager, trade });
+  renderer.onEnchant = () => connection.send({ type: "enchant" });
   renderer.onUiClosed = () => connection.send({ type: "return_grid" });
 
   const input = attachInput(renderer.canvas, {
@@ -85,6 +86,10 @@ async function start(): Promise<void> {
     onUseItem: () => {
       if (renderer.selectedItem() === "backpack") {
         renderer.openBackpack();
+        return true;
+      }
+      if (renderer.selectedItem()?.startsWith("potion_")) {
+        connection.send({ type: "use_item" });
         return true;
       }
       return false;

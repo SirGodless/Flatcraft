@@ -87,6 +87,14 @@ export const Items = {
   chestItem: blockItem("chest", BlockId.Chest),
   /** Portable 9-slot container (a FlatCraft original, not vanilla). */
   backpack: register({ id: "backpack", name: "backpack", maxStack: 1 }),
+  brewingStandItem: blockItem("brewing_stand", BlockId.BrewingStand),
+  enchantingTableItem: blockItem("enchanting_table", BlockId.EnchantingTable),
+  glassBottle: material("glass_bottle"),
+  potionSpeed: register({ id: "potion_speed", name: "potion_speed", maxStack: 1 }),
+  potionRegeneration: register({ id: "potion_regeneration", name: "potion_regeneration", maxStack: 1 }),
+  potionStrength: register({ id: "potion_strength", name: "potion_strength", maxStack: 1 }),
+  /** Reveals ores through the fog of war (FlatCraft original). */
+  potionMiner: register({ id: "potion_miner", name: "potion_miner", maxStack: 1 }),
   /** Gliding wings; behavior lands with the elytra milestone. */
   elytra: register({ id: "elytra", name: "elytra", maxStack: 1 }),
   lapisLazuli: material("lapis_lazuli"),

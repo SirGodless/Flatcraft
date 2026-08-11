@@ -1,0 +1,9 @@
+{
+  "type": "flatcraft:brewing",
+  "ingredients": [
+    { "item": "flatcraft:glass_bottle" },
+    { "item": "flatcraft:bone" },
+    { "item": "flatcraft:glowstone_dust" }
+  ],
+  "result": { "item": "flatcraft:potion_strength" }
+}

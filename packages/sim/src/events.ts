@@ -16,6 +16,8 @@ export type SimEvent =
   /** A player switched dimension (portal); position is the arrival spot. */
   | { type: "player_dimension"; player: PlayerId; dim: Dimension; x: number; y: number }
   | { type: "player_health"; player: PlayerId; health: number; max: number }
+  /** Active potion effects with remaining ticks (sent to the owner). */
+  | { type: "player_effects"; player: PlayerId; effects: Record<string, number> }
   /** Time-of-day sync, sent on join and periodically (clients advance it
    * locally between updates). */
   | { type: "time_changed"; time: number }

@@ -21,6 +21,7 @@ import {
   ContainerPanelUI,
   CraftingPanelUI,
   cursorWidget,
+  EnchantPanelUI,
   FurnacePanelUI,
   HeartsUI,
   HotbarUI,
@@ -89,8 +90,13 @@ export class Renderer {
   private chestPanel!: ContainerPanelUI;
   private backpackPanel!: ContainerPanelUI;
   private tradePanel!: TradePanelUI;
+  private enchantPanel!: EnchantPanelUI;
+  private effectsHud!: Text;
+  private effects: Record<string, number> = {};
   /** Wired by the bootstrap code to send trade commands. */
   onTrade: ((villager: number, trade: number) => void) | null = null;
+  /** Wired by the bootstrap code to send enchant commands. */
+  onEnchant: (() => void) | null = null;
   private openChestPos: { x: number; y: number } | null = null;
   /** Wired by the bootstrap code to send open_chest commands. */
   onOpenChest: ((x: number, y: number) => void) | null = null;
@@ -159,6 +165,16 @@ export class Renderer {
     this.tradePanel.onTrade = (villager, trade) => this.onTrade?.(villager, trade);
     this.app.stage.addChild(this.tradePanel.container);
 
+    this.enchantPanel = new EnchantPanelUI(blockTextures);
+    this.enchantPanel.onEnchant = () => this.onEnchant?.();
+    this.app.stage.addChild(this.enchantPanel.container);
+
+    this.effectsHud = new Text({
+      text: "",
+      style: { fill: "#b8e0ff", fontSize: 12, fontFamily: "monospace" },
+    });
+    this.app.stage.addChild(this.effectsHud);
+
     this.app.stage.addChild(this.cursorLayer);
   }
 
@@ -179,6 +195,7 @@ export class Renderer {
     this.chestPanel.close();
     this.backpackPanel.close();
     this.tradePanel.close();
+    this.enchantPanel.close();
     this.openChestPos = null;
     if (wasOpen) this.onUiClosed?.();
   }
@@ -189,7 +206,8 @@ export class Renderer {
       this.furnacePanel.visible ||
       this.chestPanel.visible ||
       this.backpackPanel.visible ||
-      this.tradePanel.visible
+      this.tradePanel.visible ||
+      this.enchantPanel.visible
     );
   }
 
@@ -236,6 +254,14 @@ export class Renderer {
       this.onOpenFurnace?.(tileX, tileY);
       return true;
     }
+    if (block === BlockId.EnchantingTable) {
+      this.craftingPanel.close();
+      this.furnacePanel.close();
+      this.chestPanel.close();
+      this.enchantPanel.open();
+      this.enchantPanel.update(this.inventory, this.selectedSlot);
+      return true;
+    }
     if (block === BlockId.Chest) {
       this.craftingPanel.close();
       this.furnacePanel.close();
@@ -255,6 +281,7 @@ export class Renderer {
       this.chestPanel.container,
       this.backpackPanel.container,
       this.tradePanel.container,
+      this.enchantPanel.container,
       this.hotbar.container,
     ];
     for (const panel of panels) {
@@ -330,6 +357,12 @@ export class Renderer {
       case "player_health": {
         if (event.player === this.localPlayerId) {
           this.hearts.update(event.health, event.max);
+        }
+        break;
+      }
+      case "player_effects": {
+        if (event.player === this.localPlayerId) {
+          this.effects = event.effects;
         }
         break;
       }
@@ -428,6 +461,7 @@ export class Renderer {
           this.craftingPanel.update(this.inventory, this.selectedSlot, event.craftGrid);
           this.refreshBackpack();
           this.tradePanel.update(this.inventory);
+          this.enchantPanel.update(this.inventory, this.selectedSlot);
           this.cursorLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
           if (this.cursorStack) {
             this.cursorLayer.addChild(cursorWidget(this.cursorStack, this.blockTextures));
@@ -696,6 +730,20 @@ export class Renderer {
       120,
     );
     this.tradePanel.container.position.set((this.screenWidth - 340) / 2, 100);
+    this.enchantPanel.container.position.set((this.screenWidth - 300) / 2, 120);
+
+    // Effects HUD under the hearts, counting down locally.
+    for (const key of Object.keys(this.effects)) {
+      this.effects[key]! -= dtMs / TICK_MS;
+      if (this.effects[key]! <= 0) delete this.effects[key];
+    }
+    this.effectsHud.text = Object.entries(this.effects)
+      .map(([id, ticks]) => `${id} ${Math.ceil(ticks / 20)}s`)
+      .join("  ");
+    this.effectsHud.position.set(
+      (this.screenWidth - this.hotbar.width) / 2,
+      this.screenHeight - this.hotbar.height - 44,
+    );
     this.cursorLayer.position.set(this.pointerX - 16, this.pointerY - 16);
 
     const px = localX !== null ? Math.floor(localX) : Math.floor(this.camera.x / TILE_PX);

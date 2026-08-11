@@ -1,0 +1,10 @@
+{
+  "type": "flatcraft:crafting_shaped",
+  "pattern": [" G ", "DOD", "OOO"],
+  "key": {
+    "G": { "item": "flatcraft:glass" },
+    "D": { "item": "flatcraft:diamond" },
+    "O": { "item": "flatcraft:obsidian" }
+  },
+  "result": { "item": "flatcraft:enchanting_table" }
+}

@@ -1,0 +1,6 @@
+{
+  "type": "flatcraft:crafting_shaped",
+  "pattern": ["G G", " G "],
+  "key": { "G": { "item": "flatcraft:glass" } },
+  "result": { "item": "flatcraft:glass_bottle", "count": 3 }
+}

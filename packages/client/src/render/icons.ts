@@ -119,7 +119,26 @@ const gem = (color: string): Art => ({
   palette: { X: color },
 });
 
+const flask = (liquid: string): Art => ({
+  rows: [
+    "...CC...",
+    "...CC...",
+    "..GLLG..",
+    ".GLLLLG.",
+    ".GLLLLG.",
+    ".GLLLLG.",
+    "..GGGG..",
+    "........",
+  ],
+  palette: { C: "#c8c8d0", G: "#dce8f0", L: liquid },
+});
+
 const ARTS: Record<string, Art> = {
+  glass_bottle: flask("#e8f4fa"),
+  potion_speed: flask("#58c2e8"),
+  potion_regeneration: flask("#e85890"),
+  potion_strength: flask("#c83030"),
+  potion_miner: flask("#f0b040"),
   stick: {
     rows: [
       "........",

@@ -1,16 +1,23 @@
 import { parseRecipe, type Recipe, type RecipeJson } from "../../crafting/recipe.js";
 
 import backpack from "./backpack.json";
+import brewingStand from "./brewing_stand.json";
 import chest from "./chest.json";
 import craftingTable from "./crafting_table.json";
 import diamondAxe from "./diamond_axe.json";
+import enchantingTable from "./enchanting_table.json";
 import diamondPickaxe from "./diamond_pickaxe.json";
 import diamondShovel from "./diamond_shovel.json";
 import diamondSword from "./diamond_sword.json";
 import flintAndSteel from "./flint_and_steel.json";
 import furnace from "./furnace.json";
 import glass from "./glass.json";
+import glassBottle from "./glass_bottle.json";
 import glowstone from "./glowstone.json";
+import potionMiner from "./potion_miner.json";
+import potionRegeneration from "./potion_regeneration.json";
+import potionSpeed from "./potion_speed.json";
+import potionStrength from "./potion_strength.json";
 import goldIngot from "./gold_ingot.json";
 import goldenAxe from "./golden_axe.json";
 import goldenPickaxe from "./golden_pickaxe.json";
@@ -73,6 +80,13 @@ const sources: Record<string, RecipeJson> = {
   chest,
   backpack,
   glowstone,
+  glass_bottle: glassBottle,
+  brewing_stand: brewingStand,
+  enchanting_table: enchantingTable,
+  potion_speed: potionSpeed,
+  potion_regeneration: potionRegeneration,
+  potion_strength: potionStrength,
+  potion_miner: potionMiner,
 };
 
 export const RECIPES: ReadonlyMap<string, Recipe> = new Map(
