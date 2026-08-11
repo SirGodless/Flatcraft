@@ -45,7 +45,7 @@ npm run build      # build all packages
 
 1. ~~Project scaffolding, architecture~~
 2. ~~Tilemap/chunk system + rendering~~ (placeholder heightmap terrain, chunk streaming via commands/events, baked-chunk PixiJS rendering, camera + break/place)
-3. World generation (overworld, caves, nether)
+3. ~~World generation: overworld~~ (biomes: desert/plains/forest/mountains, lakes, caves, ore veins, trees; nether comes with its own milestone later)
 4. ~~Physics & collision~~ (AABB player physics: gravity, jumping, walking, tile collision; server-side reach + entity-blocking checks; interpolated rendering)
 5. Inventory & crafting
 6. Block interactions

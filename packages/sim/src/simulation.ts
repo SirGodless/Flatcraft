@@ -13,7 +13,7 @@ import {
   WALK_SPEED,
 } from "./physics.js";
 import { blockDef, BlockId } from "./world/block.js";
-import { surfaceHeight } from "./world/gen.js";
+import { findSpawnX, surfaceHeight } from "./world/gen.js";
 import { World } from "./world/world.js";
 
 /** The player's current movement intent, kept until the next move command. */
@@ -107,8 +107,9 @@ export class Simulation {
 
     switch (command.type) {
       case "join": {
-        const x = 0.5;
-        const y = surfaceHeight(this.world.seed, 0);
+        const spawnX = findSpawnX(this.world.seed);
+        const x = spawnX + 0.5;
+        const y = surfaceHeight(this.world.seed, spawnX);
         const state: PlayerState = {
           id: player,
           name: command.name,
@@ -183,7 +184,9 @@ export class Simulation {
           reject("invalid coordinates");
           break;
         }
-        if (command.block === BlockId.Air || command.block === BlockId.Bedrock) {
+        // Unknown ids fall back to air; hardness -1 covers bedrock, water etc.
+        const def = blockDef(command.block);
+        if (def.id === BlockId.Air || def.hardness < 0) {
           reject("block not placeable");
           break;
         }

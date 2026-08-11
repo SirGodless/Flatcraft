@@ -1,0 +1,134 @@
+import { describe, expect, it } from "vitest";
+import {
+  BEDROCK_Y,
+  Biome,
+  biomeAt,
+  BlockId,
+  CHUNK_HEIGHT,
+  CHUNK_WIDTH,
+  SEA_LEVEL,
+  surfaceHeight,
+  treeAt,
+  World,
+} from "../src/index.js";
+
+const SEED = 1337;
+
+function freshWorld(): World {
+  return new World(SEED);
+}
+
+describe("world generation", () => {
+  it("is independent of chunk generation order", () => {
+    const a = freshWorld();
+    a.ensureChunk(0, 0);
+    a.ensureChunk(1, 0);
+    const b = freshWorld();
+    b.ensureChunk(1, 0);
+    b.ensureChunk(0, 0);
+    expect(Array.from(a.ensureChunk(0, 0).tiles)).toEqual(Array.from(b.ensureChunk(0, 0).tiles));
+    expect(Array.from(a.ensureChunk(1, 0).tiles)).toEqual(Array.from(b.ensureChunk(1, 0).tiles));
+  });
+
+  it("has a solid bedrock floor", () => {
+    const world = freshWorld();
+    const chunk = world.ensureChunk(0, Math.floor(BEDROCK_Y / CHUNK_HEIGHT));
+    const localBedrockStart = BEDROCK_Y % CHUNK_HEIGHT;
+    for (let lx = 0; lx < CHUNK_WIDTH; lx++) {
+      for (let ly = localBedrockStart; ly < CHUNK_HEIGHT; ly++) {
+        expect(chunk.getBlock(lx, ly)).toBe(BlockId.Bedrock);
+      }
+    }
+  });
+
+  it("covers low terrain with water and never grass", () => {
+    const world = freshWorld();
+    let lakes = 0;
+    for (let x = 0; x < 512; x++) {
+      const surface = surfaceHeight(SEED, x);
+      if (surface <= SEA_LEVEL) continue;
+      lakes++;
+      expect(world.getBlockGenerating(x, SEA_LEVEL)).toBe(BlockId.Water);
+      expect(world.getBlockGenerating(x, surface)).not.toBe(BlockId.Grass);
+    }
+    expect(lakes).toBeGreaterThan(0);
+  });
+
+  it("carves caves below the surface", () => {
+    const world = freshWorld();
+    let airBelowGround = 0;
+    for (let x = 0; x < 128; x++) {
+      const surface = surfaceHeight(SEED, x);
+      for (let y = surface + 8; y < 200; y++) {
+        if (world.getBlockGenerating(x, y) === BlockId.Air) airBelowGround++;
+      }
+    }
+    expect(airBelowGround).toBeGreaterThan(100);
+  });
+
+  it("places shallow and deep ores in their depth bands", () => {
+    const world = freshWorld();
+    const found = new Set<BlockId>();
+    for (let cx = -4; cx <= 4; cx++) {
+      for (let cy = 0; cy <= 7; cy++) {
+        for (const tile of world.ensureChunk(cx, cy).tiles) {
+          found.add(tile as BlockId);
+        }
+      }
+    }
+    expect(found).toContain(BlockId.CoalOre);
+    expect(found).toContain(BlockId.IronOre);
+    expect(found).toContain(BlockId.GoldOre);
+    expect(found).toContain(BlockId.DiamondOre);
+    expect(found).toContain(BlockId.Gravel);
+
+    // Diamond must never appear above its minimum depth (y >= 192 -> cy >= 6).
+    for (let cx = -4; cx <= 4; cx++) {
+      for (let cy = 0; cy <= 5; cy++) {
+        const tiles = Array.from(world.ensureChunk(cx, cy).tiles);
+        expect(tiles).not.toContain(BlockId.DiamondOre);
+      }
+    }
+  });
+
+  it("grows trees in forests, consistent across chunk borders", () => {
+    const world = freshWorld();
+    // Find a forest tree on dry land.
+    let tree = null;
+    for (let x = 0; x < 4096 && !tree; x++) {
+      if (biomeAt(SEED, x) === Biome.Forest) {
+        tree = treeAt(SEED, x);
+      }
+    }
+    expect(tree).not.toBeNull();
+    // Trunk occupies the column above the surface...
+    expect(world.getBlockGenerating(tree!.x, tree!.surface - 1)).toBe(BlockId.OakLog);
+    // ...and the canopy reaches into neighboring columns (and possibly the
+    // neighboring chunk - getBlockGenerating loads whatever chunk is needed).
+    const topY = tree!.surface - tree!.height;
+    expect(world.getBlockGenerating(tree!.x + 1, topY)).toBe(BlockId.OakLeaves);
+    expect(world.getBlockGenerating(tree!.x - 1, topY)).toBe(BlockId.OakLeaves);
+  });
+
+  it("keeps deserts sandy and snowy peaks snowy", () => {
+    const world = freshWorld();
+    let desertChecked = false;
+    let snowChecked = false;
+    for (let x = -2048; x < 2048; x++) {
+      const surface = surfaceHeight(SEED, x);
+      if (surface > SEA_LEVEL - 1) continue; // skip beaches/underwater
+      const biome = biomeAt(SEED, x);
+      if (!desertChecked && biome === Biome.Desert) {
+        expect(world.getBlockGenerating(x, surface)).toBe(BlockId.Sand);
+        desertChecked = true;
+      }
+      if (!snowChecked && biome === Biome.Mountains && surface <= -14) {
+        expect(world.getBlockGenerating(x, surface)).toBe(BlockId.Snow);
+        snowChecked = true;
+      }
+      if (desertChecked && snowChecked) break;
+    }
+    expect(desertChecked).toBe(true);
+    expect(snowChecked).toBe(true);
+  });
+});

@@ -10,13 +10,42 @@ interface BlockStyle {
   top?: { color: [number, number, number]; rows: number };
   /** Per-pixel brightness jitter, 0..1. */
   noise: number;
+  /** Overall opacity (water). */
+  alpha?: number;
+  /** Probability per pixel of being fully transparent (leaves). */
+  holes?: number;
+  /** Darken vertical bands (logs' bark look). */
+  stripe?: boolean;
+  /** Colored 2x2 speckles on top of the base (ores). */
+  specks?: { color: [number, number, number]; count: number };
+}
+
+const STONE: [number, number, number] = [122, 122, 128];
+const DIRT: [number, number, number] = [134, 96, 60];
+
+function ore(color: [number, number, number], count = 5): BlockStyle {
+  return { base: STONE, noise: 0.12, specks: { color, count } };
 }
 
 const STYLES: Partial<Record<BlockId, BlockStyle>> = {
-  [BlockId.Stone]: { base: [122, 122, 128], noise: 0.12 },
-  [BlockId.Dirt]: { base: [134, 96, 60], noise: 0.14 },
-  [BlockId.Grass]: { base: [134, 96, 60], top: { color: [92, 168, 73], rows: 4 }, noise: 0.14 },
+  [BlockId.Stone]: { base: STONE, noise: 0.12 },
+  [BlockId.Dirt]: { base: DIRT, noise: 0.14 },
+  [BlockId.Grass]: { base: DIRT, top: { color: [92, 168, 73], rows: 4 }, noise: 0.14 },
   [BlockId.Bedrock]: { base: [58, 58, 62], noise: 0.25 },
+  [BlockId.Sand]: { base: [218, 203, 152], noise: 0.08 },
+  [BlockId.Sandstone]: { base: [206, 189, 136], top: { color: [214, 198, 146], rows: 3 }, noise: 0.06 },
+  [BlockId.Gravel]: { base: [127, 124, 122], noise: 0.3 },
+  [BlockId.Water]: { base: [58, 118, 196], noise: 0.05, alpha: 0.65 },
+  [BlockId.OakLog]: { base: [104, 80, 48], noise: 0.1, stripe: true },
+  [BlockId.OakLeaves]: { base: [64, 138, 52], noise: 0.22, holes: 0.16 },
+  [BlockId.Snow]: { base: [238, 242, 248], noise: 0.04 },
+  [BlockId.CoalOre]: ore([44, 44, 46]),
+  [BlockId.IronOre]: ore([215, 172, 140]),
+  [BlockId.GoldOre]: ore([250, 212, 80]),
+  [BlockId.LapisOre]: ore([42, 84, 184]),
+  [BlockId.RedstoneOre]: ore([214, 48, 40]),
+  [BlockId.DiamondOre]: ore([96, 219, 213], 4),
+  [BlockId.EmeraldOre]: ore([48, 200, 94], 3),
 };
 
 /** Tiny deterministic PRNG so textures look identical on every load. */
@@ -34,14 +63,32 @@ function makeBlockTexture(id: BlockId, style: BlockStyle): Texture {
   canvas.height = TILE_PX;
   const ctx = canvas.getContext("2d")!;
   const rand = lcg(0xf1a7 + id * 7919);
+  ctx.globalAlpha = style.alpha ?? 1;
 
   for (let y = 0; y < TILE_PX; y++) {
     for (let x = 0; x < TILE_PX; x++) {
+      if (style.holes !== undefined && rand() < style.holes) continue;
       const inTop = style.top !== undefined && y < style.top.rows;
-      const [r, g, b] = inTop ? style.top!.color : style.base;
+      let [r, g, b] = inTop ? style.top!.color : style.base;
+      if (style.stripe && x % 4 < 2) {
+        r *= 0.82;
+        g *= 0.82;
+        b *= 0.82;
+      }
       const jitter = 1 - style.noise + rand() * style.noise * 2;
       ctx.fillStyle = `rgb(${Math.round(r * jitter)},${Math.round(g * jitter)},${Math.round(b * jitter)})`;
       ctx.fillRect(x, y, 1, 1);
+    }
+  }
+
+  if (style.specks) {
+    const [r, g, b] = style.specks.color;
+    for (let i = 0; i < style.specks.count; i++) {
+      const sx = 1 + Math.floor(rand() * (TILE_PX - 3));
+      const sy = 1 + Math.floor(rand() * (TILE_PX - 3));
+      const jitter = 0.9 + rand() * 0.2;
+      ctx.fillStyle = `rgb(${Math.round(r * jitter)},${Math.round(g * jitter)},${Math.round(b * jitter)})`;
+      ctx.fillRect(sx, sy, 2, 2);
     }
   }
 

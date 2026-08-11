@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { BlockId, createRng, generateChunk, hashSeed, Simulation, surfaceHeight } from "../src/index.js";
+import {
+  BlockId,
+  createRng,
+  findSpawnX,
+  generateChunk,
+  hashSeed,
+  Simulation,
+  surfaceHeight,
+} from "../src/index.js";
 
 describe("seeded rng", () => {
   it("produces the same sequence for the same seed", () => {
@@ -44,9 +52,10 @@ describe("world generation", () => {
 });
 
 describe("simulation", () => {
-  /** Surface y of the column right next to spawn (x = 1), within reach. */
+  /** Surface tile of the column right next to spawn, within reach. */
   function nearbySurface(seed: number): { x: number; y: number } {
-    return { x: 1, y: surfaceHeight(seed, 1) };
+    const x = findSpawnX(seed) + 1;
+    return { x, y: surfaceHeight(seed, x) };
   }
 
   function run(seed: number): { sim: Simulation; events: unknown[] } {
@@ -80,7 +89,9 @@ describe("simulation", () => {
     sim.tick([{ player, command: { type: "join", name: "T" } }]);
     const { x, y } = nearbySurface(1);
 
-    // Above the surface is air (still within reach).
+    // Force a known-air tile above the surface (a tree might occupy it).
+    sim.world.ensureChunk(Math.floor(x / 32), Math.floor((y - 3) / 32));
+    sim.world.setBlock(x, y - 3, BlockId.Air);
     const airResult = sim.tick([{ player, command: { type: "break_block", x, y: y - 3 } }]);
     expect(airResult).toContainEqual({
       to: player,

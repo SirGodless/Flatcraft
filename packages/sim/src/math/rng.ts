@@ -16,12 +16,27 @@ export function createRng(seed: number): Rng {
   };
 }
 
-/** Derive a stable sub-seed, e.g. per chunk: hashSeed(worldSeed, cx, cy). */
+/**
+ * Derive a stable sub-seed, e.g. per chunk: hashSeed(worldSeed, cx, cy).
+ * Murmur3-style mixing with a final avalanche - small input differences
+ * (neighboring coordinates) must flip about half the output bits, or
+ * noise built on this hash develops visible bias.
+ */
 export function hashSeed(...parts: number[]): number {
   let h = 0x811c9dc5;
   for (const p of parts) {
-    h ^= p >>> 0;
-    h = Math.imul(h, 0x01000193);
+    let k = p >>> 0;
+    k = Math.imul(k, 0xcc9e2d51);
+    k = (k << 15) | (k >>> 17);
+    k = Math.imul(k, 0x1b873593);
+    h ^= k;
+    h = (h << 13) | (h >>> 19);
+    h = (Math.imul(h, 5) + 0xe6546b64) >>> 0;
   }
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
   return h >>> 0;
 }

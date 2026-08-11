@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  blockDef,
   BlockId,
-  PLAYER_HEIGHT,
+  CHUNK_HEIGHT,
+  CHUNK_WIDTH,
+  findSpawnX,
   Simulation,
   surfaceHeight,
   type PlayerId,
@@ -9,6 +12,8 @@ import {
 } from "../src/index.js";
 
 const SEED = 1337;
+const SPAWN_X = findSpawnX(SEED);
+const SURFACE = surfaceHeight(SEED, SPAWN_X);
 
 function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerState } {
   const player = sim.allocatePlayerId();
@@ -21,14 +26,20 @@ function settle(sim: Simulation, ticks = 30): void {
   for (let i = 0; i < ticks; i++) sim.tick([]);
 }
 
+function setBlock(sim: Simulation, x: number, y: number, id: BlockId): void {
+  sim.world.ensureChunk(Math.floor(x / CHUNK_WIDTH), Math.floor(y / CHUNK_HEIGHT));
+  sim.world.setBlock(x, y, id);
+}
+
 describe("player physics", () => {
-  it("spawns on the surface and rests there under gravity", () => {
+  it("spawns on dry land and rests there under gravity", () => {
     const sim = new Simulation(SEED);
     const { state } = joinPlayer(sim);
+    expect(SURFACE).toBeLessThan(6); // sea level: spawn is not underwater
     settle(sim);
     expect(state.onGround).toBe(true);
     // Feet exactly on top of the surface block.
-    expect(state.y).toBe(surfaceHeight(SEED, 0));
+    expect(state.y).toBe(SURFACE);
     const yBefore = state.y;
     settle(sim, 10);
     expect(state.y).toBe(yBefore);
@@ -73,11 +84,12 @@ describe("player physics", () => {
     const { player, state } = joinPlayer(sim);
     settle(sim);
 
-    // Build a two-block wall directly to the right of the player.
+    // Build a tall wall one column to the right, covering well above and
+    // below the surface so slopes cannot route around it.
     const wallX = Math.floor(state.x) + 1;
-    sim.world.ensureChunk(0, 0);
-    sim.world.setBlock(wallX, Math.floor(state.y) - 1, BlockId.Stone);
-    sim.world.setBlock(wallX, Math.floor(state.y) - 2, BlockId.Stone);
+    for (let y = SURFACE - 5; y <= SURFACE + 6; y++) {
+      setBlock(sim, wallX, y, BlockId.Stone);
+    }
 
     sim.tick([{ player, command: { type: "move", dx: 1, jump: false } }]);
     settle(sim, 20);
@@ -86,19 +98,22 @@ describe("player physics", () => {
     expect(state.vx).toBe(0);
   });
 
-  it("does not fall through the floor at terminal velocity", () => {
+  it("does not fall through the floor after a long fall", () => {
     const sim = new Simulation(SEED);
     const { state } = joinPlayer(sim);
-    // Long free fall: dig a shaft under the spawn.
-    sim.world.ensureChunk(0, 0);
-    sim.world.ensureChunk(0, 1);
-    const surface = surfaceHeight(SEED, 0);
-    for (let y = surface; y < surface + 40; y++) {
-      sim.world.setBlock(0, y, BlockId.Air);
+    // Dig a 40-tile shaft under the spawn column.
+    const x = SPAWN_X;
+    for (let y = SURFACE; y < SURFACE + 40; y++) {
+      setBlock(sim, x, y, BlockId.Air);
     }
-    settle(sim, 120);
+    // First solid tile below the shaft (caves may extend it further).
+    let floorY = SURFACE + 40;
+    while (!blockDef(sim.world.getBlockGenerating(x, floorY)).solid) {
+      floorY++;
+    }
+    settle(sim, 200);
     expect(state.onGround).toBe(true);
-    expect(state.y).toBe(surface + 40);
+    expect(state.y).toBe(floorY);
   });
 
   it("emits player_moved broadcasts while moving", () => {
@@ -139,6 +154,7 @@ describe("player physics", () => {
     settle(sim);
     const tileX = Math.floor(state.x);
     const tileY = Math.floor(state.y) - 1; // inside the player's legs
+    setBlock(sim, tileX, tileY, BlockId.Air);
     const result = sim.tick([
       { player, command: { type: "place_block", x: tileX, y: tileY, block: BlockId.Stone } },
     ]);

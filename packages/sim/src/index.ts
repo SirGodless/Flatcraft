@@ -2,6 +2,7 @@ export * from "./constants.js";
 export * from "./commands.js";
 export * from "./events.js";
 export * from "./simulation.js";
+export * from "./math/noise.js";
 export * from "./math/rng.js";
 export * from "./physics.js";
 export * from "./world/block.js";
