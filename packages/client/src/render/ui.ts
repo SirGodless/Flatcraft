@@ -95,6 +95,51 @@ export function cursorWidget(stack: ItemStack, blockTextures: Map<BlockId, Textu
   return cell;
 }
 
+/**
+ * The player's inventory (3 rows + hotbar row) as a clickable grid, shown
+ * inside container screens (furnace, chest, backpack) so items can be
+ * moved in and out. Returns the section's pixel height via `sectionHeight`.
+ */
+function inventorySection(
+  slots: InventorySlots,
+  selected: number,
+  blockTextures: Map<BlockId, Texture>,
+  onSlotClick: SlotClickHandler | null,
+): Container {
+  const section = new Container();
+  const label = new Text({
+    text: "Inventory",
+    style: { fill: "#cccccc", fontSize: 13, fontFamily: "monospace" },
+  });
+  section.addChild(label);
+  const y0 = 20;
+  const click = (index: number) => (button: "left" | "right") =>
+    onSlotClick?.({ container: "inventory", index }, button);
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 9; col++) {
+      const index = 9 + row * 9 + col;
+      const cell = slotWidget(slots[index] ?? null, blockTextures, { onClick: click(index) });
+      cell.position.set(col * (SLOT + PAD), y0 + row * (SLOT + PAD));
+      section.addChild(cell);
+    }
+  }
+  const hotbarY = y0 + 3 * (SLOT + PAD) + 6;
+  for (let col = 0; col < 9; col++) {
+    const cell = slotWidget(slots[col] ?? null, blockTextures, {
+      highlighted: col === selected,
+      onClick: click(col),
+    });
+    cell.position.set(col * (SLOT + PAD), hotbarY);
+    section.addChild(cell);
+  }
+  return section;
+}
+
+/** Pixel height of an inventorySection. */
+const INVENTORY_SECTION_HEIGHT = 20 + 4 * (SLOT + PAD) + 6;
+/** Pixel width of an inventorySection (9 columns). */
+const INVENTORY_SECTION_WIDTH = 9 * (SLOT + PAD) - PAD;
+
 /** Hearts row above the hotbar: 10 hearts for 20 HP, half-heart capable. */
 export class HeartsUI {
   readonly container = new Container();
@@ -395,6 +440,8 @@ export class ContainerPanelUI {
 
   private slots: (ItemStack | null)[] = [];
   private makeRef: ((index: number) => SlotRef) | null = null;
+  private invSlots: InventorySlots = [];
+  private invSelected = 0;
 
   constructor(
     private readonly blockTextures: Map<BlockId, Texture>,
@@ -429,11 +476,17 @@ export class ContainerPanelUI {
     if (this.container.visible) this.rebuild();
   }
 
+  setInventory(slots: InventorySlots, selected: number): void {
+    this.invSlots = slots;
+    this.invSelected = selected;
+    if (this.container.visible) this.rebuild();
+  }
+
   private rebuild(): void {
     this.container.removeChildren().forEach((c) => c.destroy({ children: true }));
     const rows = Math.ceil(this.count / this.cols);
     const width = this.width;
-    const height = rows * (SLOT + PAD) + 34;
+    const height = rows * (SLOT + PAD) + 34 + INVENTORY_SECTION_HEIGHT + 12;
 
     const background = new Graphics()
       .rect(0, 0, width, height)
@@ -460,6 +513,10 @@ export class ContainerPanelUI {
       cell.position.set(PAD * 2 + col * (SLOT + PAD), 28 + row * (SLOT + PAD));
       this.container.addChild(cell);
     }
+
+    const inv = inventorySection(this.invSlots, this.invSelected, this.blockTextures, this.onSlotClick);
+    inv.position.set(PAD * 2, 34 + rows * (SLOT + PAD));
+    this.container.addChild(inv);
   }
 }
 
@@ -642,15 +699,24 @@ export interface FurnaceView {
   cookTotal: number;
 }
 
-/** Furnace screen: input above fuel, flame + arrow, output. */
+/** Furnace screen: input above fuel, flame + arrow, output - plus the
+ * player inventory below, so items can be dragged in. */
 export class FurnacePanelUI {
   readonly container = new Container();
   onSlotClick: SlotClickHandler | null = null;
 
   private view: FurnaceView | null = null;
+  private invSlots: InventorySlots = [];
+  private invSelected = 0;
 
   constructor(private readonly blockTextures: Map<BlockId, Texture>) {
     this.container.visible = false;
+  }
+
+  setInventory(slots: InventorySlots, selected: number): void {
+    this.invSlots = slots;
+    this.invSelected = selected;
+    if (this.container.visible) this.rebuild();
   }
 
   get visible(): boolean {
@@ -683,8 +749,8 @@ export class FurnacePanelUI {
     const view = this.view;
     if (!view) return;
 
-    const width = 250;
-    const height = 170;
+    const width = INVENTORY_SECTION_WIDTH + 4 * PAD;
+    const height = 156 + INVENTORY_SECTION_HEIGHT + 12;
     const background = new Graphics()
       .rect(0, 0, width, height)
       .fill({ color: 0x1a1a22, alpha: 0.92 })
@@ -733,5 +799,17 @@ export class FurnacePanelUI {
     const outputCell = slotWidget(view.output, this.blockTextures, { onClick: click("output") });
     outputCell.position.set(170, 64);
     this.container.addChild(outputCell);
+
+    const inv = inventorySection(this.invSlots, this.invSelected, this.blockTextures, this.onSlotClick);
+    inv.position.set(PAD * 2, 156);
+    this.container.addChild(inv);
+  }
+
+  get panelWidth(): number {
+    return INVENTORY_SECTION_WIDTH + 4 * PAD;
+  }
+
+  get panelHeight(): number {
+    return 156 + INVENTORY_SECTION_HEIGHT + 12;
   }
 }

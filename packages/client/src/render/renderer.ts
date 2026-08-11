@@ -249,6 +249,7 @@ export class Renderer {
     this.craftingPanel.close();
     this.furnacePanel.close();
     this.chestPanel.close();
+    this.backpackPanel.setInventory(this.inventory, this.selectedSlot);
     this.backpackPanel.open((index) => ({ container: "backpack", index }));
     this.refreshBackpack();
   }
@@ -278,6 +279,7 @@ export class Renderer {
     if (block === BlockId.Furnace) {
       this.craftingPanel.close();
       this.chestPanel.close();
+      this.furnacePanel.setInventory(this.inventory, this.selectedSlot);
       this.furnacePanel.open(tileX, tileY);
       this.onOpenFurnace?.(tileX, tileY);
       return true;
@@ -294,6 +296,7 @@ export class Renderer {
       this.craftingPanel.close();
       this.furnacePanel.close();
       this.openChestPos = { x: tileX, y: tileY };
+      this.chestPanel.setInventory(this.inventory, this.selectedSlot);
       this.chestPanel.open((index) => ({ container: "chest", x: tileX, y: tileY, index }));
       this.onOpenChest?.(tileX, tileY);
       return true;
@@ -496,6 +499,9 @@ export class Renderer {
           this.refreshBackpack();
           this.tradePanel.update(this.inventory);
           this.enchantPanel.update(this.inventory, this.selectedSlot);
+          this.furnacePanel.setInventory(this.inventory, this.selectedSlot);
+          this.chestPanel.setInventory(this.inventory, this.selectedSlot);
+          this.backpackPanel.setInventory(this.inventory, this.selectedSlot);
           this.cursorLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
           if (this.cursorStack) {
             this.cursorLayer.addChild(cursorWidget(this.cursorStack, this.blockTextures));
@@ -771,13 +777,13 @@ export class Renderer {
     );
     this.craftingPanel.container.position.set(12, 40);
     this.furnacePanel.container.position.set(
-      (this.screenWidth - 250) / 2,
-      (this.screenHeight - 170) / 2,
+      (this.screenWidth - this.furnacePanel.panelWidth) / 2,
+      Math.max(20, (this.screenHeight - this.furnacePanel.panelHeight) / 2),
     );
-    this.chestPanel.container.position.set((this.screenWidth - this.chestPanel.width) / 2, 80);
+    this.chestPanel.container.position.set((this.screenWidth - this.chestPanel.width) / 2, 40);
     this.backpackPanel.container.position.set(
       (this.screenWidth - this.backpackPanel.width) / 2,
-      120,
+      80,
     );
     this.tradePanel.container.position.set((this.screenWidth - 340) / 2, 100);
     this.enchantPanel.container.position.set((this.screenWidth - 300) / 2, 120);
