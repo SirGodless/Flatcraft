@@ -68,4 +68,19 @@ export class World {
   loadedChunks(): Iterable<Chunk> {
     return this.chunks.values();
   }
+
+  /** All generated chunks as plain data (for saves). */
+  serializeChunks(): Array<{ cx: number; cy: number; tiles: number[] }> {
+    return [...this.chunks.values()].map((c) => ({
+      cx: c.cx,
+      cy: c.cy,
+      tiles: Array.from(c.tiles),
+    }));
+  }
+
+  loadChunks(data: Array<{ cx: number; cy: number; tiles: number[] }>): void {
+    for (const c of data) {
+      this.setChunk(new Chunk(c.cx, c.cy, new Uint16Array(c.tiles)));
+    }
+  }
 }

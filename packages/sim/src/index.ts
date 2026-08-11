@@ -17,6 +17,7 @@ export * from "./mining.js";
 export * from "./math/rng.js";
 export * from "./physics.js";
 export * from "./portal.js";
+export * from "./save.js";
 export * from "./world/block.js";
 export * from "./world/chunk.js";
 export * from "./world/gen.js";

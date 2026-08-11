@@ -43,7 +43,7 @@ import {
   type ItemStack,
 } from "./inventory.js";
 import { itemDef } from "./items.js";
-import { createRng, type Rng } from "./math/rng.js";
+import { rngNext, type Rng, type RngState } from "./math/rng.js";
 import { canHarvest, miningTicks } from "./mining.js";
 import {
   GRAVITY,
@@ -63,6 +63,7 @@ import {
   PORTAL_COOLDOWN,
   PORTAL_TICKS,
 } from "./portal.js";
+import type { SimSave } from "./save.js";
 import { clickStack } from "./slots.js";
 import { DAY_LENGTH, daylightFactor, isNight } from "./time.js";
 import { blockDef, blockDrops, BlockId } from "./world/block.js";
@@ -135,15 +136,75 @@ export class Simulation {
   timeOfDay = 0;
 
   private readonly rng: Rng;
+  private readonly rngState: RngState;
   private nextPlayerId: PlayerId = 1;
   private nextEntityId: EntityId = 1;
+  /** Disconnected players' state, by name, adopted on rejoin. */
+  private readonly savedPlayers = new Map<string, PlayerState>();
 
   constructor(seed: number) {
     this.worlds = {
       overworld: new World(seed, "overworld"),
       nether: new World(seed, "nether"),
     };
-    this.rng = createRng(seed);
+    this.rngState = { s: seed >>> 0 };
+    this.rng = () => rngNext(this.rngState);
+  }
+
+  /** Snapshot the complete simulation state as plain serializable data. */
+  serialize(): SimSave {
+    return {
+      version: 1,
+      seed: this.world.seed,
+      tickCount: this.tickCount,
+      timeOfDay: this.timeOfDay,
+      rng: this.rngState.s,
+      nextPlayerId: this.nextPlayerId,
+      nextEntityId: this.nextEntityId,
+      worlds: {
+        overworld: this.worlds.overworld.serializeChunks(),
+        nether: this.worlds.nether.serializeChunks(),
+      },
+      furnaces: [...this.furnaces.values()].map((f) => structuredClone(f)),
+      portals: {
+        overworld: [...this.portals.overworld.values()],
+        nether: [...this.portals.nether.values()],
+      },
+      entities: [...this.entities.values()].map((e) => structuredClone(e)),
+      // Both connected and previously saved players, by name.
+      players: [
+        ...[...this.players.values()].map((p) => structuredClone(p)),
+        ...[...this.savedPlayers.values()].map((p) => structuredClone(p)),
+      ],
+    };
+  }
+
+  /** Rebuild a simulation from a snapshot. */
+  static deserialize(save: SimSave): Simulation {
+    const sim = new Simulation(save.seed);
+    sim.tickCount = save.tickCount;
+    sim.timeOfDay = save.timeOfDay;
+    sim.rngState.s = save.rng;
+    sim.nextPlayerId = save.nextPlayerId;
+    sim.nextEntityId = save.nextEntityId;
+    sim.worlds.overworld.loadChunks(save.worlds.overworld);
+    sim.worlds.nether.loadChunks(save.worlds.nether);
+    for (const f of save.furnaces) {
+      sim.furnaces.set(furnaceKey(f.dimension, f.x, f.y), structuredClone(f));
+    }
+    for (const dim of ["overworld", "nether"] as const) {
+      for (const pos of save.portals[dim]) {
+        sim.portals[dim].set(`${pos.x},${pos.y}`, { ...pos });
+      }
+    }
+    for (const e of save.entities) {
+      sim.entities.set(e.id, structuredClone(e));
+    }
+    // Players wait as "saved" until someone joins with their name.
+    for (const p of save.players) {
+      sim.savedPlayers.set(p.name, structuredClone(p));
+    }
+    return sim;
   }
 
   /** The overworld (kept for compatibility; use worldOf for others). */
@@ -710,6 +771,37 @@ export class Simulation {
 
     switch (command.type) {
       case "join": {
+        // A returning player (same name) picks up exactly where they left.
+        const saved = this.savedPlayers.get(command.name);
+        if (saved) {
+          this.savedPlayers.delete(command.name);
+          const state: PlayerState = { ...structuredClone(saved), id: player };
+          this.players.set(player, state);
+          broadcast({
+            type: "player_joined",
+            player,
+            name: state.name,
+            x: state.x,
+            y: state.y,
+            dim: state.dimension,
+          });
+          this.syncInventory(state, out);
+          reply({ type: "player_health", player, health: state.health, max: PLAYER_MAX_HEALTH });
+          reply({ type: "time_changed", time: this.timeOfDay });
+          reply({ type: "player_dimension", player, dim: state.dimension, x: state.x, y: state.y });
+          for (const entity of this.entities.values()) {
+            reply({
+              type: "entity_spawned",
+              id: entity.id,
+              kind: entity.kind,
+              dim: entity.dimension,
+              x: entity.x,
+              y: entity.y,
+              ...(entity.kind === "item" ? { stack: { ...entity.stack } } : {}),
+            });
+          }
+          break;
+        }
         const spawnX = findSpawnX(this.world.seed);
         const x = spawnX + 0.5;
         const y = surfaceHeight(this.world.seed, spawnX);
@@ -755,7 +847,10 @@ export class Simulation {
         break;
       }
       case "leave": {
-        if (this.players.delete(player)) {
+        const p = this.players.get(player);
+        if (p && this.players.delete(player)) {
+          // Keep the state for a future rejoin (and for saves).
+          this.savedPlayers.set(p.name, p);
           broadcast({ type: "player_left", player });
         }
         break;

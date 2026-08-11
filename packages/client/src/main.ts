@@ -1,7 +1,8 @@
 import { GameServer, createLoopbackPair } from "@flatcraft/server";
-import { buildPortal, chunkKey, findSpawnX, surfaceHeight } from "@flatcraft/sim";
+import { buildPortal, chunkKey, findSpawnX, Simulation, surfaceHeight } from "@flatcraft/sim";
 import { attachInput } from "./input/input.js";
 import { Renderer } from "./render/renderer.js";
+import { deleteWorld, loadWorld, saveWorld } from "./save.js";
 
 /** Max chunk requests sent per frame, to keep event batches small. */
 const CHUNK_REQUESTS_PER_FRAME = 12;
@@ -14,10 +15,23 @@ const CHUNK_REQUESTS_PER_FRAME = 12;
  * embedded server, nothing else.
  */
 async function start(): Promise<void> {
-  const server = new GameServer(/* seed */ 1337);
+  const params = new URLSearchParams(location.search);
+
+  // World persistence: one IndexedDB slot; ?fresh starts a new world.
+  if (params.has("fresh")) {
+    await deleteWorld();
+  }
+  const save = params.has("fresh") ? null : await loadWorld();
+  const server = new GameServer(save ? Simulation.deserialize(save) : /* seed */ 1337);
+  const persist = (): void => {
+    void saveWorld(server.simulation.serialize());
+  };
+  setInterval(persist, 10_000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) persist();
+  });
 
   // Debug helpers for the embedded server (singleplayer only), e.g. ?time=18000
-  const params = new URLSearchParams(location.search);
   const debugTime = params.get("time");
   if (debugTime !== null) {
     server.simulation.timeOfDay = Number(debugTime);

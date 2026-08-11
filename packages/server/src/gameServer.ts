@@ -20,8 +20,9 @@ export class GameServer {
   private pendingCommands: PlayerCommand[] = [];
   private accumulatorMs = 0;
 
-  constructor(seed: number) {
-    this.simulation = new Simulation(seed);
+  constructor(seedOrSimulation: number | Simulation) {
+    this.simulation =
+      typeof seedOrSimulation === "number" ? new Simulation(seedOrSimulation) : seedOrSimulation;
   }
 
   addConnection(connection: ServerConnection): void {
