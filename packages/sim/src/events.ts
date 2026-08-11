@@ -15,8 +15,29 @@ export type SimEvent =
   /** Mining progress for crack overlays; total 0 clears the overlay. */
   | { type: "mining_progress"; player: PlayerId; x: number; y: number; progress: number; total: number }
   | { type: "chunk_data"; cx: number; cy: number; tiles: number[] }
-  /** Full inventory sync for its owner (small enough to send whole). */
-  | { type: "inventory_changed"; player: PlayerId; slots: (ItemStack | null)[]; selected: number }
+  /** Full inventory sync for its owner (small enough to send whole),
+   * including the cursor stack and crafting grid. */
+  | {
+      type: "inventory_changed";
+      player: PlayerId;
+      slots: (ItemStack | null)[];
+      selected: number;
+      cursor: ItemStack | null;
+      craftGrid: (ItemStack | null)[];
+    }
+  /** Furnace state sync for everyone who can see/use it. */
+  | {
+      type: "furnace_changed";
+      x: number;
+      y: number;
+      input: ItemStack | null;
+      fuel: ItemStack | null;
+      output: ItemStack | null;
+      burnLeft: number;
+      burnTotal: number;
+      cookProgress: number;
+      cookTotal: number;
+    }
   | { type: "command_rejected"; player: PlayerId; reason: string };
 
 /**

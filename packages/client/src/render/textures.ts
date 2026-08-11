@@ -18,6 +18,10 @@ interface BlockStyle {
   stripe?: boolean;
   /** Colored 2x2 speckles on top of the base (ores). */
   specks?: { color: [number, number, number]; count: number };
+  /** Dark opening at the bottom center (furnace mouth). */
+  opening?: boolean;
+  /** 1px border in this color (glass pane look). */
+  frame?: [number, number, number];
 }
 
 const STONE: [number, number, number] = [122, 122, 128];
@@ -46,6 +50,13 @@ const STYLES: Partial<Record<BlockId, BlockStyle>> = {
     noise: 0.1,
   },
   [BlockId.Cobblestone]: { base: [110, 110, 114], noise: 0.22 },
+  [BlockId.Furnace]: {
+    base: [98, 98, 102],
+    top: { color: [72, 72, 76], rows: 3 },
+    noise: 0.1,
+    opening: true,
+  },
+  [BlockId.Glass]: { base: [205, 228, 238], noise: 0.03, alpha: 0.4, frame: [235, 244, 248] },
   [BlockId.CoalOre]: ore([44, 44, 46]),
   [BlockId.IronOre]: ore([215, 172, 140]),
   [BlockId.GoldOre]: ore([250, 212, 80]),
@@ -97,6 +108,22 @@ function makeBlockTexture(id: BlockId, style: BlockStyle): Texture {
       ctx.fillStyle = `rgb(${Math.round(r * jitter)},${Math.round(g * jitter)},${Math.round(b * jitter)})`;
       ctx.fillRect(sx, sy, 2, 2);
     }
+  }
+
+  if (style.opening) {
+    ctx.fillStyle = "rgb(24,22,20)";
+    ctx.fillRect(4, 9, 8, 5);
+    ctx.fillStyle = "rgb(230,140,40)";
+    ctx.fillRect(6, 12, 4, 2);
+  }
+
+  if (style.frame) {
+    const [r, g, b] = style.frame;
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(0, 0, TILE_PX, 1);
+    ctx.fillRect(0, TILE_PX - 1, TILE_PX, 1);
+    ctx.fillRect(0, 0, 1, TILE_PX);
+    ctx.fillRect(TILE_PX - 1, 0, 1, TILE_PX);
   }
 
   const texture = Texture.from(canvas);

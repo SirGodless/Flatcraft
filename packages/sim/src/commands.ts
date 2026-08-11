@@ -19,10 +19,23 @@ export type Command =
   /** Places whatever block item is in the selected hotbar slot. */
   | { type: "place_block"; x: number; y: number }
   | { type: "select_slot"; index: number }
-  /** Craft a recipe by id (recipe-book style); the simulation checks
-   * ingredients and, for 3x3 recipes, a nearby crafting table. */
+  /** Quick-craft a recipe by id (like Minecraft's recipe book); the
+   * simulation checks ingredients and, for 3x3 recipes, a nearby table. */
   | { type: "craft"; recipe: string }
+  /** A Minecraft-style cursor click on a UI slot. */
+  | { type: "slot_click"; slot: SlotRef; button: "left" | "right" }
+  /** Return crafting grid + cursor contents to the inventory (UI closed). */
+  | { type: "return_grid" }
+  /** Open a furnace: validates it and returns its current state. */
+  | { type: "open_furnace"; x: number; y: number }
   | { type: "request_chunk"; cx: number; cy: number };
+
+/** Addresses a slot in one of the clickable containers. */
+export type SlotRef =
+  | { container: "inventory"; index: number }
+  | { container: "craft_grid"; index: number }
+  | { container: "craft_result" }
+  | { container: "furnace"; x: number; y: number; slot: "input" | "fuel" | "output" };
 
 /** A command attributed to the player who issued it. */
 export interface PlayerCommand {

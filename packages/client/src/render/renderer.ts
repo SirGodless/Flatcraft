@@ -1,15 +1,18 @@
-import { Application, Container, Graphics, Text } from "pixi.js";
+import { Application, Container, Graphics, Text, type Texture } from "pixi.js";
 import {
+  BlockId,
   PLAYER_HEIGHT,
   PLAYER_WIDTH,
   TICK_MS,
   type InventorySlots,
+  type ItemStack,
   type PlayerId,
   type SimEvent,
+  type SlotRef,
 } from "@flatcraft/sim";
 import { Camera } from "./camera.js";
 import { createBlockTextures, TILE_PX } from "./textures.js";
-import { CraftingPanelUI, HotbarUI } from "./ui.js";
+import { CraftingPanelUI, cursorWidget, FurnacePanelUI, HotbarUI } from "./ui.js";
 import { CHUNK_PX_H, CHUNK_PX_W, WorldView } from "./worldView.js";
 
 export interface ChunkRange {
@@ -41,8 +44,12 @@ export class Renderer {
   worldView!: WorldView;
   /** Which player the camera follows; set by the bootstrap code. */
   localPlayerId: PlayerId | null = null;
-  /** Wired by the bootstrap code to send craft commands. */
+  /** Wired by the bootstrap code to send commands. */
   onCraft: ((recipeId: string) => void) | null = null;
+  onSlotClick: ((slot: SlotRef, button: "left" | "right") => void) | null = null;
+  onOpenFurnace: ((x: number, y: number) => void) | null = null;
+  /** Called when a UI closes, so the grid/cursor can be returned. */
+  onUiClosed: (() => void) | null = null;
 
   private readonly app = new Application();
   private readonly worldContainer = new Container();
@@ -51,6 +58,12 @@ export class Renderer {
   private hud!: Text;
   private hotbar!: HotbarUI;
   private craftingPanel!: CraftingPanelUI;
+  private furnacePanel!: FurnacePanelUI;
+  private blockTextures!: Map<BlockId, Texture>;
+  private cursorLayer = new Container();
+  private cursorStack: ItemStack | null = null;
+  private pointerX = 0;
+  private pointerY = 0;
   private inventory: InventorySlots = [];
   private selectedSlot = 0;
 
@@ -59,6 +72,7 @@ export class Renderer {
     container.appendChild(this.app.canvas);
 
     const blockTextures = createBlockTextures();
+    this.blockTextures = blockTextures;
     this.worldView = new WorldView(this.app.renderer, blockTextures);
     this.worldContainer.addChild(this.worldView.container);
     this.app.stage.addChild(this.worldContainer);
@@ -75,12 +89,84 @@ export class Renderer {
     this.app.stage.addChild(this.hotbar.container);
 
     this.craftingPanel = new CraftingPanelUI(blockTextures);
-    this.craftingPanel.onCraft = (id) => this.onCraft?.(id);
+    this.craftingPanel.onQuickCraft = (id) => this.onCraft?.(id);
+    this.craftingPanel.onSlotClick = (slot, button) => this.onSlotClick?.(slot, button);
     this.app.stage.addChild(this.craftingPanel.container);
+
+    this.furnacePanel = new FurnacePanelUI(blockTextures);
+    this.furnacePanel.onSlotClick = (slot, button) => this.onSlotClick?.(slot, button);
+    this.app.stage.addChild(this.furnacePanel.container);
+
+    this.app.stage.addChild(this.cursorLayer);
   }
 
-  toggleCraftingPanel(): void {
-    this.craftingPanel.toggle();
+  /** Toggle the inventory screen (2x2 crafting). */
+  toggleInventory(): void {
+    if (this.craftingPanel.visible || this.furnacePanel.visible) {
+      this.closeUI();
+    } else {
+      this.craftingPanel.maxHeight = this.screenHeight - 60;
+      this.craftingPanel.open(2);
+    }
+  }
+
+  closeUI(): void {
+    const wasOpen = this.craftingPanel.visible || this.furnacePanel.visible;
+    this.craftingPanel.close();
+    this.furnacePanel.close();
+    if (wasOpen) this.onUiClosed?.();
+  }
+
+  get uiOpen(): boolean {
+    return this.craftingPanel.visible || this.furnacePanel.visible;
+  }
+
+  /**
+   * Right-click on a tile: open the matching block UI if there is one.
+   * Returns true when handled (the caller then skips block placement).
+   */
+  tryOpenBlockUI(tileX: number, tileY: number): boolean {
+    const block = this.worldView.getBlock(tileX, tileY);
+    if (block === BlockId.CraftingTable) {
+      this.craftingPanel.maxHeight = this.screenHeight - 60;
+      this.furnacePanel.close();
+      this.craftingPanel.open(3);
+      return true;
+    }
+    if (block === BlockId.Furnace) {
+      this.craftingPanel.close();
+      this.furnacePanel.open(tileX, tileY);
+      this.onOpenFurnace?.(tileX, tileY);
+      return true;
+    }
+    return false;
+  }
+
+  /** Whether a screen point lands on an open UI surface (blocks world input). */
+  isOverUI(x: number, y: number): boolean {
+    const panels = [this.craftingPanel.container, this.furnacePanel.container, this.hotbar.container];
+    for (const panel of panels) {
+      if (!panel.visible) continue;
+      const bounds = panel.getBounds();
+      if (x >= bounds.x && x <= bounds.x + bounds.width && y >= bounds.y && y <= bounds.y + bounds.height) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  setPointer(x: number, y: number): void {
+    this.pointerX = x;
+    this.pointerY = y;
+  }
+
+  /** Scroll an open crafting panel; returns true if consumed. */
+  handleWheel(deltaY: number): boolean {
+    if (this.craftingPanel.visible) {
+      this.craftingPanel.scrollBy(deltaY);
+      return true;
+    }
+    return false;
   }
 
   get canvas(): HTMLCanvasElement {
@@ -145,13 +231,32 @@ export class Renderer {
         if (event.player === this.localPlayerId) {
           this.inventory = event.slots;
           this.selectedSlot = event.selected;
+          this.cursorStack = event.cursor;
           this.hotbar.update(this.inventory, this.selectedSlot);
-          this.craftingPanel.update(this.inventory);
+          this.craftingPanel.update(this.inventory, this.selectedSlot, event.craftGrid);
+          this.cursorLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
+          if (this.cursorStack) {
+            this.cursorLayer.addChild(cursorWidget(this.cursorStack, this.blockTextures));
+          }
         }
         break;
-      case "block_changed":
-        this.worldView.setBlock(event.x, event.y, event.block);
+      case "furnace_changed":
+        this.furnacePanel.update(event);
         break;
+      case "block_changed": {
+        this.worldView.setBlock(event.x, event.y, event.block);
+        // The furnace we were using got broken: close its screen.
+        const furnacePos = this.furnacePanel.position;
+        if (
+          furnacePos &&
+          furnacePos.x === event.x &&
+          furnacePos.y === event.y &&
+          event.block === BlockId.Air
+        ) {
+          this.closeUI();
+        }
+        break;
+      }
       case "mining_progress": {
         let overlay = this.miningOverlays.get(event.player);
         if (event.total === 0) {
@@ -230,6 +335,11 @@ export class Renderer {
       this.screenHeight - this.hotbar.height - 8,
     );
     this.craftingPanel.container.position.set(12, 40);
+    this.furnacePanel.container.position.set(
+      (this.screenWidth - 250) / 2,
+      (this.screenHeight - 170) / 2,
+    );
+    this.cursorLayer.position.set(this.pointerX - 16, this.pointerY - 16);
 
     const px = localX !== null ? Math.floor(localX) : Math.floor(this.camera.x / TILE_PX);
     const py = localY !== null ? Math.floor(localY) : Math.floor(this.camera.y / TILE_PX);

@@ -31,12 +31,20 @@ async function start(): Promise<void> {
   });
 
   renderer.onCraft = (recipeId) => connection.send({ type: "craft", recipe: recipeId });
+  renderer.onSlotClick = (slot, button) => connection.send({ type: "slot_click", slot, button });
+  renderer.onOpenFurnace = (x, y) => connection.send({ type: "open_furnace", x, y });
+  renderer.onUiClosed = () => connection.send({ type: "return_grid" });
 
   const input = attachInput(renderer.canvas, {
     camera: renderer.camera,
     sendCommand: (command) => connection.send(command),
     screenSize: () => ({ width: renderer.screenWidth, height: renderer.screenHeight }),
-    onToggleCraftingPanel: () => renderer.toggleCraftingPanel(),
+    onToggleInventory: () => renderer.toggleInventory(),
+    onEscape: () => renderer.closeUI(),
+    isOverUI: (x, y) => renderer.isOverUI(x, y),
+    onRightClickTile: (x, y) => renderer.tryOpenBlockUI(x, y),
+    onUiWheel: (deltaY) => renderer.handleWheel(deltaY),
+    onPointerMove: (x, y) => renderer.setPointer(x, y),
   });
 
   connection.send({ type: "join", name: "Player" });

@@ -49,5 +49,6 @@ npm run build      # build all packages
 4. ~~Physics & collision~~ (AABB player physics: gravity, jumping, walking, tile collision; server-side reach + entity-blocking checks; interpolated rendering)
 5. ~~Inventory & crafting~~ (36-slot inventory + hotbar, Minecraft-style block drops, recipes as datapack-style JSON files in `packages/sim/src/data/recipes/`, 2x2 anywhere / 3x3 needs a crafting table)
 6. ~~Block interactions~~ (hold-to-mine with progress + crack overlay, Minecraft tool tiers/speeds, tier-gated drops; no durability by design)
-7. Entities/mobs
-8. Netcode: WebSocket transport, listen server & dedicated server
+7. ~~Furnace & full tool chain~~ (real crafting grid UI with cursor clicks, furnace block entity with fuel/cook ticking and its own screen, smelting recipes as JSON, iron/golden/diamond tools)
+8. Entities/mobs
+9. Netcode: WebSocket transport, listen server & dedicated server

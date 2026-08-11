@@ -1,9 +1,26 @@
 import { parseRecipe, type Recipe, type RecipeJson } from "../../crafting/recipe.js";
 
 import craftingTable from "./crafting_table.json";
+import diamondAxe from "./diamond_axe.json";
+import diamondPickaxe from "./diamond_pickaxe.json";
+import diamondShovel from "./diamond_shovel.json";
+import diamondSword from "./diamond_sword.json";
+import furnace from "./furnace.json";
+import glass from "./glass.json";
+import goldIngot from "./gold_ingot.json";
+import goldenAxe from "./golden_axe.json";
+import goldenPickaxe from "./golden_pickaxe.json";
+import goldenShovel from "./golden_shovel.json";
+import goldenSword from "./golden_sword.json";
+import ironAxe from "./iron_axe.json";
+import ironIngot from "./iron_ingot.json";
+import ironPickaxe from "./iron_pickaxe.json";
+import ironShovel from "./iron_shovel.json";
+import ironSword from "./iron_sword.json";
 import oakPlanks from "./oak_planks.json";
 import sandstone from "./sandstone.json";
 import stick from "./stick.json";
+import stone from "./stone.json";
 import stoneAxe from "./stone_axe.json";
 import stonePickaxe from "./stone_pickaxe.json";
 import stoneShovel from "./stone_shovel.json";
@@ -22,6 +39,7 @@ const sources: Record<string, RecipeJson> = {
   oak_planks: oakPlanks,
   stick,
   crafting_table: craftingTable,
+  furnace,
   sandstone,
   wooden_pickaxe: woodenPickaxe,
   wooden_axe: woodenAxe,
@@ -31,6 +49,22 @@ const sources: Record<string, RecipeJson> = {
   stone_axe: stoneAxe,
   stone_shovel: stoneShovel,
   stone_sword: stoneSword,
+  iron_pickaxe: ironPickaxe,
+  iron_axe: ironAxe,
+  iron_shovel: ironShovel,
+  iron_sword: ironSword,
+  golden_pickaxe: goldenPickaxe,
+  golden_axe: goldenAxe,
+  golden_shovel: goldenShovel,
+  golden_sword: goldenSword,
+  diamond_pickaxe: diamondPickaxe,
+  diamond_axe: diamondAxe,
+  diamond_shovel: diamondShovel,
+  diamond_sword: diamondSword,
+  iron_ingot: ironIngot,
+  gold_ingot: goldIngot,
+  glass,
+  stone,
 };
 
 export const RECIPES: ReadonlyMap<string, Recipe> = new Map(

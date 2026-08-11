@@ -1,0 +1,6 @@
+{
+  "type": "flatcraft:smelting",
+  "ingredient": { "item": "flatcraft:sand" },
+  "result": { "item": "flatcraft:glass" },
+  "cookingtime": 200
+}

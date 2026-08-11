@@ -25,6 +25,8 @@ export enum BlockId {
   OakPlanks = 19,
   CraftingTable = 20,
   Cobblestone = 21,
+  Furnace = 22,
+  Glass = 23,
 }
 
 export interface BlockDef {
@@ -81,6 +83,9 @@ export const Blocks = {
   oakPlanks: register({ id: BlockId.OakPlanks, name: "oak_planks", solid: true, hardness: 30, tool: "axe" }),
   craftingTable: register({ id: BlockId.CraftingTable, name: "crafting_table", solid: true, hardness: 30, tool: "axe" }),
   cobblestone: register({ id: BlockId.Cobblestone, name: "cobblestone", solid: true, hardness: 32, tool: "pickaxe", requiredTier: 1 }),
+  furnace: register({ id: BlockId.Furnace, name: "furnace", solid: true, hardness: 35, tool: "pickaxe", requiredTier: 1 }),
+  // Like Minecraft, glass shatters: it drops nothing.
+  glass: register({ id: BlockId.Glass, name: "glass", solid: true, hardness: 5, drops: null }),
 } as const;
 
 export function blockDef(id: BlockId): BlockDef {

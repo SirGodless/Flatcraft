@@ -73,6 +73,23 @@ const toolArts = (head: string): Record<string, Art> => ({
 
 const wooden = toolArts(WOOD);
 const stone = toolArts(COBBLE);
+const iron = toolArts("#d8d8dc");
+const golden = toolArts("#f5d442");
+const diamond = toolArts("#5fd8d2");
+
+const ingot = (color: string): Art => ({
+  rows: [
+    "........",
+    "........",
+    "..XXXX..",
+    ".XXXXXX.",
+    ".XXXXX..",
+    "........",
+    "........",
+    "........",
+  ],
+  palette: { X: color },
+});
 
 const blob = (color: string): Art => ({
   rows: [
@@ -129,6 +146,20 @@ const ARTS: Record<string, Art> = {
   stone_axe: stone.axe!,
   stone_shovel: stone.shovel!,
   stone_sword: stone.sword!,
+  iron_pickaxe: iron.pickaxe!,
+  iron_axe: iron.axe!,
+  iron_shovel: iron.shovel!,
+  iron_sword: iron.sword!,
+  golden_pickaxe: golden.pickaxe!,
+  golden_axe: golden.axe!,
+  golden_shovel: golden.shovel!,
+  golden_sword: golden.sword!,
+  diamond_pickaxe: diamond.pickaxe!,
+  diamond_axe: diamond.axe!,
+  diamond_shovel: diamond.shovel!,
+  diamond_sword: diamond.sword!,
+  iron_ingot: ingot("#d8d8dc"),
+  gold_ingot: ingot("#f5d442"),
 };
 
 const cache = new Map<string, Texture>();

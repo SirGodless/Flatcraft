@@ -30,6 +30,17 @@ export class WorldView {
     return this.chunks.has(chunkKey(cx, cy));
   }
 
+  /** The client's view of a tile (Air for unloaded chunks). */
+  getBlock(x: number, y: number): BlockId {
+    const cx = Math.floor(x / CHUNK_WIDTH);
+    const cy = Math.floor(y / CHUNK_HEIGHT);
+    const view = this.chunks.get(chunkKey(cx, cy));
+    if (!view) return BlockId.Air;
+    const lx = x - cx * CHUNK_WIDTH;
+    const ly = y - cy * CHUNK_HEIGHT;
+    return (view.tiles[ly * CHUNK_WIDTH + lx] ?? 0) as BlockId;
+  }
+
   setChunk(cx: number, cy: number, tiles: readonly number[]): void {
     const key = chunkKey(cx, cy);
     let view = this.chunks.get(key);

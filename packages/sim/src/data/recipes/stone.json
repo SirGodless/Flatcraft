@@ -1,0 +1,6 @@
+{
+  "type": "flatcraft:smelting",
+  "ingredient": { "item": "flatcraft:cobblestone" },
+  "result": { "item": "flatcraft:stone" },
+  "cookingtime": 200
+}

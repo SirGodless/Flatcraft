@@ -1,0 +1,9 @@
+{
+  "type": "flatcraft:crafting_shaped",
+  "pattern": ["#", "|", "|"],
+  "key": {
+    "#": { "item": "flatcraft:diamond" },
+    "|": { "item": "flatcraft:stick" }
+  },
+  "result": { "item": "flatcraft:diamond_shovel" }
+}
