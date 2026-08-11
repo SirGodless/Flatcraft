@@ -33,6 +33,13 @@ export class World {
     return chunk;
   }
 
+  /** Like getBlock, but generates the containing chunk if needed (physics
+   * must never treat ungenerated terrain as air). */
+  getBlockGenerating(x: number, y: number): BlockId {
+    this.ensureChunk(Math.floor(x / CHUNK_WIDTH), Math.floor(y / CHUNK_HEIGHT));
+    return this.getBlock(x, y);
+  }
+
   getBlock(x: number, y: number): BlockId {
     const cx = Math.floor(x / CHUNK_WIDTH);
     const cy = Math.floor(y / CHUNK_HEIGHT);

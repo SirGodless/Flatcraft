@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRng, generateChunk, hashSeed, Simulation } from "../src/index.js";
+import { BlockId, createRng, generateChunk, hashSeed, Simulation, surfaceHeight } from "../src/index.js";
 
 describe("seeded rng", () => {
   it("produces the same sequence for the same seed", () => {
@@ -44,14 +44,22 @@ describe("world generation", () => {
 });
 
 describe("simulation", () => {
+  /** Surface y of the column right next to spawn (x = 1), within reach. */
+  function nearbySurface(seed: number): { x: number; y: number } {
+    return { x: 1, y: surfaceHeight(seed, 1) };
+  }
+
   function run(seed: number): { sim: Simulation; events: unknown[] } {
     const sim = new Simulation(seed);
     const player = sim.allocatePlayerId();
+    const target = nearbySurface(seed);
     const events = [
       ...sim.tick([{ player, command: { type: "join", name: "Tester" } }]),
       ...sim.tick([{ player, command: { type: "request_chunk", cx: 0, cy: 0 } }]),
-      ...sim.tick([{ player, command: { type: "break_block", x: 5, y: 40 } }]),
-      ...sim.tick([{ player, command: { type: "place_block", x: 5, y: 40, block: 1 } }]),
+      ...sim.tick([{ player, command: { type: "break_block", x: target.x, y: target.y } }]),
+      ...sim.tick([{ player, command: { type: "move", dx: 1, jump: true } }]),
+      ...sim.tick([]),
+      ...sim.tick([]),
     ];
     return { sim, events };
   }
@@ -70,42 +78,67 @@ describe("simulation", () => {
     const sim = new Simulation(1);
     const player = sim.allocatePlayerId();
     sim.tick([{ player, command: { type: "join", name: "T" } }]);
+    const { x, y } = nearbySurface(1);
 
-    // Way above the surface is air.
-    const airResult = sim.tick([{ player, command: { type: "break_block", x: 0, y: -100 } }]);
-    expect(airResult).toEqual([
-      { to: player, event: { type: "command_rejected", player, reason: "cannot break block" } },
-    ]);
+    // Above the surface is air (still within reach).
+    const airResult = sim.tick([{ player, command: { type: "break_block", x, y: y - 3 } }]);
+    expect(airResult).toContainEqual({
+      to: player,
+      event: { type: "command_rejected", player, reason: "cannot break block" },
+    });
 
-    // Deep down is bedrock (hardness -1).
-    const bedrockResult = sim.tick([{ player, command: { type: "break_block", x: 0, y: 300 } }]);
-    expect(bedrockResult).toEqual([
-      { to: player, event: { type: "command_rejected", player, reason: "cannot break block" } },
-    ]);
+    // Swap the surface block for bedrock (hardness -1): must be unbreakable.
+    sim.world.ensureChunk(0, 0);
+    sim.world.setBlock(x, y, BlockId.Bedrock);
+    const bedrockResult = sim.tick([{ player, command: { type: "break_block", x, y } }]);
+    expect(bedrockResult).toContainEqual({
+      to: player,
+      event: { type: "command_rejected", player, reason: "cannot break block" },
+    });
   });
 
   it("rejects placing into an occupied tile", () => {
     const sim = new Simulation(1);
     const player = sim.allocatePlayerId();
     sim.tick([{ player, command: { type: "join", name: "T" } }]);
-    const result = sim.tick([{ player, command: { type: "place_block", x: 0, y: 100, block: 1 } }]);
-    expect(result).toEqual([
-      { to: player, event: { type: "command_rejected", player, reason: "space occupied" } },
+    const { x, y } = nearbySurface(1);
+    const result = sim.tick([
+      { player, command: { type: "place_block", x, y: y + 1, block: BlockId.Stone } },
     ]);
+    expect(result).toContainEqual({
+      to: player,
+      event: { type: "command_rejected", player, reason: "space occupied" },
+    });
+  });
+
+  it("rejects breaking blocks beyond reach", () => {
+    const sim = new Simulation(1);
+    const player = sim.allocatePlayerId();
+    sim.tick([{ player, command: { type: "join", name: "T" } }]);
+    const result = sim.tick([{ player, command: { type: "break_block", x: 50, y: 50 } }]);
+    expect(result).toContainEqual({
+      to: player,
+      event: { type: "command_rejected", player, reason: "out of reach" },
+    });
   });
 
   it("applies valid break then place, broadcasting block_changed", () => {
     const sim = new Simulation(1);
     const player = sim.allocatePlayerId();
     sim.tick([{ player, command: { type: "join", name: "T" } }]);
+    const { x, y } = nearbySurface(1);
 
-    const broken = sim.tick([{ player, command: { type: "break_block", x: 0, y: 100 } }]);
-    expect(broken).toEqual([{ event: { type: "block_changed", x: 0, y: 100, block: 0 } }]);
-    expect(sim.world.getBlock(0, 100)).toBe(0);
+    const broken = sim.tick([{ player, command: { type: "break_block", x, y } }]);
+    expect(broken).toContainEqual({
+      event: { type: "block_changed", x, y, block: BlockId.Air },
+    });
+    expect(sim.world.getBlock(x, y)).toBe(BlockId.Air);
 
-    const placed = sim.tick([{ player, command: { type: "place_block", x: 0, y: 100, block: 2 } }]);
-    expect(placed).toEqual([{ event: { type: "block_changed", x: 0, y: 100, block: 2 } }]);
-    expect(sim.world.getBlock(0, 100)).toBe(2);
+    const placed = sim.tick([{ player, command: { type: "place_block", x, y, block: BlockId.Dirt } }]);
+    expect(placed).toContainEqual({
+      event: { type: "block_changed", x, y, block: BlockId.Dirt },
+    });
+    expect(sim.world.getBlock(x, y)).toBe(BlockId.Dirt);
   });
 
   it("chunk_data replies are addressed to the requesting player only", () => {
@@ -113,8 +146,8 @@ describe("simulation", () => {
     const player = sim.allocatePlayerId();
     sim.tick([{ player, command: { type: "join", name: "T" } }]);
     const result = sim.tick([{ player, command: { type: "request_chunk", cx: 1, cy: 1 } }]);
-    expect(result).toHaveLength(1);
-    expect(result[0]?.to).toBe(player);
-    expect(result[0]?.event.type).toBe("chunk_data");
+    const chunkEvents = result.filter((o) => o.event.type === "chunk_data");
+    expect(chunkEvents).toHaveLength(1);
+    expect(chunkEvents[0]?.to).toBe(player);
   });
 });

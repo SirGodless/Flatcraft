@@ -11,6 +11,8 @@ export type PlayerId = number;
 export type Command =
   | { type: "join"; name: string }
   | { type: "leave" }
+  /** Sets the player's movement intent; it persists until the next move
+   * command, so clients only send changes, not one command per tick. */
   | { type: "move"; dx: -1 | 0 | 1; jump: boolean }
   | { type: "break_block"; x: number; y: number }
   | { type: "place_block"; x: number; y: number; block: BlockId }

@@ -10,29 +10,55 @@ export interface InputOptions {
 }
 
 export interface InputHandle {
-  /** Advance camera panning by held keys. Called once per frame. */
-  update(dtMs: number): void;
   dispose(): void;
 }
 
-const PAN_SPEED_SCREEN_PX_PER_S = 600;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 6;
+
+const LEFT_KEYS = ["KeyA", "ArrowLeft"];
+const RIGHT_KEYS = ["KeyD", "ArrowRight"];
+const JUMP_KEYS = ["Space", "KeyW", "ArrowUp"];
+const GAME_KEYS = new Set([...LEFT_KEYS, ...RIGHT_KEYS, ...JUMP_KEYS]);
 
 /**
  * Input layer. Translates raw browser events into either camera changes
  * (pure view state, stays client-side) or Commands (anything that would
  * change the world - the simulation decides whether it happens).
- * Camera panning is a stand-in until player physics drives the camera.
+ * Movement keys send a `move` command only when the intent changes;
+ * the simulation keeps applying the last intent every tick.
  */
 export function attachInput(target: HTMLElement, opts: InputOptions): InputHandle {
   const held = new Set<string>();
+  let lastDx: -1 | 0 | 1 = 0;
+  let lastJump = false;
+
+  const currentDx = (): -1 | 0 | 1 => {
+    const left = LEFT_KEYS.some((k) => held.has(k));
+    const right = RIGHT_KEYS.some((k) => held.has(k));
+    if (left === right) return 0;
+    return right ? 1 : -1;
+  };
+
+  const syncMoveIntent = (): void => {
+    const dx = currentDx();
+    const jump = JUMP_KEYS.some((k) => held.has(k));
+    if (dx !== lastDx || jump !== lastJump) {
+      lastDx = dx;
+      lastJump = jump;
+      opts.sendCommand({ type: "move", dx, jump });
+    }
+  };
 
   const onKeyDown = (e: KeyboardEvent): void => {
+    if (GAME_KEYS.has(e.code)) e.preventDefault();
+    if (e.repeat) return;
     held.add(e.code);
+    syncMoveIntent();
   };
   const onKeyUp = (e: KeyboardEvent): void => {
     held.delete(e.code);
+    syncMoveIntent();
   };
 
   const onWheel = (e: WheelEvent): void => {
@@ -62,13 +88,6 @@ export function attachInput(target: HTMLElement, opts: InputOptions): InputHandl
   target.addEventListener("contextmenu", onContextMenu);
 
   return {
-    update(dtMs: number): void {
-      const step = ((PAN_SPEED_SCREEN_PX_PER_S / opts.camera.zoom) * dtMs) / 1000;
-      if (held.has("KeyA") || held.has("ArrowLeft")) opts.camera.x -= step;
-      if (held.has("KeyD") || held.has("ArrowRight")) opts.camera.x += step;
-      if (held.has("KeyW") || held.has("ArrowUp")) opts.camera.y -= step;
-      if (held.has("KeyS") || held.has("ArrowDown")) opts.camera.y += step;
-    },
     dispose(): void {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);

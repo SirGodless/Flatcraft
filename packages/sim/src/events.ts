@@ -9,6 +9,7 @@ import type { BlockId } from "./world/block.js";
 export type SimEvent =
   | { type: "player_joined"; player: PlayerId; name: string; x: number; y: number }
   | { type: "player_left"; player: PlayerId }
+  | { type: "player_moved"; player: PlayerId; x: number; y: number }
   | { type: "block_changed"; x: number; y: number; block: BlockId }
   | { type: "chunk_data"; cx: number; cy: number; tiles: number[] }
   | { type: "command_rejected"; player: PlayerId; reason: string };

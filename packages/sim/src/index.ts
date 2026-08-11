@@ -3,6 +3,7 @@ export * from "./commands.js";
 export * from "./events.js";
 export * from "./simulation.js";
 export * from "./math/rng.js";
+export * from "./physics.js";
 export * from "./world/block.js";
 export * from "./world/chunk.js";
 export * from "./world/gen.js";

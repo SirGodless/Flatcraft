@@ -2,15 +2,36 @@ import type { PlayerCommand, PlayerId } from "./commands.js";
 import type { OutboundEvent, SimEvent } from "./events.js";
 import { CHUNK_HEIGHT, CHUNK_WIDTH } from "./constants.js";
 import { createRng, type Rng } from "./math/rng.js";
+import {
+  GRAVITY,
+  JUMP_VELOCITY,
+  PLAYER_HEIGHT,
+  PLAYER_WIDTH,
+  REACH,
+  stepBody,
+  TERMINAL_VELOCITY,
+  WALK_SPEED,
+} from "./physics.js";
 import { blockDef, BlockId } from "./world/block.js";
 import { surfaceHeight } from "./world/gen.js";
 import { World } from "./world/world.js";
 
+/** The player's current movement intent, kept until the next move command. */
+export interface PlayerInput {
+  dx: -1 | 0 | 1;
+  jump: boolean;
+}
+
 export interface PlayerState {
   id: PlayerId;
   name: string;
+  /** Feet-center position in tiles (see physics.ts for the AABB layout). */
   x: number;
   y: number;
+  vx: number;
+  vy: number;
+  onGround: boolean;
+  input: PlayerInput;
 }
 
 /** Reject chunk requests absurdly far out (bad client / future cheat guard). */
@@ -41,17 +62,36 @@ export class Simulation {
   }
 
   /**
-   * Advance the world by exactly one tick, applying the given commands in
-   * order. Returns the outbound events for the transport layer to deliver.
+   * Advance the world by exactly one tick: apply the given commands in
+   * order, then run the physics step for every player. Returns the
+   * outbound events for the transport layer to deliver.
    */
   tick(commands: readonly PlayerCommand[]): OutboundEvent[] {
     const out: OutboundEvent[] = [];
     for (const pc of commands) {
       this.apply(pc, out);
     }
-    // Entity/physics updates per tick will run here once implemented.
+    this.stepPlayers(out);
     this.tickCount++;
     return out;
+  }
+
+  private stepPlayers(out: OutboundEvent[]): void {
+    for (const p of this.players.values()) {
+      const prevX = p.x;
+      const prevY = p.y;
+
+      p.vx = p.input.dx * WALK_SPEED;
+      if (p.input.jump && p.onGround) {
+        p.vy = JUMP_VELOCITY;
+      }
+      p.vy = Math.min(p.vy + GRAVITY, TERMINAL_VELOCITY);
+      stepBody(this.world, p, PLAYER_WIDTH, PLAYER_HEIGHT);
+
+      if (p.x !== prevX || p.y !== prevY) {
+        out.push({ event: { type: "player_moved", player: p.id, x: p.x, y: p.y } });
+      }
+    }
   }
 
   private apply({ player, command }: PlayerCommand, out: OutboundEvent[]): void {
@@ -67,9 +107,18 @@ export class Simulation {
 
     switch (command.type) {
       case "join": {
-        const x = 0;
-        const y = surfaceHeight(this.world.seed, x) - 2;
-        const state: PlayerState = { id: player, name: command.name, x, y };
+        const x = 0.5;
+        const y = surfaceHeight(this.world.seed, 0);
+        const state: PlayerState = {
+          id: player,
+          name: command.name,
+          x,
+          y,
+          vx: 0,
+          vy: 0,
+          onGround: false,
+          input: { dx: 0, jump: false },
+        };
         this.players.set(player, state);
         broadcast({ type: "player_joined", player, name: state.name, x, y });
         break;
@@ -78,6 +127,19 @@ export class Simulation {
         if (this.players.delete(player)) {
           broadcast({ type: "player_left", player });
         }
+        break;
+      }
+      case "move": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        if (![-1, 0, 1].includes(command.dx) || typeof command.jump !== "boolean") {
+          reject("invalid input");
+          break;
+        }
+        p.input = { dx: command.dx, jump: command.jump };
         break;
       }
       case "request_chunk": {
@@ -101,8 +163,11 @@ export class Simulation {
           reject("invalid coordinates");
           break;
         }
-        this.world.ensureChunk(Math.floor(x / CHUNK_WIDTH), Math.floor(y / CHUNK_HEIGHT));
-        const current = this.world.getBlock(x, y);
+        if (!this.withinReach(player, x, y)) {
+          reject("out of reach");
+          break;
+        }
+        const current = this.world.getBlockGenerating(x, y);
         if (current === BlockId.Air || blockDef(current).hardness < 0) {
           reject("cannot break block");
           break;
@@ -122,9 +187,16 @@ export class Simulation {
           reject("block not placeable");
           break;
         }
-        this.world.ensureChunk(Math.floor(x / CHUNK_WIDTH), Math.floor(y / CHUNK_HEIGHT));
-        if (this.world.getBlock(x, y) !== BlockId.Air) {
+        if (!this.withinReach(player, x, y)) {
+          reject("out of reach");
+          break;
+        }
+        if (this.world.getBlockGenerating(x, y) !== BlockId.Air) {
           reject("space occupied");
+          break;
+        }
+        if (this.tileIntersectsAnyPlayer(x, y)) {
+          reject("blocked by player");
           break;
         }
         if (this.world.setBlock(x, y, command.block)) {
@@ -132,9 +204,23 @@ export class Simulation {
         }
         break;
       }
-      case "move":
-        // Movement will be resolved by the physics step once it exists.
-        break;
     }
+  }
+
+  private withinReach(player: PlayerId, tileX: number, tileY: number): boolean {
+    const p = this.players.get(player);
+    if (!p) return false;
+    const dx = tileX + 0.5 - p.x;
+    const dy = tileY + 0.5 - (p.y - PLAYER_HEIGHT / 2);
+    return dx * dx + dy * dy <= REACH * REACH;
+  }
+
+  private tileIntersectsAnyPlayer(tileX: number, tileY: number): boolean {
+    for (const p of this.players.values()) {
+      const overlapsX = tileX + 1 > p.x - PLAYER_WIDTH / 2 && tileX < p.x + PLAYER_WIDTH / 2;
+      const overlapsY = tileY + 1 > p.y - PLAYER_HEIGHT && tileY < p.y;
+      if (overlapsX && overlapsY) return true;
+    }
+    return false;
   }
 }

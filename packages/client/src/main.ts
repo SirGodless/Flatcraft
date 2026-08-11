@@ -21,6 +21,7 @@ async function start(): Promise<void> {
   server.addConnection(serverEnd);
 
   const renderer = new Renderer();
+  renderer.localPlayerId = playerId;
   await renderer.init(document.getElementById("app")!);
 
   connection.onEvents((events) => {
@@ -58,12 +59,11 @@ async function start(): Promise<void> {
   const frame = (now: number): void => {
     const dt = now - last;
     last = now;
-    input.update(dt);
     requestVisibleChunks();
     // Server ticks at a fixed rate regardless of frame rate...
     server.advance(dt);
-    // ...while rendering runs per frame on whatever state it has seen.
-    renderer.draw();
+    // ...while rendering runs per frame, interpolating between ticks.
+    renderer.draw(dt);
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
