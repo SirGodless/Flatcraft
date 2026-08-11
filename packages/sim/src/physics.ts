@@ -13,7 +13,11 @@ import type { World } from "./world/world.js";
 export const GRAVITY = 0.08;
 export const TERMINAL_VELOCITY = 0.9;
 export const WALK_SPEED = 0.22;
-export const JUMP_VELOCITY = -0.42;
+/**
+ * Chosen so the discrete tick integration (gravity already applies on the
+ * jump tick) peaks at ~1.3 tiles - comfortably clears one block, never two.
+ */
+export const JUMP_VELOCITY = -0.5;
 
 export const PLAYER_WIDTH = 0.6;
 export const PLAYER_HEIGHT = 1.8;

@@ -79,6 +79,42 @@ describe("player physics", () => {
     expect(state.onGround).toBe(true);
   });
 
+  it("jumps high enough to climb one block, but not two", () => {
+    const sim = new Simulation(SEED);
+    const { player, state } = joinPlayer(sim);
+    settle(sim);
+
+    // A one-block step directly to the right of the player, walled off
+    // behind so the jump-running player (the move intent persists) can't
+    // simply fly across it. At some tick they must stand on top of it.
+    const stepX = Math.floor(state.x) + 1;
+    setBlock(sim, stepX, SURFACE - 1, BlockId.Stone);
+    setBlock(sim, stepX + 1, SURFACE - 1, BlockId.Stone);
+    for (let dy = 1; dy <= 4; dy++) setBlock(sim, stepX + 2, SURFACE - dy, BlockId.Stone);
+    sim.tick([{ player, command: { type: "move", dx: 1, jump: true } }]);
+    let stoodOnStep = false;
+    for (let i = 0; i < 60 && !stoodOnStep; i++) {
+      sim.tick([]);
+      stoodOnStep =
+        state.onGround &&
+        state.y === SURFACE - 1 &&
+        Math.floor(state.x) >= stepX &&
+        Math.floor(state.x) <= stepX + 1;
+    }
+    expect(stoodOnStep).toBe(true);
+
+    // Raise it to a two-block wall: jumping must not clear it.
+    sim.tick([{ player, command: { type: "move", dx: 0, jump: false } }]);
+    state.x = stepX - 1.5;
+    state.y = SURFACE;
+    state.vx = 0;
+    state.vy = 0;
+    setBlock(sim, stepX, SURFACE - 2, BlockId.Stone);
+    sim.tick([{ player, command: { type: "move", dx: 1, jump: true } }]);
+    for (let i = 0; i < 60; i++) sim.tick([]);
+    expect(state.x).toBeLessThan(stepX); // still stuck in front of the wall
+  });
+
   it("is stopped by walls", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
