@@ -43,6 +43,12 @@ async function start(): Promise<void> {
     onEscape: () => renderer.closeUI(),
     isOverUI: (x, y) => renderer.isOverUI(x, y),
     onRightClickTile: (x, y) => renderer.tryOpenBlockUI(x, y),
+    onAttackAt: (x, y) => {
+      const mob = renderer.mobAt(x, y);
+      if (mob === null) return false;
+      connection.send({ type: "attack", entity: mob });
+      return true;
+    },
     onUiWheel: (deltaY) => renderer.handleWheel(deltaY),
     onPointerMove: (x, y) => renderer.setPointer(x, y),
   });

@@ -150,6 +150,8 @@ describe("simulation", () => {
       sim.tick([]);
     }
     expect(sim.world.getBlock(x, y)).toBe(BlockId.Air);
+    // Wait for the dropped item entity to be picked up.
+    for (let i = 0; i < 30; i++) sim.tick([]);
 
     // The drop (cobblestone) landed in slot 1; select it and place it back.
     sim.tick([{ player, command: { type: "select_slot", index: 1 } }]);

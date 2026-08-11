@@ -98,22 +98,53 @@ describe("player physics", () => {
     expect(state.vx).toBe(0);
   });
 
-  it("does not fall through the floor after a long fall", () => {
+  it("lands on the floor after a fall and takes fall damage", () => {
     const sim = new Simulation(SEED);
     const { state } = joinPlayer(sim);
-    // Dig a 40-tile shaft under the spawn column.
+    // Dig an 8-tile shaft under the spawn column (survivable fall).
     const x = SPAWN_X;
-    for (let y = SURFACE; y < SURFACE + 40; y++) {
+    for (let y = SURFACE; y < SURFACE + 8; y++) {
       setBlock(sim, x, y, BlockId.Air);
     }
     // First solid tile below the shaft (caves may extend it further).
-    let floorY = SURFACE + 40;
+    let floorY = SURFACE + 8;
     while (!blockDef(sim.world.getBlockGenerating(x, floorY)).solid) {
       floorY++;
     }
-    settle(sim, 200);
+    settle(sim, 100);
     expect(state.onGround).toBe(true);
     expect(state.y).toBe(floorY);
+    // Fell floorY - SURFACE tiles; everything past 3 hurts (minus possible regen).
+    const excess = floorY - SURFACE - 3;
+    expect(state.health).toBeLessThanOrEqual(20 - excess + 2);
+    expect(state.health).toBeLessThan(20);
+  });
+
+  it("dies from a lethal fall and respawns at the spawn point", () => {
+    const sim = new Simulation(SEED);
+    const { player, state } = joinPlayer(sim);
+    // A 30-tile shaft in the NEIGHBOR column (the spawn column must stay
+    // intact for the respawn), far beyond lethal (30 - 3 = 27 damage).
+    const x = SPAWN_X + 1;
+    const colSurface = surfaceHeight(SEED, x);
+    for (let y = colSurface; y < colSurface + 30; y++) {
+      setBlock(sim, x, y, BlockId.Air);
+    }
+    // Teleport the player over the shaft (white-box).
+    state.x = x + 0.5;
+    state.y = colSurface - 1;
+    state.inventory[0] = { item: "cobblestone", count: 5 };
+    const events: unknown[] = [];
+    for (let i = 0; i < 150; i++) {
+      events.push(...sim.tick([]));
+    }
+    // Respawned on the surface at full (possibly regenerating) health...
+    expect(state.y).toBe(SURFACE);
+    expect(state.onGround).toBe(true);
+    expect(state.health).toBeGreaterThanOrEqual(19);
+    // ...and the inventory was dropped as item entities down in the shaft.
+    expect(state.inventory.every((s) => s === null || s.item !== "cobblestone")).toBe(true);
+    expect(player).toBeGreaterThan(0);
   });
 
   it("emits player_moved broadcasts while moving", () => {

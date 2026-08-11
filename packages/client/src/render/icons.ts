@@ -160,6 +160,8 @@ const ARTS: Record<string, Art> = {
   diamond_sword: diamond.sword!,
   iron_ingot: ingot("#d8d8dc"),
   gold_ingot: ingot("#f5d442"),
+  rotten_flesh: blob("#6b7d3a"),
+  porkchop: blob("#e88a94"),
 };
 
 const cache = new Map<string, Texture>();

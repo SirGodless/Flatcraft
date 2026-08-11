@@ -16,6 +16,32 @@ import {
   type InventorySlots,
   type ItemStack,
 } from "./inventory.js";
+import {
+  ATTACK_REACH,
+  ENTITY_SIZES,
+  ITEM_DESPAWN_TICKS,
+  ITEM_PICKUP_DELAY,
+  ITEM_PICKUP_RADIUS,
+  MOB_CAP,
+  MOB_DESPAWN_RANGE,
+  MOB_STATS,
+  ZOMBIE_ATTACK_COOLDOWN,
+  ZOMBIE_DAMAGE,
+  ZOMBIE_FOLLOW_RANGE,
+  type Entity,
+  type EntityId,
+  type ItemEntity,
+  type MobEntity,
+  type MobKind,
+} from "./entities.js";
+import {
+  attackDamage,
+  HURT_COOLDOWN_TICKS,
+  PLAYER_ATTACK_COOLDOWN,
+  PLAYER_MAX_HEALTH,
+  REGEN_INTERVAL_TICKS,
+  SAFE_FALL_TILES,
+} from "./combat.js";
 import { itemDef } from "./items.js";
 import { createRng, type Rng } from "./math/rng.js";
 import { canHarvest, miningTicks } from "./mining.js";
@@ -31,7 +57,7 @@ import {
 } from "./physics.js";
 import { clickStack } from "./slots.js";
 import { blockDef, blockDrops, BlockId } from "./world/block.js";
-import { findSpawnX, surfaceHeight } from "./world/gen.js";
+import { Biome, biomeAt, findSpawnX, surfaceHeight } from "./world/gen.js";
 import { World } from "./world/world.js";
 
 /** The player's current movement intent, kept until the next move command. */
@@ -59,6 +85,15 @@ export interface PlayerState {
   craftGrid: (ItemStack | null)[];
   /** Block currently being mined, with accumulated progress ticks. */
   mining: { x: number; y: number; progress: number } | null;
+  health: number;
+  /** Invulnerability frames after taking a hit. */
+  hurtCooldown: number;
+  /** Ticks until the next melee attack is allowed. */
+  attackCooldown: number;
+  /** Knockback velocity, decays and adds onto walking. */
+  kbX: number;
+  /** Tiles fallen so far in the current fall. */
+  fallDistance: number;
 }
 
 /** Reject chunk requests absurdly far out (bad client / future cheat guard). */
@@ -74,10 +109,12 @@ export class Simulation {
   readonly world: World;
   readonly players = new Map<PlayerId, PlayerState>();
   readonly furnaces = new Map<string, FurnaceState>();
+  readonly entities = new Map<EntityId, Entity>();
   tickCount = 0;
 
   private readonly rng: Rng;
   private nextPlayerId: PlayerId = 1;
+  private nextEntityId: EntityId = 1;
 
   constructor(seed: number) {
     this.world = new World(seed);
@@ -101,9 +138,231 @@ export class Simulation {
     }
     this.stepMining(out);
     this.stepFurnaces(out);
+    this.stepEntities(out);
     this.stepPlayers(out);
+    this.stepSpawning(out);
     this.tickCount++;
     return out;
+  }
+
+  /** Spawn an item lying in the world (block drops, mob loot, death drops). */
+  spawnItem(x: number, y: number, stack: ItemStack, out: OutboundEvent[]): ItemEntity {
+    const entity: ItemEntity = {
+      id: this.nextEntityId++,
+      kind: "item",
+      x,
+      y,
+      vx: (this.rng() - 0.5) * 0.15,
+      vy: -0.15,
+      onGround: false,
+      stack: { ...stack },
+      age: 0,
+      pickupDelay: ITEM_PICKUP_DELAY,
+    };
+    this.entities.set(entity.id, entity);
+    out.push({ event: { type: "entity_spawned", id: entity.id, kind: "item", x, y, stack: { ...stack } } });
+    return entity;
+  }
+
+  spawnMob(kind: MobKind, x: number, y: number, out: OutboundEvent[]): MobEntity {
+    const entity: MobEntity = {
+      id: this.nextEntityId++,
+      kind,
+      x,
+      y,
+      vx: 0,
+      vy: 0,
+      onGround: false,
+      health: MOB_STATS[kind].health,
+      hurtCooldown: 0,
+      attackCooldown: 0,
+      wanderDir: 0,
+      wanderTimer: 0,
+    };
+    this.entities.set(entity.id, entity);
+    out.push({ event: { type: "entity_spawned", id: entity.id, kind, x, y } });
+    return entity;
+  }
+
+  private removeEntity(id: EntityId, out: OutboundEvent[]): void {
+    if (this.entities.delete(id)) {
+      out.push({ event: { type: "entity_removed", id } });
+    }
+  }
+
+  private stepEntities(out: OutboundEvent[]): void {
+    for (const entity of [...this.entities.values()]) {
+      const prevX = entity.x;
+      const prevY = entity.y;
+      const size = ENTITY_SIZES[entity.kind];
+
+      if (entity.kind === "item") {
+        entity.age++;
+        if (entity.pickupDelay > 0) entity.pickupDelay--;
+        if (entity.age >= ITEM_DESPAWN_TICKS) {
+          this.removeEntity(entity.id, out);
+          continue;
+        }
+        entity.vx *= 0.85;
+        if (Math.abs(entity.vx) < 0.005) entity.vx = 0;
+        entity.vy = Math.min(entity.vy + GRAVITY, TERMINAL_VELOCITY);
+        stepBody(this.world, entity, size.width, size.height);
+        if (entity.pickupDelay === 0) {
+          const taker = this.playerNearBox(entity.x, entity.y - size.height / 2, ITEM_PICKUP_RADIUS);
+          if (taker) {
+            const leftover = addToInventory(taker.inventory, entity.stack.item, entity.stack.count);
+            if (leftover === 0) {
+              this.removeEntity(entity.id, out);
+            } else {
+              entity.stack = { item: entity.stack.item, count: leftover };
+            }
+            this.syncInventory(taker, out);
+          }
+        }
+      } else {
+        // Mobs
+        if (entity.hurtCooldown > 0) entity.hurtCooldown--;
+        if (entity.attackCooldown > 0) entity.attackCooldown--;
+
+        let dir: -1 | 0 | 1 = 0;
+        if (entity.kind === "zombie") {
+          const target = this.nearestPlayer(entity.x, entity.y);
+          if (target && Math.abs(target.p.x - entity.x) <= ZOMBIE_FOLLOW_RANGE && target.dist <= ZOMBIE_FOLLOW_RANGE * 1.5) {
+            const dx = target.p.x - entity.x;
+            dir = Math.abs(dx) > 0.4 ? (dx > 0 ? 1 : -1) : 0;
+            // Contact attack.
+            if (entity.attackCooldown === 0 && this.entityTouchesPlayer(entity, target.p)) {
+              entity.attackCooldown = ZOMBIE_ATTACK_COOLDOWN;
+              this.hurtPlayer(target.p, ZOMBIE_DAMAGE, out, entity.x);
+            }
+          }
+        } else {
+          // Pig: idle wandering.
+          entity.wanderTimer--;
+          if (entity.wanderTimer <= 0) {
+            const roll = this.rng();
+            entity.wanderDir = roll < 0.4 ? 0 : roll < 0.7 ? 1 : -1;
+            entity.wanderTimer = 40 + Math.floor(this.rng() * 80);
+          }
+          dir = entity.wanderDir;
+        }
+
+        entity.vx = dir * MOB_STATS[entity.kind].speed;
+        entity.vy = Math.min(entity.vy + GRAVITY, TERMINAL_VELOCITY);
+        stepBody(this.world, entity, size.width, size.height);
+        // Hop over one-block walls.
+        if (dir !== 0 && entity.vx === 0 && entity.onGround) {
+          entity.vy = JUMP_VELOCITY;
+        }
+
+        // Despawn far from every player.
+        const nearest = this.nearestPlayer(entity.x, entity.y);
+        if (!nearest || nearest.dist > MOB_DESPAWN_RANGE) {
+          this.removeEntity(entity.id, out);
+          continue;
+        }
+      }
+
+      if (entity.x !== prevX || entity.y !== prevY) {
+        out.push({ event: { type: "entity_moved", id: entity.id, x: entity.x, y: entity.y } });
+      }
+    }
+  }
+
+  private stepSpawning(out: OutboundEvent[]): void {
+    if (this.tickCount % 50 !== 0 || this.players.size === 0) return;
+    let mobCount = 0;
+    for (const e of this.entities.values()) {
+      if (e.kind !== "item") mobCount++;
+    }
+    if (mobCount >= MOB_CAP) return;
+
+    const players = [...this.players.values()];
+    const anchor = players[Math.floor(this.rng() * players.length)]!;
+    const offset = 12 + Math.floor(this.rng() * 20);
+    const x = Math.floor(anchor.x) + (this.rng() < 0.5 ? -offset : offset);
+    const surface = surfaceHeight(this.world.seed, x);
+
+    if (this.rng() < 0.5) {
+      // Pig on a grassy surface.
+      if (this.world.getBlockGenerating(x, surface) !== BlockId.Grass) return;
+      const biome = biomeAt(this.world.seed, x);
+      if (biome !== Biome.Plains && biome !== Biome.Forest) return;
+      this.spawnMob("pig", x + 0.5, surface, out);
+    } else {
+      // Zombie in a cave: find an air pocket below ground.
+      const yStart = surface + 6 + Math.floor(this.rng() * 40);
+      for (let y = yStart; y < yStart + 12; y++) {
+        const feetFree = this.world.getBlockGenerating(x, y - 1) === BlockId.Air;
+        const headFree = this.world.getBlockGenerating(x, y - 2) === BlockId.Air;
+        const floorSolid = blockDef(this.world.getBlockGenerating(x, y)).solid;
+        if (feetFree && headFree && floorSolid) {
+          this.spawnMob("zombie", x + 0.5, y, out);
+          return;
+        }
+      }
+    }
+  }
+
+  private nearestPlayer(x: number, y: number): { p: PlayerState; dist: number } | null {
+    let best: { p: PlayerState; dist: number } | null = null;
+    for (const p of this.players.values()) {
+      const dist = Math.hypot(p.x - x, p.y - PLAYER_HEIGHT / 2 - y);
+      if (!best || dist < best.dist) best = { p, dist };
+    }
+    return best;
+  }
+
+  /** Player whose AABB (expanded by radius) contains the point - like
+   * Minecraft's item magnetism, which expands the player's box. */
+  private playerNearBox(x: number, y: number, radius: number): PlayerState | null {
+    for (const p of this.players.values()) {
+      const dx = Math.max(0, Math.abs(x - p.x) - PLAYER_WIDTH / 2);
+      const top = p.y - PLAYER_HEIGHT;
+      const dy = y < top ? top - y : y > p.y ? y - p.y : 0;
+      if (Math.hypot(dx, dy) <= radius) return p;
+    }
+    return null;
+  }
+
+  private entityTouchesPlayer(entity: MobEntity, p: PlayerState): boolean {
+    const size = ENTITY_SIZES[entity.kind];
+    const overlapsX = Math.abs(entity.x - p.x) < (size.width + PLAYER_WIDTH) / 2 + 0.2;
+    const overlapsY = entity.y > p.y - PLAYER_HEIGHT - 0.2 && entity.y - size.height < p.y + 0.2;
+    return overlapsX && overlapsY;
+  }
+
+  private hurtPlayer(p: PlayerState, amount: number, out: OutboundEvent[], fromX?: number): void {
+    if (amount <= 0 || p.hurtCooldown > 0) return;
+    p.hurtCooldown = HURT_COOLDOWN_TICKS;
+    p.health -= amount;
+    if (fromX !== undefined) {
+      p.kbX = (p.x >= fromX ? 1 : -1) * 0.35;
+      p.vy = Math.min(p.vy, -0.2);
+    }
+    if (p.health <= 0) {
+      // Death: drop the inventory (and grid/cursor) as item entities, respawn.
+      this.dumpGridAndCursor(p);
+      for (let i = 0; i < p.inventory.length; i++) {
+        const stack = p.inventory[i];
+        if (stack) {
+          this.spawnItem(p.x, p.y - 1, stack, out);
+          p.inventory[i] = null;
+        }
+      }
+      const spawnX = findSpawnX(this.world.seed);
+      p.x = spawnX + 0.5;
+      p.y = surfaceHeight(this.world.seed, spawnX);
+      p.vx = 0;
+      p.vy = 0;
+      p.kbX = 0;
+      p.fallDistance = 0;
+      p.health = PLAYER_MAX_HEALTH;
+      p.mining = null;
+      out.push({ event: { type: "player_moved", player: p.id, x: p.x, y: p.y } });
+      this.syncInventory(p, out);
+    }
+    out.push({ event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
   }
 
   private stepFurnaces(out: OutboundEvent[]): void {
@@ -193,8 +452,9 @@ export class Simulation {
         if (canHarvest(block, held)) {
           const drops = blockDrops(block);
           if (drops) {
-            // Leftover that does not fit is lost until item entities exist.
-            addToInventory(p.inventory, drops.item, drops.count);
+            // Drops become item entities at the block's center, like
+            // Minecraft - walk over them to pick them up.
+            this.spawnItem(mining.x + 0.5, mining.y + 0.75, drops, out);
           }
         }
         this.syncInventory(p, out);
@@ -206,13 +466,46 @@ export class Simulation {
     for (const p of this.players.values()) {
       const prevX = p.x;
       const prevY = p.y;
+      const wasOnGround = p.onGround;
 
-      p.vx = p.input.dx * WALK_SPEED;
+      if (p.hurtCooldown > 0) p.hurtCooldown--;
+      if (p.attackCooldown > 0) p.attackCooldown--;
+
+      p.vx = p.input.dx * WALK_SPEED + p.kbX;
+      p.kbX *= 0.6;
+      if (Math.abs(p.kbX) < 0.01) p.kbX = 0;
       if (p.input.jump && p.onGround) {
         p.vy = JUMP_VELOCITY;
       }
       p.vy = Math.min(p.vy + GRAVITY, TERMINAL_VELOCITY);
       stepBody(this.world, p, PLAYER_WIDTH, PLAYER_HEIGHT);
+
+      // Fall damage: accumulate while falling, apply on landing.
+      if (p.y > prevY) {
+        p.fallDistance += p.y - prevY;
+      } else if (p.vy < 0) {
+        p.fallDistance = 0;
+      }
+      if (p.onGround && !wasOnGround) {
+        const excess = Math.floor(p.fallDistance - SAFE_FALL_TILES);
+        p.fallDistance = 0;
+        if (excess > 0) {
+          // Fall damage ignores invulnerability frames' timing niceties:
+          // clear them so a hit right before landing doesn't negate it.
+          p.hurtCooldown = 0;
+          this.hurtPlayer(p, excess, out);
+        }
+      }
+
+      // Passive regeneration (no food system yet).
+      if (
+        this.tickCount % REGEN_INTERVAL_TICKS === 0 &&
+        p.health > 0 &&
+        p.health < PLAYER_MAX_HEALTH
+      ) {
+        p.health++;
+        out.push({ event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
+      }
 
       if (p.x !== prevX || p.y !== prevY) {
         out.push({ event: { type: "player_moved", player: p.id, x: p.x, y: p.y } });
@@ -267,10 +560,27 @@ export class Simulation {
           cursor: null,
           craftGrid: new Array<ItemStack | null>(CRAFT_GRID_SIZE).fill(null),
           mining: null,
+          health: PLAYER_MAX_HEALTH,
+          hurtCooldown: 0,
+          attackCooldown: 0,
+          kbX: 0,
+          fallDistance: 0,
         };
         this.players.set(player, state);
         broadcast({ type: "player_joined", player, name: state.name, x, y });
         syncInventory(state);
+        reply({ type: "player_health", player, health: state.health, max: PLAYER_MAX_HEALTH });
+        // Catch the new client up on existing entities.
+        for (const entity of this.entities.values()) {
+          reply({
+            type: "entity_spawned",
+            id: entity.id,
+            kind: entity.kind,
+            x: entity.x,
+            y: entity.y,
+            ...(entity.kind === "item" ? { stack: { ...entity.stack } } : {}),
+          });
+        }
         break;
       }
       case "leave": {
@@ -431,6 +741,49 @@ export class Simulation {
           p.mining = null;
           broadcast({ type: "mining_progress", player, x, y, progress: 0, total: 0 });
         }
+        break;
+      }
+      case "attack": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        if (p.attackCooldown > 0) {
+          break; // silently ignore spam clicks
+        }
+        const entity = this.entities.get(command.entity);
+        if (!entity || entity.kind === "item") {
+          reject("no such target");
+          break;
+        }
+        const size = ENTITY_SIZES[entity.kind];
+        const dist = Math.hypot(entity.x - p.x, entity.y - size.height / 2 - (p.y - PLAYER_HEIGHT / 2));
+        if (dist > ATTACK_REACH) {
+          reject("out of reach");
+          break;
+        }
+        p.attackCooldown = PLAYER_ATTACK_COOLDOWN;
+        if (entity.hurtCooldown > 0) {
+          break; // still invulnerable from the last hit
+        }
+        entity.hurtCooldown = HURT_COOLDOWN_TICKS;
+        entity.health -= attackDamage(p.inventory[p.selected] ?? null);
+        entity.vx += (entity.x >= p.x ? 1 : -1) * 0.3;
+        entity.vy = Math.min(entity.vy, -0.2);
+        if (entity.health > 0) {
+          broadcast({ type: "entity_hurt", id: entity.id, health: entity.health });
+          break;
+        }
+        // Death drops.
+        if (entity.kind === "zombie") {
+          const count = Math.floor(this.rng() * 3); // 0-2 rotten flesh
+          if (count > 0) this.spawnItem(entity.x, entity.y - 0.5, { item: "rotten_flesh", count }, out);
+        } else {
+          const count = 1 + Math.floor(this.rng() * 2); // 1-2 porkchops
+          this.spawnItem(entity.x, entity.y - 0.5, { item: "porkchop", count }, out);
+        }
+        this.removeEntity(entity.id, out);
         break;
       }
       case "place_block": {

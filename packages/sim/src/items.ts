@@ -65,6 +65,8 @@ export const Items = {
   coal: material("coal"),
   ironIngot: material("iron_ingot"),
   goldIngot: material("gold_ingot"),
+  rottenFlesh: material("rotten_flesh"),
+  porkchop: material("porkchop"),
   lapisLazuli: material("lapis_lazuli"),
   redstone: material("redstone"),
   diamond: material("diamond"),

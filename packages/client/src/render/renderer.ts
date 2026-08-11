@@ -1,9 +1,12 @@
-import { Application, Container, Graphics, Text, type Texture } from "pixi.js";
+import { Application, Container, Graphics, Sprite, Text, type Texture } from "pixi.js";
 import {
   BlockId,
+  ENTITY_SIZES,
   PLAYER_HEIGHT,
+  PLAYER_MAX_HEALTH,
   PLAYER_WIDTH,
   TICK_MS,
+  type EntityId,
   type InventorySlots,
   type ItemStack,
   type PlayerId,
@@ -11,8 +14,9 @@ import {
   type SlotRef,
 } from "@flatcraft/sim";
 import { Camera } from "./camera.js";
+import { itemTexture } from "./icons.js";
 import { createBlockTextures, TILE_PX } from "./textures.js";
-import { CraftingPanelUI, cursorWidget, FurnacePanelUI, HotbarUI } from "./ui.js";
+import { CraftingPanelUI, cursorWidget, FurnacePanelUI, HeartsUI, HotbarUI } from "./ui.js";
 import { CHUNK_PX_H, CHUNK_PX_W, WorldView } from "./worldView.js";
 
 export interface ChunkRange {
@@ -31,6 +35,17 @@ interface PlayerMarker {
   y: number;
   /** When the latest position arrived, for inter-tick interpolation. */
   updatedAt: number;
+}
+
+interface EntityView {
+  gfx: Container;
+  kind: string;
+  prevX: number;
+  prevY: number;
+  x: number;
+  y: number;
+  updatedAt: number;
+  hurtAt: number;
 }
 
 /**
@@ -54,7 +69,9 @@ export class Renderer {
   private readonly app = new Application();
   private readonly worldContainer = new Container();
   private readonly players = new Map<PlayerId, PlayerMarker>();
+  private readonly entities = new Map<EntityId, EntityView>();
   private readonly miningOverlays = new Map<PlayerId, Graphics>();
+  private hearts!: HeartsUI;
   private hud!: Text;
   private hotbar!: HotbarUI;
   private craftingPanel!: CraftingPanelUI;
@@ -87,6 +104,10 @@ export class Renderer {
     this.hotbar = new HotbarUI(blockTextures);
     this.hotbar.update(this.inventory, this.selectedSlot);
     this.app.stage.addChild(this.hotbar.container);
+
+    this.hearts = new HeartsUI();
+    this.hearts.update(PLAYER_MAX_HEALTH, PLAYER_MAX_HEALTH);
+    this.app.stage.addChild(this.hearts.container);
 
     this.craftingPanel = new CraftingPanelUI(blockTextures);
     this.craftingPanel.onQuickCraft = (id) => this.onCraft?.(id);
@@ -204,11 +225,58 @@ export class Renderer {
       case "player_moved": {
         const marker = this.players.get(event.player);
         if (!marker) break;
-        marker.prevX = marker.x;
-        marker.prevY = marker.y;
+        // Teleports (death respawn) snap instead of lerping across the map.
+        const teleported = Math.abs(event.x - marker.x) + Math.abs(event.y - marker.y) > 5;
+        marker.prevX = teleported ? event.x : marker.x;
+        marker.prevY = teleported ? event.y : marker.y;
         marker.x = event.x;
         marker.y = event.y;
         marker.updatedAt = performance.now();
+        break;
+      }
+      case "player_health": {
+        if (event.player === this.localPlayerId) {
+          this.hearts.update(event.health, event.max);
+        }
+        break;
+      }
+      case "entity_spawned": {
+        if (this.entities.has(event.id)) break;
+        const gfx = this.buildEntityGfx(event.kind, event.stack);
+        this.worldContainer.addChild(gfx);
+        this.entities.set(event.id, {
+          gfx,
+          kind: event.kind,
+          prevX: event.x,
+          prevY: event.y,
+          x: event.x,
+          y: event.y,
+          updatedAt: performance.now(),
+          hurtAt: 0,
+        });
+        break;
+      }
+      case "entity_moved": {
+        const view = this.entities.get(event.id);
+        if (!view) break;
+        view.prevX = view.x;
+        view.prevY = view.y;
+        view.x = event.x;
+        view.y = event.y;
+        view.updatedAt = performance.now();
+        break;
+      }
+      case "entity_hurt": {
+        const view = this.entities.get(event.id);
+        if (view) view.hurtAt = performance.now();
+        break;
+      }
+      case "entity_removed": {
+        const view = this.entities.get(event.id);
+        if (view) {
+          view.gfx.destroy({ children: true });
+          this.entities.delete(event.id);
+        }
         break;
       }
       case "player_left": {
@@ -292,6 +360,50 @@ export class Renderer {
     }
   }
 
+  private buildEntityGfx(kind: string, stack?: ItemStack): Container {
+    if (kind === "item" && stack) {
+      const container = new Container();
+      const texture = itemTexture(stack.item, this.blockTextures);
+      if (texture) {
+        const sprite = new Sprite(texture);
+        sprite.width = TILE_PX * 0.5;
+        sprite.height = TILE_PX * 0.5;
+        container.addChild(sprite);
+      }
+      return container;
+    }
+    const gfx = new Graphics();
+    if (kind === "zombie") {
+      gfx.rect(0, 0, 0.6 * TILE_PX, 1.8 * TILE_PX).fill({ color: 0x4e9e4e });
+      gfx.rect(0, 0, 0.6 * TILE_PX, 0.45 * TILE_PX).fill({ color: 0x3c7a3c });
+    } else if (kind === "pig") {
+      gfx.rect(0, 0, 0.9 * TILE_PX, 0.9 * TILE_PX).fill({ color: 0xefa4a8 });
+      gfx.rect(0.65 * TILE_PX, 0.25 * TILE_PX, 0.25 * TILE_PX, 0.2 * TILE_PX).fill({ color: 0xd98488 });
+    } else {
+      gfx.rect(0, 0, TILE_PX, TILE_PX).fill({ color: 0xff00ff });
+    }
+    return gfx;
+  }
+
+  /**
+   * Mob under the given world position (in tile units), for attack clicks.
+   */
+  mobAt(tileX: number, tileY: number): EntityId | null {
+    for (const [id, view] of this.entities) {
+      if (view.kind === "item") continue;
+      const size = ENTITY_SIZES[view.kind as keyof typeof ENTITY_SIZES];
+      if (
+        tileX >= view.x - size.width / 2 &&
+        tileX <= view.x + size.width / 2 &&
+        tileY >= view.y - size.height &&
+        tileY <= view.y
+      ) {
+        return id;
+      }
+    }
+    return null;
+  }
+
   /** Chunks the camera can currently see, padded by one for prefetch. */
   visibleChunkRange(): ChunkRange {
     const halfW = this.screenWidth / 2 / this.camera.zoom;
@@ -320,6 +432,17 @@ export class Renderer {
       }
     }
 
+    for (const view of this.entities.values()) {
+      const alpha = Math.min(1, (now - view.updatedAt) / TICK_MS);
+      const x = view.prevX + (view.x - view.prevX) * alpha;
+      const y = view.prevY + (view.y - view.prevY) * alpha;
+      const size = ENTITY_SIZES[view.kind as keyof typeof ENTITY_SIZES] ?? { width: 1, height: 1 };
+      // Items bob gently so they read as pickups.
+      const bob = view.kind === "item" ? Math.sin(now / 300 + view.x) * 1.5 : 0;
+      view.gfx.position.set((x - size.width / 2) * TILE_PX, (y - size.height) * TILE_PX + bob);
+      view.gfx.tint = now - view.hurtAt < 150 ? 0xff6060 : 0xffffff;
+    }
+
     if (localX !== null && localY !== null) {
       const targetX = localX * TILE_PX;
       const targetY = (localY - PLAYER_HEIGHT / 2) * TILE_PX;
@@ -333,6 +456,10 @@ export class Renderer {
     this.hotbar.container.position.set(
       (this.screenWidth - this.hotbar.width) / 2,
       this.screenHeight - this.hotbar.height - 8,
+    );
+    this.hearts.container.position.set(
+      (this.screenWidth - this.hotbar.width) / 2,
+      this.screenHeight - this.hotbar.height - 26,
     );
     this.craftingPanel.container.position.set(12, 40);
     this.furnacePanel.container.position.set(

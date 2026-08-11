@@ -82,6 +82,8 @@ describe("mining via commands", () => {
     // 15 ticks of work; the block must still stand one tick before.
     const ticks = mineOut(sim, player, x, y);
     expect(ticks).toBe(15);
+    // The drop is an item entity now; stand nearby and let it get picked up.
+    for (let i = 0; i < 30; i++) sim.tick([]);
     expect(countInInventory(state.inventory, "cobblestone")).toBe(1);
   });
 
@@ -94,6 +96,7 @@ describe("mining via commands", () => {
 
     const ticks = mineOut(sim, player, x, y);
     expect(ticks).toBe(99);
+    for (let i = 0; i < 30; i++) sim.tick([]);
     expect(countInInventory(state.inventory, "cobblestone")).toBe(0);
   });
 

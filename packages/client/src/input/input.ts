@@ -1,5 +1,6 @@
 import type { Command } from "@flatcraft/sim";
 import type { Camera } from "../render/camera.js";
+import { TILE_PX } from "../render/textures.js";
 
 export type CommandSink = (command: Command) => void;
 
@@ -15,6 +16,8 @@ export interface InputOptions {
   isOverUI(x: number, y: number): boolean;
   /** Right-click on a tile; true = handled (opened a block UI). */
   onRightClickTile(x: number, y: number): boolean;
+  /** Left-click at world coords (tile units, fractional); true = attacked a mob. */
+  onAttackAt(x: number, y: number): boolean;
   /** Wheel while UI is open; true = consumed (no zoom). */
   onUiWheel(deltaY: number): boolean;
   /** Raw pointer position for the cursor-stack overlay. */
@@ -105,6 +108,9 @@ export function attachInput(target: HTMLElement, opts: InputOptions): InputHandl
     if (opts.isOverUI(e.offsetX, e.offsetY)) return; // Pixi handles UI clicks
     const tile = tileAt(e);
     if (e.button === 0) {
+      const { width, height } = opts.screenSize();
+      const world = opts.camera.screenToWorld(e.offsetX, e.offsetY, width, height);
+      if (opts.onAttackAt(world.x / TILE_PX, world.y / TILE_PX)) return;
       miningTile = tile;
       opts.sendCommand({ type: "start_mining", x: tile.x, y: tile.y });
     } else if (e.button === 2) {

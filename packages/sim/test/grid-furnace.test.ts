@@ -251,7 +251,11 @@ describe("furnace", () => {
       sim.tick([]);
     }
     expect(sim.world.getBlock(fx, fy)).toBe(BlockId.Air);
+    // Contents go straight to the miner; the furnace block itself drops
+    // as an item entity - step next to it to collect it.
     expect(countInInventory(state.inventory, "iron_ore")).toBe(3);
+    state.x = fx + 0.5;
+    for (let i = 0; i < 30; i++) sim.tick([]);
     expect(countInInventory(state.inventory, "furnace")).toBe(1);
     expect(sim.furnaces.size).toBe(0);
   });

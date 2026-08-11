@@ -93,6 +93,32 @@ export function cursorWidget(stack: ItemStack, blockTextures: Map<BlockId, Textu
   return cell;
 }
 
+/** Hearts row above the hotbar: 10 hearts for 20 HP, half-heart capable. */
+export class HeartsUI {
+  readonly container = new Container();
+
+  update(health: number, max: number): void {
+    this.container.removeChildren().forEach((c) => c.destroy({ children: true }));
+    const hearts = Math.ceil(max / 2);
+    const gfx = new Graphics();
+    for (let i = 0; i < hearts; i++) {
+      const x = i * 18;
+      const hp = health - i * 2;
+      gfx.rect(x, 0, 14, 12).fill({ color: 0x3a1010, alpha: 0.8 });
+      if (hp >= 2) {
+        gfx.rect(x + 1, 1, 12, 10).fill({ color: 0xd83030 });
+      } else if (hp === 1) {
+        gfx.rect(x + 1, 1, 6, 10).fill({ color: 0xd83030 });
+      }
+    }
+    this.container.addChild(gfx);
+  }
+
+  get width(): number {
+    return 10 * 18 - 4;
+  }
+}
+
 /** The always-visible 9-slot hotbar, bottom center of the screen. */
 export class HotbarUI {
   readonly container = new Container();

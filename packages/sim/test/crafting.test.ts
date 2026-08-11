@@ -156,6 +156,8 @@ describe("drops and placement", () => {
     for (let i = 0; i < 20 && sim.world.getBlock(x, y) !== BlockId.Air; i++) {
       sim.tick([]);
     }
+    // The drop is an item entity; wait for the nearby player to pick it up.
+    for (let i = 0; i < 30; i++) sim.tick([]);
     // Stone drops cobblestone, Minecraft-style.
     expect(countInInventory(state.inventory, "cobblestone")).toBe(1);
     expect(countInInventory(state.inventory, "stone")).toBe(0);

@@ -1,4 +1,5 @@
 import type { PlayerId } from "./commands.js";
+import type { EntityId } from "./entities.js";
 import type { ItemStack } from "./inventory.js";
 import type { BlockId } from "./world/block.js";
 
@@ -11,6 +12,12 @@ export type SimEvent =
   | { type: "player_joined"; player: PlayerId; name: string; x: number; y: number }
   | { type: "player_left"; player: PlayerId }
   | { type: "player_moved"; player: PlayerId; x: number; y: number }
+  | { type: "player_health"; player: PlayerId; health: number; max: number }
+  /** stack is present for item entities so clients can render the icon. */
+  | { type: "entity_spawned"; id: EntityId; kind: string; x: number; y: number; stack?: ItemStack }
+  | { type: "entity_moved"; id: EntityId; x: number; y: number }
+  | { type: "entity_hurt"; id: EntityId; health: number }
+  | { type: "entity_removed"; id: EntityId }
   | { type: "block_changed"; x: number; y: number; block: BlockId }
   /** Mining progress for crack overlays; total 0 clears the overlay. */
   | { type: "mining_progress"; player: PlayerId; x: number; y: number; progress: number; total: number }

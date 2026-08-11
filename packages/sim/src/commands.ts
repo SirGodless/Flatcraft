@@ -16,6 +16,8 @@ export type Command =
    * block breaks or a stop_mining/new start_mining arrives. */
   | { type: "start_mining"; x: number; y: number }
   | { type: "stop_mining" }
+  /** Melee-attack a mob by entity id. */
+  | { type: "attack"; entity: number }
   /** Places whatever block item is in the selected hotbar slot. */
   | { type: "place_block"; x: number; y: number }
   | { type: "select_slot"; index: number }
