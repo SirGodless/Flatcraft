@@ -1,0 +1,20 @@
+{
+  "name": "@flatcraft/client",
+  "version": "0.1.0",
+  "description": "Browser client: rendering, input, UI. Talks to the game exclusively through a ClientConnection.",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@flatcraft/server": "*",
+    "@flatcraft/sim": "*",
+    "pixi.js": "^8.4.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}

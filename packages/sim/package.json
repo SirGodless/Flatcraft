@@ -1,0 +1,12 @@
+{
+  "name": "@flatcraft/sim",
+  "version": "0.1.0",
+  "description": "Deterministic, tick-based game simulation. No DOM, no rendering, no I/O.",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

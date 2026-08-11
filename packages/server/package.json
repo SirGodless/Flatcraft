@@ -1,0 +1,15 @@
+{
+  "name": "@flatcraft/server",
+  "version": "0.1.0",
+  "description": "Authoritative game server logic and transport abstraction. Runs embedded in the client (singleplayer/host) or standalone headless (dedicated).",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@flatcraft/sim": "*"
+  }
+}
