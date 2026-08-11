@@ -21,6 +21,7 @@ import { createBlockTextures, TILE_PX } from "./textures.js";
 import {
   ContainerPanelUI,
   CraftingPanelUI,
+  currentTooltip,
   cursorWidget,
   EnchantPanelUI,
   FurnacePanelUI,
@@ -106,6 +107,9 @@ export class Renderer {
   private blockTextures!: Map<BlockId, Texture>;
   private cursorLayer = new Container();
   private cursorStack: ItemStack | null = null;
+  private tooltipBox!: Container;
+  private tooltipBg!: Graphics;
+  private tooltipLabel!: Text;
   private pointerX = 0;
   private pointerY = 0;
   private inventory: InventorySlots = [];
@@ -197,6 +201,19 @@ export class Renderer {
     this.app.stage.addChild(this.effectsHud);
 
     this.app.stage.addChild(this.cursorLayer);
+
+    // Item-name tooltip, drawn above everything next to the pointer.
+    this.tooltipBox = new Container();
+    this.tooltipBox.visible = false;
+    this.tooltipBg = new Graphics();
+    this.tooltipLabel = new Text({
+      text: "",
+      style: { fill: "#ffffff", fontSize: 12, fontFamily: "monospace", lineHeight: 16 },
+    });
+    this.tooltipLabel.position.set(6, 4);
+    this.tooltipBox.addChild(this.tooltipBg);
+    this.tooltipBox.addChild(this.tooltipLabel);
+    this.app.stage.addChild(this.tooltipBox);
   }
 
   /** Toggle the inventory screen (2x2 crafting). */
@@ -801,6 +818,24 @@ export class Renderer {
       this.screenHeight - this.hotbar.height - 44,
     );
     this.cursorLayer.position.set(this.pointerX - 16, this.pointerY - 16);
+
+    // Item tooltip next to the pointer.
+    const tip = currentTooltip();
+    this.tooltipBox.visible = tip !== null;
+    if (tip !== null) {
+      if (this.tooltipLabel.text !== tip) {
+        this.tooltipLabel.text = tip;
+        this.tooltipBg
+          .clear()
+          .roundRect(0, 0, this.tooltipLabel.width + 12, this.tooltipLabel.height + 8, 4)
+          .fill({ color: 0x14141c, alpha: 0.95 })
+          .stroke({ color: 0x8888aa, width: 1 });
+      }
+      const w = this.tooltipLabel.width + 12;
+      const x = Math.min(this.pointerX + 14, this.screenWidth - w - 4);
+      const y = Math.max(4, this.pointerY - this.tooltipLabel.height - 18);
+      this.tooltipBox.position.set(x, y);
+    }
 
     const px = localX !== null ? Math.floor(localX) : Math.floor(this.camera.x / TILE_PX);
     const py = localY !== null ? Math.floor(localY) : Math.floor(this.camera.y / TILE_PX);

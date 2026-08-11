@@ -20,6 +20,32 @@ const ICON = 32;
 
 export type SlotClickHandler = (slot: SlotRef, button: "left" | "right") => void;
 
+/**
+ * Item tooltip state: slot widgets set the hovered item's name here and
+ * the renderer draws it next to the pointer each frame.
+ */
+let tooltipText: string | null = null;
+
+export function currentTooltip(): string | null {
+  return tooltipText;
+}
+
+/** "cooked_beef" -> "Cooked Beef" */
+function prettyName(id: string): string {
+  return id
+    .split("_")
+    .map((word) => (word[0] ?? "").toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function tooltipFor(stack: ItemStack): string {
+  const lines = [prettyName(stack.item)];
+  for (const ench of stack.ench ?? []) {
+    lines.push(`${prettyName(ench.id)} ${ench.level}`);
+  }
+  return lines.join("\n");
+}
+
 function buttonOf(e: FederatedPointerEvent): "left" | "right" | null {
   if (e.button === 0) return "left";
   if (e.button === 2) return "right";
@@ -69,6 +95,20 @@ function slotWidget(
     cell.on("pointerdown", (e: FederatedPointerEvent) => {
       const button = buttonOf(e);
       if (button) options.onClick!(button);
+    });
+  }
+  if (stack) {
+    // Hovering shows the item name (pointermove keeps it fresh across
+    // panel rebuilds, pointerout clears it).
+    cell.eventMode = "static";
+    const text = tooltipFor(stack);
+    const show = (): void => {
+      tooltipText = text;
+    };
+    cell.on("pointerover", show);
+    cell.on("pointermove", show);
+    cell.on("pointerout", () => {
+      if (tooltipText === text) tooltipText = null;
     });
   }
   return cell;
