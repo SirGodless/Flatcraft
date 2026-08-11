@@ -75,6 +75,9 @@ export const Items = {
   flint: material("flint"),
   glowstoneDust: material("glowstone_dust"),
   flintAndSteel: register({ id: "flint_and_steel", name: "flint_and_steel", maxStack: 1 }),
+  chestItem: blockItem("chest", BlockId.Chest),
+  /** Portable 9-slot container (a FlatCraft original, not vanilla). */
+  backpack: register({ id: "backpack", name: "backpack", maxStack: 1 }),
   lapisLazuli: material("lapis_lazuli"),
   redstone: material("redstone"),
   diamond: material("diamond"),

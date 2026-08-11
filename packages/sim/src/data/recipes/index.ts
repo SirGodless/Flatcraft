@@ -1,5 +1,7 @@
 import { parseRecipe, type Recipe, type RecipeJson } from "../../crafting/recipe.js";
 
+import backpack from "./backpack.json";
+import chest from "./chest.json";
 import craftingTable from "./crafting_table.json";
 import diamondAxe from "./diamond_axe.json";
 import diamondPickaxe from "./diamond_pickaxe.json";
@@ -68,6 +70,8 @@ const sources: Record<string, RecipeJson> = {
   glass,
   stone,
   flint_and_steel: flintAndSteel,
+  chest,
+  backpack,
   glowstone,
 };
 

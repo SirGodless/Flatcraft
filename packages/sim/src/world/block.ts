@@ -34,6 +34,7 @@ export enum BlockId {
   NetherPortal = 28,
   Lava = 29,
   Basalt = 30,
+  Chest = 31,
 }
 
 export interface BlockDef {
@@ -102,6 +103,7 @@ export const Blocks = {
   // Static lava; damages anything inside it. Not minable or placeable.
   lava: register({ id: BlockId.Lava, name: "lava", solid: false, hardness: -1, drops: null }),
   basalt: register({ id: BlockId.Basalt, name: "basalt", solid: true, hardness: 25, tool: "pickaxe", requiredTier: 1 }),
+  chest: register({ id: BlockId.Chest, name: "chest", solid: true, hardness: 25, tool: "axe" }),
 } as const;
 
 export function blockDef(id: BlockId): BlockDef {

@@ -30,6 +30,8 @@ export type Command =
   | { type: "return_grid" }
   /** Open a furnace: validates it and returns its current state. */
   | { type: "open_furnace"; x: number; y: number }
+  /** Open a chest: validates it and returns its current contents. */
+  | { type: "open_chest"; x: number; y: number }
   | { type: "request_chunk"; cx: number; cy: number };
 
 /** Addresses a slot in one of the clickable containers. */
@@ -37,7 +39,10 @@ export type SlotRef =
   | { container: "inventory"; index: number }
   | { container: "craft_grid"; index: number }
   | { container: "craft_result" }
-  | { container: "furnace"; x: number; y: number; slot: "input" | "fuel" | "output" };
+  | { container: "furnace"; x: number; y: number; slot: "input" | "fuel" | "output" }
+  | { container: "chest"; x: number; y: number; index: number }
+  /** A slot inside the backpack in the player's selected hotbar slot. */
+  | { container: "backpack"; index: number };
 
 /** A command attributed to the player who issued it. */
 export interface PlayerCommand {

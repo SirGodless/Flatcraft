@@ -163,6 +163,19 @@ const ARTS: Record<string, Art> = {
   rotten_flesh: blob("#6b7d3a"),
   porkchop: blob("#e88a94"),
   flint: gem("#3c3c40"),
+  backpack: {
+    rows: [
+      "........",
+      ".BBBBBB.",
+      "BBLLLLBB",
+      "B.LBBL.B",
+      "B.BBBB.B",
+      "B.BBBB.B",
+      ".BBBBBB.",
+      "........",
+    ],
+    palette: { B: "#8a5a30", L: "#6b4522" },
+  },
   glowstone_dust: blob("#f0cf5e"),
   flint_and_steel: {
     rows: [

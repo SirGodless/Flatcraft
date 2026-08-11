@@ -16,6 +16,8 @@ export interface InputOptions {
   isOverUI(x: number, y: number): boolean;
   /** Right-click on a tile; true = handled (opened a block UI). */
   onRightClickTile(x: number, y: number): boolean;
+  /** Right-click with no block UI hit; true = handled (e.g. backpack). */
+  onUseItem(): boolean;
   /** Left-click at world coords (tile units, fractional); true = attacked a mob. */
   onAttackAt(x: number, y: number): boolean;
   /** Wheel while UI is open; true = consumed (no zoom). */
@@ -115,6 +117,7 @@ export function attachInput(target: HTMLElement, opts: InputOptions): InputHandl
       opts.sendCommand({ type: "start_mining", x: tile.x, y: tile.y });
     } else if (e.button === 2) {
       if (opts.onRightClickTile(tile.x, tile.y)) return;
+      if (opts.onUseItem()) return;
       opts.sendCommand({ type: "place_block", x: tile.x, y: tile.y });
     }
   };

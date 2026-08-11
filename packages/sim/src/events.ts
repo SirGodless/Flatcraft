@@ -38,6 +38,8 @@ export type SimEvent =
       cursor: ItemStack | null;
       craftGrid: (ItemStack | null)[];
     }
+  /** Chest contents sync. */
+  | { type: "chest_changed"; dim: Dimension; x: number; y: number; slots: (ItemStack | null)[] }
   /** Furnace state sync for everyone who can see/use it. */
   | {
       type: "furnace_changed";

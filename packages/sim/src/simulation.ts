@@ -125,6 +125,8 @@ export class Simulation {
   readonly worlds: Record<Dimension, World>;
   readonly players = new Map<PlayerId, PlayerState>();
   readonly furnaces = new Map<string, FurnaceState>();
+  /** Chest contents, keyed like furnaces: "dim:x,y". */
+  readonly chests = new Map<string, { dimension: Dimension; x: number; y: number; slots: (ItemStack | null)[] }>();
   readonly entities = new Map<EntityId, Entity>();
   /** Known portal interiors (bottom-left of interior), per dimension. */
   readonly portals: Record<Dimension, Map<string, { x: number; y: number }>> = {
@@ -166,6 +168,7 @@ export class Simulation {
         nether: this.worlds.nether.serializeChunks(),
       },
       furnaces: [...this.furnaces.values()].map((f) => structuredClone(f)),
+      chests: [...this.chests.values()].map((c) => structuredClone(c)),
       portals: {
         overworld: [...this.portals.overworld.values()],
         nether: [...this.portals.nether.values()],
@@ -191,6 +194,9 @@ export class Simulation {
     sim.worlds.nether.loadChunks(save.worlds.nether);
     for (const f of save.furnaces) {
       sim.furnaces.set(furnaceKey(f.dimension, f.x, f.y), structuredClone(f));
+    }
+    for (const c of save.chests ?? []) {
+      sim.chests.set(furnaceKey(c.dimension, c.x, c.y), structuredClone(c));
     }
     for (const dim of ["overworld", "nether"] as const) {
       for (const pos of save.portals[dim]) {
@@ -369,6 +375,16 @@ export class Simulation {
               if (stack) addToInventory(p.inventory, stack.item, stack.count);
             }
             this.furnaces.delete(furnaceKey(p.dimension, mining.x, mining.y));
+          }
+        }
+        if (block === BlockId.Chest) {
+          const chest = this.chests.get(furnaceKey(p.dimension, mining.x, mining.y));
+          if (chest) {
+            // Contents spill out as item entities, like Minecraft.
+            for (const stack of chest.slots) {
+              if (stack) this.spawnItem(p.dimension, mining.x + 0.5, mining.y + 0.5, stack, out);
+            }
+            this.chests.delete(furnaceKey(p.dimension, mining.x, mining.y));
           }
         }
         if (canHarvest(block, held)) {
@@ -957,6 +973,25 @@ export class Simulation {
         reply(this.furnaceEvent(state));
         break;
       }
+      case "open_chest": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        const { x, y } = command;
+        if (!Number.isInteger(x) || !Number.isInteger(y) || !this.withinReach(player, x, y)) {
+          reject("out of reach");
+          break;
+        }
+        if (this.worldOf(p.dimension).getBlockGenerating(x, y) !== BlockId.Chest) {
+          reject("no chest there");
+          break;
+        }
+        const chest = this.ensureChest(p.dimension, x, y);
+        reply({ type: "chest_changed", dim: p.dimension, x, y, slots: cloneInventory(chest.slots) });
+        break;
+      }
       case "request_chunk": {
         const p = this.players.get(player);
         if (!p) {
@@ -1160,6 +1195,54 @@ export class Simulation {
         }
         return;
       }
+      case "chest": {
+        const { x, y } = slot;
+        if (!Number.isInteger(x) || !Number.isInteger(y) || !this.withinReach(p.id, x, y)) {
+          reject("out of reach");
+          return;
+        }
+        if (this.worldOf(p.dimension).getBlockGenerating(x, y) !== BlockId.Chest) {
+          reject("no chest there");
+          return;
+        }
+        if (!Number.isInteger(slot.index) || slot.index < 0 || slot.index >= 27) {
+          reject("invalid slot");
+          return;
+        }
+        const chest = this.ensureChest(p.dimension, x, y);
+        const result = clickStack(p.cursor, chest.slots[slot.index] ?? null, button);
+        p.cursor = result.cursor;
+        chest.slots[slot.index] = result.slot;
+        broadcast({
+          type: "chest_changed",
+          dim: p.dimension,
+          x,
+          y,
+          slots: cloneInventory(chest.slots),
+        });
+        return;
+      }
+      case "backpack": {
+        const held = p.inventory[p.selected];
+        if (!held || held.item !== "backpack") {
+          reject("no backpack in hand");
+          return;
+        }
+        if (!Number.isInteger(slot.index) || slot.index < 0 || slot.index >= 9) {
+          reject("invalid slot");
+          return;
+        }
+        // No backpacks inside backpacks.
+        if (p.cursor?.item === "backpack") {
+          reject("backpack in backpack");
+          return;
+        }
+        held.data ??= { slots: new Array<ItemStack | null>(9).fill(null) };
+        const result = clickStack(p.cursor, held.data.slots[slot.index] ?? null, button);
+        p.cursor = result.cursor;
+        held.data.slots[slot.index] = result.slot;
+        return;
+      }
       case "furnace": {
         const { x, y } = slot;
         if (!Number.isInteger(x) || !Number.isInteger(y) || !this.withinReach(p.id, x, y)) {
@@ -1201,6 +1284,20 @@ export class Simulation {
         return;
       }
     }
+  }
+
+  private ensureChest(
+    dimension: Dimension,
+    x: number,
+    y: number,
+  ): { dimension: Dimension; x: number; y: number; slots: (ItemStack | null)[] } {
+    const key = furnaceKey(dimension, x, y);
+    let chest = this.chests.get(key);
+    if (!chest) {
+      chest = { dimension, x, y, slots: new Array<ItemStack | null>(27).fill(null) };
+      this.chests.set(key, chest);
+    }
+    return chest;
   }
 
   private dumpGridAndCursor(p: PlayerState): void {

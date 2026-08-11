@@ -64,6 +64,12 @@ const STYLES: Partial<Record<BlockId, BlockStyle>> = {
   [BlockId.NetherPortal]: { base: [138, 48, 200], noise: 0.25, alpha: 0.75 },
   [BlockId.Lava]: { base: [224, 80, 16], noise: 0.2, specks: { color: [255, 200, 60], count: 5 } },
   [BlockId.Basalt]: { base: [74, 74, 82], noise: 0.08, stripe: true },
+  [BlockId.Chest]: {
+    base: [158, 110, 54],
+    top: { color: [130, 90, 44], rows: 5 },
+    noise: 0.08,
+    frame: [96, 66, 32],
+  },
   [BlockId.CoalOre]: ore([44, 44, 46]),
   [BlockId.IronOre]: ore([215, 172, 140]),
   [BlockId.GoldOre]: ore([250, 212, 80]),

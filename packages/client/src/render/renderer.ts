@@ -17,7 +17,7 @@ import {
 import { Camera } from "./camera.js";
 import { itemTexture } from "./icons.js";
 import { createBlockTextures, TILE_PX } from "./textures.js";
-import { CraftingPanelUI, cursorWidget, FurnacePanelUI, HeartsUI, HotbarUI } from "./ui.js";
+import { ContainerPanelUI, CraftingPanelUI, cursorWidget, FurnacePanelUI, HeartsUI, HotbarUI } from "./ui.js";
 import { CHUNK_PX_H, CHUNK_PX_W, WorldView } from "./worldView.js";
 
 export interface ChunkRange {
@@ -78,6 +78,11 @@ export class Renderer {
   private hotbar!: HotbarUI;
   private craftingPanel!: CraftingPanelUI;
   private furnacePanel!: FurnacePanelUI;
+  private chestPanel!: ContainerPanelUI;
+  private backpackPanel!: ContainerPanelUI;
+  private openChestPos: { x: number; y: number } | null = null;
+  /** Wired by the bootstrap code to send open_chest commands. */
+  onOpenChest: ((x: number, y: number) => void) | null = null;
   private blockTextures!: Map<BlockId, Texture>;
   private cursorLayer = new Container();
   private cursorStack: ItemStack | null = null;
@@ -131,6 +136,14 @@ export class Renderer {
     this.furnacePanel.onSlotClick = (slot, button) => this.onSlotClick?.(slot, button);
     this.app.stage.addChild(this.furnacePanel.container);
 
+    this.chestPanel = new ContainerPanelUI(blockTextures, "Chest", 9, 27);
+    this.chestPanel.onSlotClick = (slot, button) => this.onSlotClick?.(slot, button);
+    this.app.stage.addChild(this.chestPanel.container);
+
+    this.backpackPanel = new ContainerPanelUI(blockTextures, "Backpack", 9, 9);
+    this.backpackPanel.onSlotClick = (slot, button) => this.onSlotClick?.(slot, button);
+    this.app.stage.addChild(this.backpackPanel.container);
+
     this.app.stage.addChild(this.cursorLayer);
   }
 
@@ -145,14 +158,46 @@ export class Renderer {
   }
 
   closeUI(): void {
-    const wasOpen = this.craftingPanel.visible || this.furnacePanel.visible;
+    const wasOpen = this.uiOpen;
     this.craftingPanel.close();
     this.furnacePanel.close();
+    this.chestPanel.close();
+    this.backpackPanel.close();
+    this.openChestPos = null;
     if (wasOpen) this.onUiClosed?.();
   }
 
   get uiOpen(): boolean {
-    return this.craftingPanel.visible || this.furnacePanel.visible;
+    return (
+      this.craftingPanel.visible ||
+      this.furnacePanel.visible ||
+      this.chestPanel.visible ||
+      this.backpackPanel.visible
+    );
+  }
+
+  /** The item id in the selected hotbar slot, if any. */
+  selectedItem(): string | null {
+    return this.inventory[this.selectedSlot]?.item ?? null;
+  }
+
+  /** Open the backpack screen for the selected hotbar slot. */
+  openBackpack(): void {
+    this.craftingPanel.close();
+    this.furnacePanel.close();
+    this.chestPanel.close();
+    this.backpackPanel.open((index) => ({ container: "backpack", index }));
+    this.refreshBackpack();
+  }
+
+  private refreshBackpack(): void {
+    if (!this.backpackPanel.visible) return;
+    const held = this.inventory[this.selectedSlot];
+    if (!held || held.item !== "backpack") {
+      this.backpackPanel.close();
+      return;
+    }
+    this.backpackPanel.update(held.data?.slots ?? new Array(9).fill(null));
   }
 
   /**
@@ -169,8 +214,17 @@ export class Renderer {
     }
     if (block === BlockId.Furnace) {
       this.craftingPanel.close();
+      this.chestPanel.close();
       this.furnacePanel.open(tileX, tileY);
       this.onOpenFurnace?.(tileX, tileY);
+      return true;
+    }
+    if (block === BlockId.Chest) {
+      this.craftingPanel.close();
+      this.furnacePanel.close();
+      this.openChestPos = { x: tileX, y: tileY };
+      this.chestPanel.open((index) => ({ container: "chest", x: tileX, y: tileY, index }));
+      this.onOpenChest?.(tileX, tileY);
       return true;
     }
     return false;
@@ -178,7 +232,13 @@ export class Renderer {
 
   /** Whether a screen point lands on an open UI surface (blocks world input). */
   isOverUI(x: number, y: number): boolean {
-    const panels = [this.craftingPanel.container, this.furnacePanel.container, this.hotbar.container];
+    const panels = [
+      this.craftingPanel.container,
+      this.furnacePanel.container,
+      this.chestPanel.container,
+      this.backpackPanel.container,
+      this.hotbar.container,
+    ];
     for (const panel of panels) {
       if (!panel.visible) continue;
       const bounds = panel.getBounds();
@@ -348,6 +408,7 @@ export class Renderer {
           this.cursorStack = event.cursor;
           this.hotbar.update(this.inventory, this.selectedSlot);
           this.craftingPanel.update(this.inventory, this.selectedSlot, event.craftGrid);
+          this.refreshBackpack();
           this.cursorLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
           if (this.cursorStack) {
             this.cursorLayer.addChild(cursorWidget(this.cursorStack, this.blockTextures));
@@ -357,18 +418,36 @@ export class Renderer {
       case "furnace_changed":
         this.furnacePanel.update(event);
         break;
+      case "chest_changed":
+        if (
+          event.dim === this.localDim &&
+          this.openChestPos &&
+          this.openChestPos.x === event.x &&
+          this.openChestPos.y === event.y
+        ) {
+          this.chestPanel.update(event.slots);
+        }
+        break;
       case "time_changed":
         this.timeOfDay = event.time;
         break;
       case "block_changed": {
         if (event.dim !== this.localDim) break;
         this.worldView.setBlock(event.x, event.y, event.block);
-        // The furnace we were using got broken: close its screen.
+        // The furnace/chest we were using got broken: close its screen.
         const furnacePos = this.furnacePanel.position;
         if (
           furnacePos &&
           furnacePos.x === event.x &&
           furnacePos.y === event.y &&
+          event.block === BlockId.Air
+        ) {
+          this.closeUI();
+        }
+        if (
+          this.openChestPos &&
+          this.openChestPos.x === event.x &&
+          this.openChestPos.y === event.y &&
           event.block === BlockId.Air
         ) {
           this.closeUI();
@@ -536,6 +615,11 @@ export class Renderer {
     this.furnacePanel.container.position.set(
       (this.screenWidth - 250) / 2,
       (this.screenHeight - 170) / 2,
+    );
+    this.chestPanel.container.position.set((this.screenWidth - this.chestPanel.width) / 2, 80);
+    this.backpackPanel.container.position.set(
+      (this.screenWidth - this.backpackPanel.width) / 2,
+      120,
     );
     this.cursorLayer.position.set(this.pointerX - 16, this.pointerY - 16);
 

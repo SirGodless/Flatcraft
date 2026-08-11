@@ -356,6 +356,84 @@ export class CraftingPanelUI {
   }
 }
 
+/**
+ * Generic item-container screen (chest: 27 slots, backpack: 9). The
+ * slot-ref factory decides where clicks are routed server-side.
+ */
+export class ContainerPanelUI {
+  readonly container = new Container();
+  onSlotClick: SlotClickHandler | null = null;
+
+  private slots: (ItemStack | null)[] = [];
+  private makeRef: ((index: number) => SlotRef) | null = null;
+
+  constructor(
+    private readonly blockTextures: Map<BlockId, Texture>,
+    private readonly title: string,
+    private readonly cols: number,
+    private readonly count: number,
+  ) {
+    this.container.visible = false;
+  }
+
+  get visible(): boolean {
+    return this.container.visible;
+  }
+
+  get width(): number {
+    return this.cols * (SLOT + PAD) + 3 * PAD;
+  }
+
+  open(makeRef: (index: number) => SlotRef): void {
+    this.makeRef = makeRef;
+    this.slots = new Array<ItemStack | null>(this.count).fill(null);
+    this.container.visible = true;
+    this.rebuild();
+  }
+
+  close(): void {
+    this.container.visible = false;
+  }
+
+  update(slots: (ItemStack | null)[]): void {
+    this.slots = slots;
+    if (this.container.visible) this.rebuild();
+  }
+
+  private rebuild(): void {
+    this.container.removeChildren().forEach((c) => c.destroy({ children: true }));
+    const rows = Math.ceil(this.count / this.cols);
+    const width = this.width;
+    const height = rows * (SLOT + PAD) + 34;
+
+    const background = new Graphics()
+      .rect(0, 0, width, height)
+      .fill({ color: 0x1a1a22, alpha: 0.92 })
+      .stroke({ color: 0x555566, width: 2 });
+    background.eventMode = "static";
+    this.container.addChild(background);
+
+    const label = new Text({
+      text: this.title,
+      style: { fill: "#cccccc", fontSize: 13, fontFamily: "monospace" },
+    });
+    label.position.set(PAD * 2, 8);
+    this.container.addChild(label);
+
+    for (let i = 0; i < this.count; i++) {
+      const col = i % this.cols;
+      const row = Math.floor(i / this.cols);
+      const cell = slotWidget(this.slots[i] ?? null, this.blockTextures, {
+        onClick: (button) => {
+          if (this.makeRef) this.onSlotClick?.(this.makeRef(i), button);
+        },
+      });
+      cell.position.set(PAD * 2 + col * (SLOT + PAD), 28 + row * (SLOT + PAD));
+      this.container.addChild(cell);
+    }
+  }
+}
+
 export interface FurnaceView {
   x: number;
   y: number;

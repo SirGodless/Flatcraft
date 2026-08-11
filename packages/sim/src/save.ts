@@ -1,6 +1,8 @@
 import type { Entity } from "./entities.js";
 import type { FurnaceState } from "./furnace.js";
+import type { ItemStack } from "./inventory.js";
 import type { PlayerState } from "./simulation.js";
+import type { Dimension } from "./world/world.js";
 
 /**
  * Complete simulation snapshot, plain data: JSON- and structured-clone-
@@ -19,6 +21,7 @@ export interface SimSave {
     nether: Array<{ cx: number; cy: number; tiles: number[] }>;
   };
   furnaces: FurnaceState[];
+  chests?: Array<{ dimension: Dimension; x: number; y: number; slots: (ItemStack | null)[] }>;
   portals: {
     overworld: Array<{ x: number; y: number }>;
     nether: Array<{ x: number; y: number }>;

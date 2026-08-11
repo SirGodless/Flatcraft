@@ -11,6 +11,8 @@ export const HOTBAR_SIZE = 9;
 export interface ItemStack {
   item: string;
   count: number;
+  /** Nested inventory for container items (backpacks). */
+  data?: { slots: (ItemStack | null)[] };
 }
 
 export type InventorySlots = (ItemStack | null)[];
@@ -71,5 +73,5 @@ export function removeFromInventory(slots: InventorySlots, item: string, count: 
 }
 
 export function cloneInventory(slots: InventorySlots): InventorySlots {
-  return slots.map((stack) => (stack ? { ...stack } : null));
+  return slots.map((stack) => (stack ? structuredClone(stack) : null));
 }
