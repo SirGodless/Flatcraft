@@ -1,0 +1,19 @@
+{
+  "name": "flatcraft",
+  "private": true,
+  "version": "0.1.0",
+  "description": "FlatCraft - a 2D sandbox survival game for the browser",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @flatcraft/client",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}
