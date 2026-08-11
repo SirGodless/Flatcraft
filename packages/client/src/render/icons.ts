@@ -162,6 +162,21 @@ const ARTS: Record<string, Art> = {
   gold_ingot: ingot("#f5d442"),
   rotten_flesh: blob("#6b7d3a"),
   porkchop: blob("#e88a94"),
+  flint: gem("#3c3c40"),
+  glowstone_dust: blob("#f0cf5e"),
+  flint_and_steel: {
+    rows: [
+      "........",
+      ".SS.....",
+      "S..S..Y.",
+      "S....Y..",
+      ".S..Y...",
+      "..SS....",
+      "........",
+      "........",
+    ],
+    palette: { S: "#b0b0b8", Y: "#f5d442" },
+  },
 };
 
 const cache = new Map<string, Texture>();

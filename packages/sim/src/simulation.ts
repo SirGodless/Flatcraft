@@ -6,17 +6,6 @@ import { DEFAULT_COOK_TICKS, fuelTicks } from "./crafting/recipe.js";
 import { RECIPES } from "./data/recipes/index.js";
 import { createFurnace, furnaceIdle, furnaceKey, stepFurnace, type FurnaceState } from "./furnace.js";
 import {
-  addToInventory,
-  cloneInventory,
-  countInInventory,
-  createInventory,
-  HOTBAR_SIZE,
-  INVENTORY_SIZE,
-  removeFromInventory,
-  type InventorySlots,
-  type ItemStack,
-} from "./inventory.js";
-import {
   ATTACK_REACH,
   ENTITY_SIZES,
   ITEM_DESPAWN_TICKS,
@@ -42,6 +31,17 @@ import {
   REGEN_INTERVAL_TICKS,
   SAFE_FALL_TILES,
 } from "./combat.js";
+import {
+  addToInventory,
+  cloneInventory,
+  countInInventory,
+  createInventory,
+  HOTBAR_SIZE,
+  INVENTORY_SIZE,
+  removeFromInventory,
+  type InventorySlots,
+  type ItemStack,
+} from "./inventory.js";
 import { itemDef } from "./items.js";
 import { createRng, type Rng } from "./math/rng.js";
 import { canHarvest, miningTicks } from "./mining.js";
@@ -55,11 +55,20 @@ import {
   TERMINAL_VELOCITY,
   WALK_SPEED,
 } from "./physics.js";
+import {
+  buildPortal,
+  findPortalInterior,
+  nearPortal,
+  NETHER_SCALE,
+  PORTAL_COOLDOWN,
+  PORTAL_TICKS,
+} from "./portal.js";
 import { clickStack } from "./slots.js";
 import { DAY_LENGTH, daylightFactor, isNight } from "./time.js";
 import { blockDef, blockDrops, BlockId } from "./world/block.js";
 import { Biome, biomeAt, findSpawnX, surfaceHeight } from "./world/gen.js";
-import { World } from "./world/world.js";
+import { LAVA_LEVEL } from "./world/nether.js";
+import { World, type Dimension } from "./world/world.js";
 
 /** The player's current movement intent, kept until the next move command. */
 export interface PlayerInput {
@@ -70,6 +79,7 @@ export interface PlayerInput {
 export interface PlayerState {
   id: PlayerId;
   name: string;
+  dimension: Dimension;
   /** Feet-center position in tiles (see physics.ts for the AABB layout). */
   x: number;
   y: number;
@@ -95,6 +105,10 @@ export interface PlayerState {
   kbX: number;
   /** Tiles fallen so far in the current fall. */
   fallDistance: number;
+  /** Consecutive ticks standing inside a nether portal. */
+  portalTicks: number;
+  /** Ticks left before a portal can trigger again after arriving. */
+  portalCooldown: number;
 }
 
 /** Reject chunk requests absurdly far out (bad client / future cheat guard). */
@@ -107,10 +121,15 @@ const MAX_CHUNK_COORD = 1_000_000;
  * any other ambient environment - all inputs arrive via commands.
  */
 export class Simulation {
-  readonly world: World;
+  readonly worlds: Record<Dimension, World>;
   readonly players = new Map<PlayerId, PlayerState>();
   readonly furnaces = new Map<string, FurnaceState>();
   readonly entities = new Map<EntityId, Entity>();
+  /** Known portal interiors (bottom-left of interior), per dimension. */
+  readonly portals: Record<Dimension, Map<string, { x: number; y: number }>> = {
+    overworld: new Map(),
+    nether: new Map(),
+  };
   tickCount = 0;
   /** Time of day in ticks, 0..DAY_LENGTH (writable, e.g. for tests). */
   timeOfDay = 0;
@@ -120,8 +139,20 @@ export class Simulation {
   private nextEntityId: EntityId = 1;
 
   constructor(seed: number) {
-    this.world = new World(seed);
+    this.worlds = {
+      overworld: new World(seed, "overworld"),
+      nether: new World(seed, "nether"),
+    };
     this.rng = createRng(seed);
+  }
+
+  /** The overworld (kept for compatibility; use worldOf for others). */
+  get world(): World {
+    return this.worlds.overworld;
+  }
+
+  worldOf(dimension: Dimension): World {
+    return this.worlds[dimension];
   }
 
   /** Reserve a player id for a new connection (embedded or remote). */
@@ -129,11 +160,6 @@ export class Simulation {
     return this.nextPlayerId++;
   }
 
-  /**
-   * Advance the world by exactly one tick: apply the given commands in
-   * order, then run mining, furnaces and physics. Returns the outbound
-   * events for the transport layer to deliver.
-   */
   tick(commands: readonly PlayerCommand[]): OutboundEvent[] {
     const out: OutboundEvent[] = [];
     for (const pc of commands) {
@@ -153,10 +179,11 @@ export class Simulation {
   }
 
   /** Spawn an item lying in the world (block drops, mob loot, death drops). */
-  spawnItem(x: number, y: number, stack: ItemStack, out: OutboundEvent[]): ItemEntity {
+  spawnItem(dimension: Dimension, x: number, y: number, stack: ItemStack, out: OutboundEvent[]): ItemEntity {
     const entity: ItemEntity = {
       id: this.nextEntityId++,
       kind: "item",
+      dimension,
       x,
       y,
       vx: (this.rng() - 0.5) * 0.15,
@@ -167,14 +194,17 @@ export class Simulation {
       pickupDelay: ITEM_PICKUP_DELAY,
     };
     this.entities.set(entity.id, entity);
-    out.push({ event: { type: "entity_spawned", id: entity.id, kind: "item", x, y, stack: { ...stack } } });
+    out.push({
+      event: { type: "entity_spawned", id: entity.id, kind: "item", dim: dimension, x, y, stack: { ...stack } },
+    });
     return entity;
   }
 
-  spawnMob(kind: MobKind, x: number, y: number, out: OutboundEvent[]): MobEntity {
+  spawnMob(kind: MobKind, x: number, y: number, out: OutboundEvent[], dimension: Dimension = "overworld"): MobEntity {
     const entity: MobEntity = {
       id: this.nextEntityId++,
       kind,
+      dimension,
       x,
       y,
       vx: 0,
@@ -187,7 +217,7 @@ export class Simulation {
       wanderTimer: 0,
     };
     this.entities.set(entity.id, entity);
-    out.push({ event: { type: "entity_spawned", id: entity.id, kind, x, y } });
+    out.push({ event: { type: "entity_spawned", id: entity.id, kind, dim: dimension, x, y } });
     return entity;
   }
 
@@ -197,11 +227,110 @@ export class Simulation {
     }
   }
 
+  private stepFurnaces(out: OutboundEvent[]): void {
+    for (const state of this.furnaces.values()) {
+      const changed = stepFurnace(state, RECIPES.values());
+      if (changed && (this.tickCount % 4 === 0 || furnaceIdle(state))) {
+        out.push({ event: this.furnaceEvent(state) });
+      }
+    }
+  }
+
+  private furnaceEvent(state: FurnaceState): SimEvent {
+    const recipe = state.input
+      ? [...RECIPES.values()].find((r) => r.kind === "smelting" && r.ingredients.has(state.input!.item))
+      : undefined;
+    return {
+      type: "furnace_changed",
+      dim: state.dimension,
+      x: state.x,
+      y: state.y,
+      input: state.input ? { ...state.input } : null,
+      fuel: state.fuel ? { ...state.fuel } : null,
+      output: state.output ? { ...state.output } : null,
+      burnLeft: state.burnLeft,
+      burnTotal: state.burnTotal,
+      cookProgress: state.cookProgress,
+      cookTotal: recipe?.cookingTime ?? DEFAULT_COOK_TICKS,
+    };
+  }
+
+  private stepMining(out: OutboundEvent[]): void {
+    for (const p of this.players.values()) {
+      const mining = p.mining;
+      if (!mining) continue;
+      const world = this.worldOf(p.dimension);
+
+      const clear = (): void => {
+        p.mining = null;
+        out.push({
+          event: { type: "mining_progress", player: p.id, x: mining.x, y: mining.y, progress: 0, total: 0 },
+        });
+      };
+
+      if (!this.withinReach(p.id, mining.x, mining.y)) {
+        clear();
+        continue;
+      }
+      const block = world.getBlockGenerating(mining.x, mining.y);
+      if (block === BlockId.Air || blockDef(block).hardness < 0) {
+        clear();
+        continue;
+      }
+
+      const held = p.inventory[p.selected] ?? null;
+      const total = miningTicks(block, held);
+      mining.progress++;
+
+      if (mining.progress < total) {
+        out.push({
+          event: {
+            type: "mining_progress",
+            player: p.id,
+            x: mining.x,
+            y: mining.y,
+            progress: mining.progress,
+            total,
+          },
+        });
+        continue;
+      }
+
+      clear();
+      if (world.setBlock(mining.x, mining.y, BlockId.Air)) {
+        out.push({
+          event: { type: "block_changed", dim: p.dimension, x: mining.x, y: mining.y, block: BlockId.Air },
+        });
+        if (block === BlockId.Furnace) {
+          const state = this.furnaces.get(furnaceKey(p.dimension, mining.x, mining.y));
+          if (state) {
+            for (const stack of [state.input, state.fuel, state.output]) {
+              if (stack) addToInventory(p.inventory, stack.item, stack.count);
+            }
+            this.furnaces.delete(furnaceKey(p.dimension, mining.x, mining.y));
+          }
+        }
+        if (canHarvest(block, held)) {
+          // Gravel sometimes yields flint instead, like Minecraft.
+          const drops =
+            block === BlockId.Gravel && this.rng() < 0.25
+              ? { item: "flint", count: 1 }
+              : blockDrops(block);
+          if (drops) {
+            this.spawnItem(p.dimension, mining.x + 0.5, mining.y + 0.75, drops, out);
+          }
+        }
+        this.syncInventory(p, out);
+      }
+    }
+  }
+
   private stepEntities(out: OutboundEvent[]): void {
     for (const entity of [...this.entities.values()]) {
       const prevX = entity.x;
       const prevY = entity.y;
       const size = ENTITY_SIZES[entity.kind];
+      const world = this.worldOf(entity.dimension);
 
       if (entity.kind === "item") {
         entity.age++;
@@ -210,12 +339,17 @@ export class Simulation {
           this.removeEntity(entity.id, out);
           continue;
         }
+        // Items burn up in lava.
+        if (world.getBlockGenerating(Math.floor(entity.x), Math.floor(entity.y - 0.1)) === BlockId.Lava) {
+          this.removeEntity(entity.id, out);
+          continue;
+        }
         entity.vx *= 0.85;
         if (Math.abs(entity.vx) < 0.005) entity.vx = 0;
         entity.vy = Math.min(entity.vy + GRAVITY, TERMINAL_VELOCITY);
-        stepBody(this.world, entity, size.width, size.height);
+        stepBody(world, entity, size.width, size.height);
         if (entity.pickupDelay === 0) {
-          const taker = this.playerNearBox(entity.x, entity.y - size.height / 2, ITEM_PICKUP_RADIUS);
+          const taker = this.playerNearBox(entity.dimension, entity.x, entity.y - size.height / 2, ITEM_PICKUP_RADIUS);
           if (taker) {
             const leftover = addToInventory(taker.inventory, entity.stack.item, entity.stack.count);
             if (leftover === 0) {
@@ -227,33 +361,36 @@ export class Simulation {
           }
         }
       } else {
-        // Mobs
         if (entity.hurtCooldown > 0) entity.hurtCooldown--;
         if (entity.attackCooldown > 0) entity.attackCooldown--;
 
+        // Lava hurts mobs too.
+        if (world.getBlockGenerating(Math.floor(entity.x), Math.floor(entity.y - 0.1)) === BlockId.Lava) {
+          this.hurtMob(entity, 2, out);
+          if (!this.entities.has(entity.id)) continue;
+        }
+
         let dir: -1 | 0 | 1 = 0;
         if (entity.kind === "zombie") {
-          // Zombies burn in daylight when exposed on the surface.
           if (
+            entity.dimension === "overworld" &&
             this.tickCount % 40 === 0 &&
             daylightFactor(this.timeOfDay) > 0.5 &&
-            entity.y <= surfaceHeight(this.world.seed, Math.floor(entity.x))
+            entity.y <= surfaceHeight(world.seed, Math.floor(entity.x))
           ) {
             this.hurtMob(entity, 1, out);
             if (!this.entities.has(entity.id)) continue;
           }
-          const target = this.nearestPlayer(entity.x, entity.y);
+          const target = this.nearestPlayer(entity.dimension, entity.x, entity.y);
           if (target && Math.abs(target.p.x - entity.x) <= ZOMBIE_FOLLOW_RANGE && target.dist <= ZOMBIE_FOLLOW_RANGE * 1.5) {
             const dx = target.p.x - entity.x;
             dir = Math.abs(dx) > 0.4 ? (dx > 0 ? 1 : -1) : 0;
-            // Contact attack.
             if (entity.attackCooldown === 0 && this.entityTouchesPlayer(entity, target.p)) {
               entity.attackCooldown = ZOMBIE_ATTACK_COOLDOWN;
               this.hurtPlayer(target.p, ZOMBIE_DAMAGE, out, entity.x);
             }
           }
         } else {
-          // Pig: idle wandering.
           entity.wanderTimer--;
           if (entity.wanderTimer <= 0) {
             const roll = this.rng();
@@ -264,15 +401,16 @@ export class Simulation {
         }
 
         entity.vx = dir * MOB_STATS[entity.kind].speed;
+        if (world.getBlockGenerating(Math.floor(entity.x), Math.floor(entity.y)) === BlockId.SoulSand) {
+          entity.vx *= 0.4;
+        }
         entity.vy = Math.min(entity.vy + GRAVITY, TERMINAL_VELOCITY);
-        stepBody(this.world, entity, size.width, size.height);
-        // Hop over one-block walls.
+        stepBody(world, entity, size.width, size.height);
         if (dir !== 0 && entity.vx === 0 && entity.onGround) {
           entity.vy = JUMP_VELOCITY;
         }
 
-        // Despawn far from every player.
-        const nearest = this.nearestPlayer(entity.x, entity.y);
+        const nearest = this.nearestPlayer(entity.dimension, entity.x, entity.y);
         if (!nearest || nearest.dist > MOB_DESPAWN_RANGE) {
           this.removeEntity(entity.id, out);
           continue;
@@ -295,39 +433,158 @@ export class Simulation {
 
     const players = [...this.players.values()];
     const anchor = players[Math.floor(this.rng() * players.length)]!;
+    if (anchor.dimension !== "overworld") return; // nether mobs come later
+    const world = this.worlds.overworld;
     const offset = 12 + Math.floor(this.rng() * 20);
     const x = Math.floor(anchor.x) + (this.rng() < 0.5 ? -offset : offset);
-    const surface = surfaceHeight(this.world.seed, x);
+    const surface = surfaceHeight(world.seed, x);
 
     const night = isNight(this.timeOfDay);
     if (this.rng() < 0.5) {
       if (night) {
-        // At night, zombies rise on the surface instead of pigs.
-        const feetFree = this.world.getBlockGenerating(x, surface - 1) === BlockId.Air;
-        const headFree = this.world.getBlockGenerating(x, surface - 2) === BlockId.Air;
-        if (feetFree && headFree && blockDef(this.world.getBlockGenerating(x, surface)).solid) {
+        const feetFree = world.getBlockGenerating(x, surface - 1) === BlockId.Air;
+        const headFree = world.getBlockGenerating(x, surface - 2) === BlockId.Air;
+        if (feetFree && headFree && blockDef(world.getBlockGenerating(x, surface)).solid) {
           this.spawnMob("zombie", x + 0.5, surface, out);
         }
         return;
       }
-      // Pigs only in daylight, on a grassy surface.
-      if (this.world.getBlockGenerating(x, surface) !== BlockId.Grass) return;
-      const biome = biomeAt(this.world.seed, x);
+      if (world.getBlockGenerating(x, surface) !== BlockId.Grass) return;
+      const biome = biomeAt(world.seed, x);
       if (biome !== Biome.Plains && biome !== Biome.Forest) return;
       this.spawnMob("pig", x + 0.5, surface, out);
     } else {
-      // Zombie in a cave: find an air pocket below ground (any time of day).
       const yStart = surface + 6 + Math.floor(this.rng() * 40);
       for (let y = yStart; y < yStart + 12; y++) {
-        const feetFree = this.world.getBlockGenerating(x, y - 1) === BlockId.Air;
-        const headFree = this.world.getBlockGenerating(x, y - 2) === BlockId.Air;
-        const floorSolid = blockDef(this.world.getBlockGenerating(x, y)).solid;
+        const feetFree = world.getBlockGenerating(x, y - 1) === BlockId.Air;
+        const headFree = world.getBlockGenerating(x, y - 2) === BlockId.Air;
+        const floorSolid = blockDef(world.getBlockGenerating(x, y)).solid;
         if (feetFree && headFree && floorSolid) {
           this.spawnMob("zombie", x + 0.5, y, out);
           return;
         }
       }
     }
+  }
+
+  private stepPlayers(out: OutboundEvent[]): void {
+    for (const p of this.players.values()) {
+      const prevX = p.x;
+      const prevY = p.y;
+      const wasOnGround = p.onGround;
+      const world = this.worldOf(p.dimension);
+
+      if (p.hurtCooldown > 0) p.hurtCooldown--;
+      if (p.attackCooldown > 0) p.attackCooldown--;
+
+      p.vx = p.input.dx * WALK_SPEED + p.kbX;
+      p.kbX *= 0.6;
+      if (Math.abs(p.kbX) < 0.01) p.kbX = 0;
+      if (world.getBlockGenerating(Math.floor(p.x), Math.floor(p.y)) === BlockId.SoulSand) {
+        p.vx *= 0.4;
+      }
+      if (p.input.jump && p.onGround) {
+        p.vy = JUMP_VELOCITY;
+      }
+      p.vy = Math.min(p.vy + GRAVITY, TERMINAL_VELOCITY);
+      stepBody(world, p, PLAYER_WIDTH, PLAYER_HEIGHT);
+
+      // Fall damage: accumulate while falling, apply on landing.
+      if (p.y > prevY) {
+        p.fallDistance += p.y - prevY;
+      } else if (p.vy < 0) {
+        p.fallDistance = 0;
+      }
+      if (p.onGround && !wasOnGround) {
+        const excess = Math.floor(p.fallDistance - SAFE_FALL_TILES);
+        p.fallDistance = 0;
+        if (excess > 0) {
+          p.hurtCooldown = 0;
+          this.hurtPlayer(p, excess, out);
+        }
+      }
+
+      // Lava.
+      if (world.getBlockGenerating(Math.floor(p.x), Math.floor(p.y - 0.5)) === BlockId.Lava) {
+        this.hurtPlayer(p, 2, out);
+      }
+
+      // Nether portals: standing next to one counts (2D adaptation).
+      const inPortal = nearPortal(world, p.x, p.y - 0.9);
+      if (inPortal) {
+        if (p.portalCooldown === 0) {
+          p.portalTicks++;
+          if (p.portalTicks >= PORTAL_TICKS) {
+            this.teleportThroughPortal(p, out);
+          }
+        }
+      } else {
+        p.portalTicks = 0;
+        if (p.portalCooldown > 0) p.portalCooldown--;
+      }
+
+      // Passive regeneration (no food system yet).
+      if (this.tickCount % REGEN_INTERVAL_TICKS === 0 && p.health > 0 && p.health < PLAYER_MAX_HEALTH) {
+        p.health++;
+        out.push({ event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
+      }
+
+      if (p.x !== prevX || p.y !== prevY) {
+        out.push({ event: { type: "player_moved", player: p.id, x: p.x, y: p.y } });
+      }
+    }
+  }
+
+  private teleportThroughPortal(p: PlayerState, out: OutboundEvent[]): void {
+    const targetDim: Dimension = p.dimension === "overworld" ? "nether" : "overworld";
+    const targetWorld = this.worldOf(targetDim);
+    const xt = Math.round(p.dimension === "overworld" ? p.x / NETHER_SCALE : p.x * NETHER_SCALE);
+
+    // Reuse a known portal nearby, otherwise build one.
+    let arrival: { x: number; y: number } | null = null;
+    for (const pos of this.portals[targetDim].values()) {
+      if (Math.abs(pos.x - xt) <= 16 && (!arrival || Math.abs(pos.x - xt) < Math.abs(arrival.x - xt))) {
+        arrival = pos;
+      }
+    }
+    if (!arrival) {
+      let by: number;
+      if (targetDim === "nether") {
+        // Find open floor space in the nether band, else carve at y=40.
+        by = 40;
+        for (let y = 10; y < LAVA_LEVEL - 4; y++) {
+          const floorSolid = blockDef(targetWorld.getBlockGenerating(xt, y + 1)).solid;
+          const space =
+            targetWorld.getBlockGenerating(xt, y) === BlockId.Air &&
+            targetWorld.getBlockGenerating(xt, y - 1) === BlockId.Air;
+          if (floorSolid && space) {
+            by = y;
+            break;
+          }
+        }
+      } else {
+        by = surfaceHeight(targetWorld.seed, xt) - 1;
+      }
+      const changes = buildPortal(targetWorld, xt, by);
+      for (const c of changes) {
+        out.push({ event: { type: "block_changed", dim: targetDim, x: c.x, y: c.y, block: c.block } });
+      }
+      arrival = { x: xt, y: by };
+      this.portals[targetDim].set(`${xt},${by}`, arrival);
+    }
+
+    p.dimension = targetDim;
+    // Arrive beside the frame (in 2D the interior is walled off).
+    p.x = arrival.x - 2.5;
+    p.y = arrival.y + 1;
+    p.vx = 0;
+    p.vy = 0;
+    p.kbX = 0;
+    p.fallDistance = 0;
+    p.portalTicks = 0;
+    p.portalCooldown = PORTAL_COOLDOWN;
+    p.mining = null;
+    out.push({ event: { type: "player_dimension", player: p.id, dim: targetDim, x: p.x, y: p.y } });
   }
 
   private hurtMob(entity: MobEntity, amount: number, out: OutboundEvent[], fromX?: number): void {
@@ -342,30 +599,30 @@ export class Simulation {
       out.push({ event: { type: "entity_hurt", id: entity.id, health: entity.health } });
       return;
     }
-    // Death drops.
     if (entity.kind === "zombie") {
       const count = Math.floor(this.rng() * 3); // 0-2 rotten flesh
-      if (count > 0) this.spawnItem(entity.x, entity.y - 0.5, { item: "rotten_flesh", count }, out);
+      if (count > 0) this.spawnItem(entity.dimension, entity.x, entity.y - 0.5, { item: "rotten_flesh", count }, out);
     } else {
       const count = 1 + Math.floor(this.rng() * 2); // 1-2 porkchops
-      this.spawnItem(entity.x, entity.y - 0.5, { item: "porkchop", count }, out);
+      this.spawnItem(entity.dimension, entity.x, entity.y - 0.5, { item: "porkchop", count }, out);
     }
     this.removeEntity(entity.id, out);
   }
 
-  private nearestPlayer(x: number, y: number): { p: PlayerState; dist: number } | null {
+  private nearestPlayer(dimension: Dimension, x: number, y: number): { p: PlayerState; dist: number } | null {
     let best: { p: PlayerState; dist: number } | null = null;
     for (const p of this.players.values()) {
+      if (p.dimension !== dimension) continue;
       const dist = Math.hypot(p.x - x, p.y - PLAYER_HEIGHT / 2 - y);
       if (!best || dist < best.dist) best = { p, dist };
     }
     return best;
   }
 
-  /** Player whose AABB (expanded by radius) contains the point - like
-   * Minecraft's item magnetism, which expands the player's box. */
-  private playerNearBox(x: number, y: number, radius: number): PlayerState | null {
+  /** Player whose AABB (expanded by radius) contains the point. */
+  private playerNearBox(dimension: Dimension, x: number, y: number, radius: number): PlayerState | null {
     for (const p of this.players.values()) {
+      if (p.dimension !== dimension) continue;
       const dx = Math.max(0, Math.abs(x - p.x) - PLAYER_WIDTH / 2);
       const top = p.y - PLAYER_HEIGHT;
       const dy = y < top ? top - y : y > p.y ? y - p.y : 0;
@@ -390,16 +647,19 @@ export class Simulation {
       p.vy = Math.min(p.vy, -0.2);
     }
     if (p.health <= 0) {
-      // Death: drop the inventory (and grid/cursor) as item entities, respawn.
+      // Death: drop the inventory (and grid/cursor) as item entities,
+      // respawn at the overworld spawn.
       this.dumpGridAndCursor(p);
       for (let i = 0; i < p.inventory.length; i++) {
         const stack = p.inventory[i];
         if (stack) {
-          this.spawnItem(p.x, p.y - 1, stack, out);
+          this.spawnItem(p.dimension, p.x, p.y - 1, stack, out);
           p.inventory[i] = null;
         }
       }
+      const fromDim = p.dimension;
       const spawnX = findSpawnX(this.world.seed);
+      p.dimension = "overworld";
       p.x = spawnX + 0.5;
       p.y = surfaceHeight(this.world.seed, spawnX);
       p.vx = 0;
@@ -408,158 +668,16 @@ export class Simulation {
       p.fallDistance = 0;
       p.health = PLAYER_MAX_HEALTH;
       p.mining = null;
-      out.push({ event: { type: "player_moved", player: p.id, x: p.x, y: p.y } });
+      p.portalTicks = 0;
+      p.portalCooldown = 0;
+      if (fromDim !== "overworld") {
+        out.push({ event: { type: "player_dimension", player: p.id, dim: "overworld", x: p.x, y: p.y } });
+      } else {
+        out.push({ event: { type: "player_moved", player: p.id, x: p.x, y: p.y } });
+      }
       this.syncInventory(p, out);
     }
     out.push({ event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
-  }
-
-  private stepFurnaces(out: OutboundEvent[]): void {
-    for (const state of this.furnaces.values()) {
-      const changed = stepFurnace(state, RECIPES.values());
-      // Broadcast at a low rate while active plus when turning idle, so
-      // progress bars stay fresh without an event per tick.
-      if (changed && (this.tickCount % 4 === 0 || furnaceIdle(state))) {
-        out.push({ event: this.furnaceEvent(state) });
-      }
-    }
-  }
-
-  private furnaceEvent(state: FurnaceState): SimEvent {
-    const recipe = state.input
-      ? [...RECIPES.values()].find((r) => r.kind === "smelting" && r.ingredients.has(state.input!.item))
-      : undefined;
-    return {
-      type: "furnace_changed",
-      x: state.x,
-      y: state.y,
-      input: state.input ? { ...state.input } : null,
-      fuel: state.fuel ? { ...state.fuel } : null,
-      output: state.output ? { ...state.output } : null,
-      burnLeft: state.burnLeft,
-      burnTotal: state.burnTotal,
-      cookProgress: state.cookProgress,
-      cookTotal: recipe?.cookingTime ?? DEFAULT_COOK_TICKS,
-    };
-  }
-
-  private stepMining(out: OutboundEvent[]): void {
-    for (const p of this.players.values()) {
-      const mining = p.mining;
-      if (!mining) continue;
-
-      const clear = (): void => {
-        p.mining = null;
-        out.push({
-          event: { type: "mining_progress", player: p.id, x: mining.x, y: mining.y, progress: 0, total: 0 },
-        });
-      };
-
-      if (!this.withinReach(p.id, mining.x, mining.y)) {
-        clear();
-        continue;
-      }
-      const block = this.world.getBlockGenerating(mining.x, mining.y);
-      if (block === BlockId.Air || blockDef(block).hardness < 0) {
-        clear();
-        continue;
-      }
-
-      const held = p.inventory[p.selected] ?? null;
-      // Recomputed every tick, so switching the held item mid-mining
-      // changes the remaining time (progress is kept).
-      const total = miningTicks(block, held);
-      mining.progress++;
-
-      if (mining.progress < total) {
-        out.push({
-          event: {
-            type: "mining_progress",
-            player: p.id,
-            x: mining.x,
-            y: mining.y,
-            progress: mining.progress,
-            total,
-          },
-        });
-        continue;
-      }
-
-      clear();
-      if (this.world.setBlock(mining.x, mining.y, BlockId.Air)) {
-        out.push({ event: { type: "block_changed", x: mining.x, y: mining.y, block: BlockId.Air } });
-        // A broken furnace hands its contents to the miner.
-        if (block === BlockId.Furnace) {
-          const state = this.furnaces.get(furnaceKey(mining.x, mining.y));
-          if (state) {
-            for (const stack of [state.input, state.fuel, state.output]) {
-              if (stack) addToInventory(p.inventory, stack.item, stack.count);
-            }
-            this.furnaces.delete(furnaceKey(mining.x, mining.y));
-          }
-        }
-        if (canHarvest(block, held)) {
-          const drops = blockDrops(block);
-          if (drops) {
-            // Drops become item entities at the block's center, like
-            // Minecraft - walk over them to pick them up.
-            this.spawnItem(mining.x + 0.5, mining.y + 0.75, drops, out);
-          }
-        }
-        this.syncInventory(p, out);
-      }
-    }
-  }
-
-  private stepPlayers(out: OutboundEvent[]): void {
-    for (const p of this.players.values()) {
-      const prevX = p.x;
-      const prevY = p.y;
-      const wasOnGround = p.onGround;
-
-      if (p.hurtCooldown > 0) p.hurtCooldown--;
-      if (p.attackCooldown > 0) p.attackCooldown--;
-
-      p.vx = p.input.dx * WALK_SPEED + p.kbX;
-      p.kbX *= 0.6;
-      if (Math.abs(p.kbX) < 0.01) p.kbX = 0;
-      if (p.input.jump && p.onGround) {
-        p.vy = JUMP_VELOCITY;
-      }
-      p.vy = Math.min(p.vy + GRAVITY, TERMINAL_VELOCITY);
-      stepBody(this.world, p, PLAYER_WIDTH, PLAYER_HEIGHT);
-
-      // Fall damage: accumulate while falling, apply on landing.
-      if (p.y > prevY) {
-        p.fallDistance += p.y - prevY;
-      } else if (p.vy < 0) {
-        p.fallDistance = 0;
-      }
-      if (p.onGround && !wasOnGround) {
-        const excess = Math.floor(p.fallDistance - SAFE_FALL_TILES);
-        p.fallDistance = 0;
-        if (excess > 0) {
-          // Fall damage ignores invulnerability frames' timing niceties:
-          // clear them so a hit right before landing doesn't negate it.
-          p.hurtCooldown = 0;
-          this.hurtPlayer(p, excess, out);
-        }
-      }
-
-      // Passive regeneration (no food system yet).
-      if (
-        this.tickCount % REGEN_INTERVAL_TICKS === 0 &&
-        p.health > 0 &&
-        p.health < PLAYER_MAX_HEALTH
-      ) {
-        p.health++;
-        out.push({ event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
-      }
-
-      if (p.x !== prevX || p.y !== prevY) {
-        out.push({ event: { type: "player_moved", player: p.id, x: p.x, y: p.y } });
-      }
-    }
   }
 
   private syncInventory(p: PlayerState, out: OutboundEvent[]): void {
@@ -598,6 +716,7 @@ export class Simulation {
         const state: PlayerState = {
           id: player,
           name: command.name,
+          dimension: "overworld",
           x,
           y,
           vx: 0,
@@ -614,18 +733,20 @@ export class Simulation {
           attackCooldown: 0,
           kbX: 0,
           fallDistance: 0,
+          portalTicks: 0,
+          portalCooldown: 0,
         };
         this.players.set(player, state);
-        broadcast({ type: "player_joined", player, name: state.name, x, y });
+        broadcast({ type: "player_joined", player, name: state.name, x, y, dim: "overworld" });
         syncInventory(state);
         reply({ type: "player_health", player, health: state.health, max: PLAYER_MAX_HEALTH });
         reply({ type: "time_changed", time: this.timeOfDay });
-        // Catch the new client up on existing entities.
         for (const entity of this.entities.values()) {
           reply({
             type: "entity_spawned",
             id: entity.id,
             kind: entity.kind,
+            dim: entity.dimension,
             x: entity.x,
             y: entity.y,
             ...(entity.kind === "item" ? { stack: { ...entity.stack } } : {}),
@@ -690,7 +811,6 @@ export class Simulation {
         for (const [item, count] of recipe.ingredients) {
           removeFromInventory(p.inventory, item, count);
         }
-        // Leftover that does not fit is lost until item entities exist.
         addToInventory(p.inventory, recipe.result.item, recipe.result.count);
         syncInventory(p);
         break;
@@ -730,19 +850,24 @@ export class Simulation {
           reject("out of reach");
           break;
         }
-        if (this.world.getBlockGenerating(x, y) !== BlockId.Furnace) {
+        if (this.worldOf(p.dimension).getBlockGenerating(x, y) !== BlockId.Furnace) {
           reject("no furnace there");
           break;
         }
-        let state = this.furnaces.get(furnaceKey(x, y));
+        let state = this.furnaces.get(furnaceKey(p.dimension, x, y));
         if (!state) {
-          state = createFurnace(x, y);
-          this.furnaces.set(furnaceKey(x, y), state);
+          state = createFurnace(p.dimension, x, y);
+          this.furnaces.set(furnaceKey(p.dimension, x, y), state);
         }
         reply(this.furnaceEvent(state));
         break;
       }
       case "request_chunk": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
         const { cx, cy } = command;
         if (
           !Number.isInteger(cx) ||
@@ -753,8 +878,8 @@ export class Simulation {
           reject("invalid chunk coordinates");
           break;
         }
-        const chunk = this.world.ensureChunk(cx, cy);
-        reply({ type: "chunk_data", cx, cy, tiles: Array.from(chunk.tiles) });
+        const chunk = this.worldOf(p.dimension).ensureChunk(cx, cy);
+        reply({ type: "chunk_data", dim: p.dimension, cx, cy, tiles: Array.from(chunk.tiles) });
         break;
       }
       case "start_mining": {
@@ -772,7 +897,7 @@ export class Simulation {
           reject("out of reach");
           break;
         }
-        const current = this.world.getBlockGenerating(x, y);
+        const current = this.worldOf(p.dimension).getBlockGenerating(x, y);
         if (current === BlockId.Air || blockDef(current).hardness < 0) {
           reject("cannot mine");
           break;
@@ -800,10 +925,10 @@ export class Simulation {
           break;
         }
         if (p.attackCooldown > 0) {
-          break; // silently ignore spam clicks
+          break;
         }
         const entity = this.entities.get(command.entity);
-        if (!entity || entity.kind === "item") {
+        if (!entity || entity.kind === "item" || entity.dimension !== p.dimension) {
           reject("no such target");
           break;
         }
@@ -828,9 +953,33 @@ export class Simulation {
           reject("invalid coordinates");
           break;
         }
+        const world = this.worldOf(p.dimension);
         const stack = p.inventory[p.selected];
         if (!stack) {
           reject("nothing to place");
+          break;
+        }
+        if (!this.withinReach(player, x, y)) {
+          reject("out of reach");
+          break;
+        }
+        // Flint and steel lights portals instead of placing a block.
+        if (stack.item === "flint_and_steel") {
+          const interior = findPortalInterior(world, x, y);
+          if (!interior) {
+            reject("no portal frame");
+            break;
+          }
+          for (let ty = interior.top; ty <= interior.bottom; ty++) {
+            for (let tx = interior.left; tx <= interior.right; tx++) {
+              world.setBlock(tx, ty, BlockId.NetherPortal);
+              broadcast({ type: "block_changed", dim: p.dimension, x: tx, y: ty, block: BlockId.NetherPortal });
+            }
+          }
+          this.portals[p.dimension].set(`${interior.left},${interior.bottom}`, {
+            x: interior.left,
+            y: interior.bottom,
+          });
           break;
         }
         const def = itemDef(stack.item);
@@ -838,24 +987,20 @@ export class Simulation {
           reject("item not placeable");
           break;
         }
-        if (!this.withinReach(player, x, y)) {
-          reject("out of reach");
-          break;
-        }
-        if (this.world.getBlockGenerating(x, y) !== BlockId.Air) {
+        if (world.getBlockGenerating(x, y) !== BlockId.Air) {
           reject("space occupied");
           break;
         }
-        if (blockDef(def.block).solid && this.tileIntersectsAnyPlayer(x, y)) {
+        if (blockDef(def.block).solid && this.tileIntersectsAnyPlayer(p.dimension, x, y)) {
           reject("blocked by player");
           break;
         }
-        if (this.world.setBlock(x, y, def.block)) {
+        if (world.setBlock(x, y, def.block)) {
           stack.count -= 1;
           if (stack.count === 0) {
             p.inventory[p.selected] = null;
           }
-          broadcast({ type: "block_changed", x, y, block: def.block });
+          broadcast({ type: "block_changed", dim: p.dimension, x, y, block: def.block });
           syncInventory(p);
         }
         break;
@@ -903,7 +1048,11 @@ export class Simulation {
           return;
         }
         const result = recipe.result;
-        if (p.cursor && (p.cursor.item !== result.item || p.cursor.count + result.count > (itemDef(result.item)?.maxStack ?? 64))) {
+        if (
+          p.cursor &&
+          (p.cursor.item !== result.item ||
+            p.cursor.count + result.count > (itemDef(result.item)?.maxStack ?? 64))
+        ) {
           return;
         }
         p.cursor = p.cursor
@@ -922,30 +1071,25 @@ export class Simulation {
           reject("out of reach");
           return;
         }
-        if (this.world.getBlockGenerating(x, y) !== BlockId.Furnace) {
+        if (this.worldOf(p.dimension).getBlockGenerating(x, y) !== BlockId.Furnace) {
           reject("no furnace there");
           return;
         }
-        let state = this.furnaces.get(furnaceKey(x, y));
+        let state = this.furnaces.get(furnaceKey(p.dimension, x, y));
         if (!state) {
-          state = createFurnace(x, y);
-          this.furnaces.set(furnaceKey(x, y), state);
+          state = createFurnace(p.dimension, x, y);
+          this.furnaces.set(furnaceKey(p.dimension, x, y), state);
         }
         if (slot.slot === "output") {
-          // Output is take-only.
           if (!state.output) return;
           if (p.cursor && p.cursor.item !== state.output.item) return;
           const maxStack = itemDef(state.output.item)?.maxStack ?? 64;
           const take = Math.min(state.output.count, maxStack - (p.cursor?.count ?? 0));
           if (take <= 0) return;
-          p.cursor = {
-            item: state.output.item,
-            count: (p.cursor?.count ?? 0) + take,
-          };
+          p.cursor = { item: state.output.item, count: (p.cursor?.count ?? 0) + take };
           const rest = state.output.count - take;
           state.output = rest > 0 ? { item: state.output.item, count: rest } : null;
         } else if (slot.slot === "fuel") {
-          // Only fuel goes into the fuel slot.
           if (p.cursor && fuelTicks(p.cursor.item) === 0) {
             reject("not a fuel");
             return;
@@ -968,7 +1112,6 @@ export class Simulation {
     for (let i = 0; i < CRAFT_GRID_SIZE; i++) {
       const cell = p.craftGrid[i];
       if (!cell) continue;
-      // Leftover that does not fit is lost until item entities exist.
       addToInventory(p.inventory, cell.item, cell.count);
       p.craftGrid[i] = null;
     }
@@ -986,8 +1129,9 @@ export class Simulation {
     return dx * dx + dy * dy <= REACH * REACH;
   }
 
-  private tileIntersectsAnyPlayer(tileX: number, tileY: number): boolean {
+  private tileIntersectsAnyPlayer(dimension: Dimension, tileX: number, tileY: number): boolean {
     for (const p of this.players.values()) {
+      if (p.dimension !== dimension) continue;
       const overlapsX = tileX + 1 > p.x - PLAYER_WIDTH / 2 && tileX < p.x + PLAYER_WIDTH / 2;
       const overlapsY = tileY + 1 > p.y - PLAYER_HEIGHT && tileY < p.y;
       if (overlapsX && overlapsY) return true;
@@ -996,6 +1140,7 @@ export class Simulation {
   }
 
   private blockNearby(p: PlayerState, block: BlockId): boolean {
+    const world = this.worldOf(p.dimension);
     const centerY = p.y - PLAYER_HEIGHT / 2;
     const minX = Math.floor(p.x - REACH);
     const maxX = Math.floor(p.x + REACH);
@@ -1003,7 +1148,7 @@ export class Simulation {
     const maxY = Math.floor(centerY + REACH);
     for (let ty = minY; ty <= maxY; ty++) {
       for (let tx = minX; tx <= maxX; tx++) {
-        if (this.world.getBlock(tx, ty) === block) return true;
+        if (world.getBlock(tx, ty) === block) return true;
       }
     }
     return false;

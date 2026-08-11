@@ -1,4 +1,5 @@
 import type { ItemStack } from "./inventory.js";
+import type { Dimension } from "./world/world.js";
 
 /**
  * Non-player entities: items lying in the world and mobs. Plain
@@ -10,6 +11,7 @@ export type MobKind = "zombie" | "pig";
 
 interface EntityBase {
   id: EntityId;
+  dimension: Dimension;
   x: number;
   y: number;
   vx: number;

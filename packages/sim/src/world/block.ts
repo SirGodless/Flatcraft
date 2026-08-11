@@ -27,6 +27,13 @@ export enum BlockId {
   Cobblestone = 21,
   Furnace = 22,
   Glass = 23,
+  Netherrack = 24,
+  SoulSand = 25,
+  Glowstone = 26,
+  Obsidian = 27,
+  NetherPortal = 28,
+  Lava = 29,
+  Basalt = 30,
 }
 
 export interface BlockDef {
@@ -86,6 +93,15 @@ export const Blocks = {
   furnace: register({ id: BlockId.Furnace, name: "furnace", solid: true, hardness: 35, tool: "pickaxe", requiredTier: 1 }),
   // Like Minecraft, glass shatters: it drops nothing.
   glass: register({ id: BlockId.Glass, name: "glass", solid: true, hardness: 5, drops: null }),
+  netherrack: register({ id: BlockId.Netherrack, name: "netherrack", solid: true, hardness: 8, tool: "pickaxe", requiredTier: 1 }),
+  soulSand: register({ id: BlockId.SoulSand, name: "soul_sand", solid: true, hardness: 10, tool: "shovel" }),
+  glowstone: register({ id: BlockId.Glowstone, name: "glowstone", solid: true, hardness: 6, drops: { item: "glowstone_dust", count: 3 } }),
+  obsidian: register({ id: BlockId.Obsidian, name: "obsidian", solid: true, hardness: 250, tool: "pickaxe", requiredTier: 4 }),
+  // Portal blocks are placed/removed by portal logic, never mined.
+  netherPortal: register({ id: BlockId.NetherPortal, name: "nether_portal", solid: false, hardness: -1, drops: null }),
+  // Static lava; damages anything inside it. Not minable or placeable.
+  lava: register({ id: BlockId.Lava, name: "lava", solid: false, hardness: -1, drops: null }),
+  basalt: register({ id: BlockId.Basalt, name: "basalt", solid: true, hardness: 25, tool: "pickaxe", requiredTier: 1 }),
 } as const;
 
 export function blockDef(id: BlockId): BlockDef {

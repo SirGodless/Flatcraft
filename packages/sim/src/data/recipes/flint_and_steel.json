@@ -1,0 +1,8 @@
+{
+  "type": "flatcraft:crafting_shapeless",
+  "ingredients": [
+    { "item": "flatcraft:iron_ingot" },
+    { "item": "flatcraft:flint" }
+  ],
+  "result": { "item": "flatcraft:flint_and_steel" }
+}

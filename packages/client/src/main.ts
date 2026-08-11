@@ -1,5 +1,5 @@
 import { GameServer, createLoopbackPair } from "@flatcraft/server";
-import { chunkKey } from "@flatcraft/sim";
+import { buildPortal, chunkKey, findSpawnX, surfaceHeight } from "@flatcraft/sim";
 import { attachInput } from "./input/input.js";
 import { Renderer } from "./render/renderer.js";
 
@@ -21,6 +21,14 @@ async function start(): Promise<void> {
   const debugTime = params.get("time");
   if (debugTime !== null) {
     server.simulation.timeOfDay = Number(debugTime);
+  }
+  if (params.get("portal") !== null) {
+    // Pre-build a lit portal three tiles right of spawn.
+    const sim = server.simulation;
+    const sx = findSpawnX(sim.world.seed);
+    const sy = surfaceHeight(sim.world.seed, sx) - 1;
+    buildPortal(sim.world, sx + 3, sy);
+    sim.portals.overworld.set(`${sx + 3},${sy}`, { x: sx + 3, y: sy });
   }
 
   const playerId = server.simulation.allocatePlayerId();
@@ -65,6 +73,7 @@ async function start(): Promise<void> {
   // Chunks already asked for; in multiplayer this would need re-request on
   // timeout, in singleplayer the loopback server always answers.
   const requestedChunks = new Set<string>();
+  renderer.onDimensionChanged = () => requestedChunks.clear();
   const requestVisibleChunks = (): void => {
     const range = renderer.visibleChunkRange();
     let budget = CHUNK_REQUESTS_PER_FRAME;

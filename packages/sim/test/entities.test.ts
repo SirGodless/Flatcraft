@@ -35,7 +35,7 @@ describe("item entities", () => {
     const { state } = joinPlayer(sim);
     const out: OutboundEvent[] = [];
     // Drop an item two tiles above the player's head.
-    const item = sim.spawnItem(state.x, state.y - 4, { item: "coal", count: 3 }, out);
+    const item = sim.spawnItem("overworld", state.x, state.y - 4, { item: "coal", count: 3 }, out);
     expect(out.some((o) => o.event.type === "entity_spawned")).toBe(true);
     settle(sim, 40);
     expect(sim.entities.has(item.id)).toBe(false); // picked up
@@ -46,7 +46,7 @@ describe("item entities", () => {
     const sim = new Simulation(SEED);
     const { state } = joinPlayer(sim);
     const out: OutboundEvent[] = [];
-    sim.spawnItem(state.x, state.y - 1, { item: "coal", count: 1 }, out);
+    sim.spawnItem("overworld", state.x, state.y - 1, { item: "coal", count: 1 }, out);
     sim.tick([]);
     expect(countInInventory(state.inventory, "coal")).toBe(0);
     settle(sim, 15);
@@ -57,7 +57,7 @@ describe("item entities", () => {
     const sim = new Simulation(SEED);
     const { state } = joinPlayer(sim);
     const out: OutboundEvent[] = [];
-    const item = sim.spawnItem(state.x + 10, state.y - 1, { item: "coal", count: 1 }, out);
+    const item = sim.spawnItem("overworld", state.x + 10, state.y - 1, { item: "coal", count: 1 }, out);
     settle(sim, 40);
     expect(sim.entities.has(item.id)).toBe(true);
   });
@@ -148,7 +148,7 @@ describe("entity determinism and spawning", () => {
       const out: OutboundEvent[] = [];
       sim.spawnMob("zombie", state.x + 8, state.y, out);
       sim.spawnMob("pig", state.x - 5, state.y, out);
-      sim.spawnItem(state.x + 3, state.y - 2, { item: "coal", count: 1 }, out);
+      sim.spawnItem("overworld", state.x + 3, state.y - 2, { item: "coal", count: 1 }, out);
       for (let i = 0; i < 100; i++) {
         sim.tick(i === 50 ? [{ player, command: { type: "move", dx: 1, jump: false } }] : []);
       }

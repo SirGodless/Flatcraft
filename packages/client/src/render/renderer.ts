@@ -41,6 +41,7 @@ interface PlayerMarker {
 interface EntityView {
   gfx: Container;
   kind: string;
+  dim: string;
   prevX: number;
   prevY: number;
   x: number;
@@ -86,6 +87,11 @@ export class Renderer {
   private selectedSlot = 0;
   private darkness!: Graphics;
   private timeOfDay = 0;
+  /** The dimension the local player is in; everything else is hidden. */
+  private localDim = "overworld";
+  private readonly playerDims = new Map<PlayerId, string>();
+  /** Called when the local player switches dimension (world reset). */
+  onDimensionChanged: (() => void) | null = null;
 
   async init(container: HTMLElement): Promise<void> {
     await this.app.init({ resizeTo: container, background: "#87b9e7" });
@@ -212,9 +218,11 @@ export class Renderer {
   handleEvent(event: SimEvent): void {
     switch (event.type) {
       case "player_joined": {
+        this.playerDims.set(event.player, event.dim);
         const gfx = new Graphics()
           .rect(0, 0, PLAYER_WIDTH * TILE_PX, PLAYER_HEIGHT * TILE_PX)
           .fill({ color: event.player === this.localPlayerId ? 0xe04848 : 0x4868e0 });
+        gfx.visible = event.dim === this.localDim;
         this.worldContainer.addChild(gfx);
         this.players.set(event.player, {
           gfx,
@@ -247,13 +255,42 @@ export class Renderer {
         }
         break;
       }
+      case "player_dimension": {
+        this.playerDims.set(event.player, event.dim);
+        const marker = this.players.get(event.player);
+        if (marker) {
+          marker.prevX = event.x;
+          marker.prevY = event.y;
+          marker.x = event.x;
+          marker.y = event.y;
+          marker.updatedAt = performance.now();
+        }
+        if (event.player === this.localPlayerId) {
+          // Reset the world view for the new dimension.
+          this.localDim = event.dim;
+          this.worldView.clear();
+          this.closeUI();
+          this.camera.centerOnTile(event.x, event.y);
+          for (const [id, view] of this.entities) {
+            view.gfx.visible = view.dim === this.localDim;
+            void id;
+          }
+          this.onDimensionChanged?.();
+        }
+        for (const [pid, m] of this.players) {
+          m.gfx.visible = this.playerDims.get(pid) === this.localDim;
+        }
+        break;
+      }
       case "entity_spawned": {
         if (this.entities.has(event.id)) break;
         const gfx = this.buildEntityGfx(event.kind, event.stack);
+        gfx.visible = event.dim === this.localDim;
         this.worldContainer.addChild(gfx);
         this.entities.set(event.id, {
           gfx,
           kind: event.kind,
+          dim: event.dim,
           prevX: event.x,
           prevY: event.y,
           x: event.x,
@@ -300,7 +337,9 @@ export class Renderer {
         break;
       }
       case "chunk_data":
-        this.worldView.setChunk(event.cx, event.cy, event.tiles);
+        if (event.dim === this.localDim) {
+          this.worldView.setChunk(event.cx, event.cy, event.tiles);
+        }
         break;
       case "inventory_changed":
         if (event.player === this.localPlayerId) {
@@ -322,6 +361,7 @@ export class Renderer {
         this.timeOfDay = event.time;
         break;
       case "block_changed": {
+        if (event.dim !== this.localDim) break;
         this.worldView.setBlock(event.x, event.y, event.block);
         // The furnace we were using got broken: close its screen.
         const furnacePos = this.furnacePanel.position;
@@ -431,15 +471,24 @@ export class Renderer {
 
     // Advance local time between server syncs (1 tick per 50 ms) and
     // shade the world: sky color blends toward night, plus a veil.
+    // The nether has no sky - fixed gloomy red instead.
     this.timeOfDay += dtMs / TICK_MS;
-    const light = daylightFactor(this.timeOfDay);
-    const lerp = (a: number, b: number): number => Math.round(a + (b - a) * light);
-    this.app.renderer.background.color =
-      (lerp(0x10, 0x87) << 16) | (lerp(0x12, 0xb9) << 8) | lerp(0x24, 0xe7);
-    this.darkness
-      .clear()
-      .rect(0, 0, this.screenWidth, this.screenHeight)
-      .fill({ color: 0x060612, alpha: (1 - light) * 0.45 });
+    if (this.localDim === "nether") {
+      this.app.renderer.background.color = 0x2a0f0f;
+      this.darkness
+        .clear()
+        .rect(0, 0, this.screenWidth, this.screenHeight)
+        .fill({ color: 0x160606, alpha: 0.25 });
+    } else {
+      const light = daylightFactor(this.timeOfDay);
+      const lerp = (a: number, b: number): number => Math.round(a + (b - a) * light);
+      this.app.renderer.background.color =
+        (lerp(0x10, 0x87) << 16) | (lerp(0x12, 0xb9) << 8) | lerp(0x24, 0xe7);
+      this.darkness
+        .clear()
+        .rect(0, 0, this.screenWidth, this.screenHeight)
+        .fill({ color: 0x060612, alpha: (1 - light) * 0.45 });
+    }
     let localX: number | null = null;
     let localY: number | null = null;
 
@@ -492,6 +541,6 @@ export class Renderer {
 
     const px = localX !== null ? Math.floor(localX) : Math.floor(this.camera.x / TILE_PX);
     const py = localY !== null ? Math.floor(localY) : Math.floor(this.camera.y / TILE_PX);
-    this.hud.text = `FlatCraft | tile ${px},${py} | zoom ${this.camera.zoom.toFixed(1)} | A/D walk, Space jump, hold LMB mine, RMB place, 1-9 slot, E craft`;
+    this.hud.text = `FlatCraft | ${this.localDim} ${px},${py} | zoom ${this.camera.zoom.toFixed(1)} | A/D walk, Space jump, hold LMB mine, RMB place, 1-9 slot, E craft`;
   }
 }

@@ -2,6 +2,9 @@ import { CHUNK_HEIGHT, CHUNK_WIDTH } from "../constants.js";
 import { BlockId } from "./block.js";
 import { Chunk, chunkKey } from "./chunk.js";
 import { generateChunk } from "./gen.js";
+import { generateNetherChunk } from "./nether.js";
+
+export type Dimension = "overworld" | "nether";
 
 /**
  * World state: a sparse grid of chunks. Purely data + accessors; world
@@ -9,10 +12,12 @@ import { generateChunk } from "./gen.js";
  */
 export class World {
   readonly seed: number;
+  readonly dimension: Dimension;
   private readonly chunks = new Map<string, Chunk>();
 
-  constructor(seed: number) {
+  constructor(seed: number, dimension: Dimension = "overworld") {
     this.seed = seed;
+    this.dimension = dimension;
   }
 
   getChunk(cx: number, cy: number): Chunk | undefined {
@@ -27,7 +32,10 @@ export class World {
   ensureChunk(cx: number, cy: number): Chunk {
     let chunk = this.getChunk(cx, cy);
     if (!chunk) {
-      chunk = generateChunk(this.seed, cx, cy);
+      chunk =
+        this.dimension === "nether"
+          ? generateNetherChunk(this.seed, cx, cy)
+          : generateChunk(this.seed, cx, cy);
       this.setChunk(chunk);
     }
     return chunk;

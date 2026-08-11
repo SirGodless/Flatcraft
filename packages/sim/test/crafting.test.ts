@@ -180,7 +180,7 @@ describe("drops and placement", () => {
     sim.tick([{ player, command: { type: "select_slot", index: 0 } }]);
     const result = sim.tick([{ player, command: { type: "place_block", x, y } }]);
     expect(result).toContainEqual({
-      event: { type: "block_changed", x, y, block: BlockId.Dirt },
+      event: { type: "block_changed", dim: "overworld", x, y, block: BlockId.Dirt },
     });
     expect(sim.world.getBlock(x, y)).toBe(BlockId.Dirt);
     expect(countInInventory(state.inventory, "dirt")).toBe(1);

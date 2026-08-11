@@ -1,6 +1,7 @@
 import { DEFAULT_COOK_TICKS, fuelTicks, type Recipe } from "./crafting/recipe.js";
 import type { ItemStack } from "./inventory.js";
 import { itemDef } from "./items.js";
+import type { Dimension } from "./world/world.js";
 
 /**
  * Furnace block state: a real Minecraft-style furnace with input, fuel
@@ -8,6 +9,7 @@ import { itemDef } from "./items.js";
  * simulation keyed by position and tick with the world.
  */
 export interface FurnaceState {
+  dimension: Dimension;
   x: number;
   y: number;
   input: ItemStack | null;
@@ -21,12 +23,12 @@ export interface FurnaceState {
   cookProgress: number;
 }
 
-export function createFurnace(x: number, y: number): FurnaceState {
-  return { x, y, input: null, fuel: null, output: null, burnLeft: 0, burnTotal: 0, cookProgress: 0 };
+export function createFurnace(dimension: Dimension, x: number, y: number): FurnaceState {
+  return { dimension, x, y, input: null, fuel: null, output: null, burnLeft: 0, burnTotal: 0, cookProgress: 0 };
 }
 
-export function furnaceKey(x: number, y: number): string {
-  return `${x},${y}`;
+export function furnaceKey(dimension: Dimension, x: number, y: number): string {
+  return `${dimension}:${x},${y}`;
 }
 
 /** The smelting recipe consuming this item, if any. */

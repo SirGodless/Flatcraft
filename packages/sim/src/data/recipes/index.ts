@@ -5,8 +5,10 @@ import diamondAxe from "./diamond_axe.json";
 import diamondPickaxe from "./diamond_pickaxe.json";
 import diamondShovel from "./diamond_shovel.json";
 import diamondSword from "./diamond_sword.json";
+import flintAndSteel from "./flint_and_steel.json";
 import furnace from "./furnace.json";
 import glass from "./glass.json";
+import glowstone from "./glowstone.json";
 import goldIngot from "./gold_ingot.json";
 import goldenAxe from "./golden_axe.json";
 import goldenPickaxe from "./golden_pickaxe.json";
@@ -65,6 +67,8 @@ const sources: Record<string, RecipeJson> = {
   gold_ingot: goldIngot,
   glass,
   stone,
+  flint_and_steel: flintAndSteel,
+  glowstone,
 };
 
 export const RECIPES: ReadonlyMap<string, Recipe> = new Map(

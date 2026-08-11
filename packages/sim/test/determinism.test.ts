@@ -157,7 +157,7 @@ describe("simulation", () => {
     sim.tick([{ player, command: { type: "select_slot", index: 1 } }]);
     const placed = sim.tick([{ player, command: { type: "place_block", x, y } }]);
     expect(placed).toContainEqual({
-      event: { type: "block_changed", x, y, block: BlockId.Cobblestone },
+      event: { type: "block_changed", dim: "overworld", x, y, block: BlockId.Cobblestone },
     });
     expect(sim.world.getBlock(x, y)).toBe(BlockId.Cobblestone);
   });

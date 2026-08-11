@@ -133,6 +133,7 @@ interface VeinSpec {
 }
 
 const VEINS: readonly VeinSpec[] = [
+  { block: BlockId.Obsidian, attempts: 2, sizeMin: 3, sizeMax: 6, minY: 236, maxY: 255 },
   { block: BlockId.Gravel, attempts: 3, sizeMin: 6, sizeMax: 12, minY: 12, maxY: 255 },
   { block: BlockId.CoalOre, attempts: 5, sizeMin: 4, sizeMax: 10, minY: 2, maxY: 255 },
   { block: BlockId.IronOre, attempts: 4, sizeMin: 3, sizeMax: 6, minY: 24, maxY: 255 },

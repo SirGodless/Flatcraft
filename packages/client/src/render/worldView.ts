@@ -30,6 +30,15 @@ export class WorldView {
     return this.chunks.has(chunkKey(cx, cy));
   }
 
+  /** Drop all chunks (dimension switch). */
+  clear(): void {
+    for (const view of this.chunks.values()) {
+      view.sprite.destroy();
+      view.target.destroy(true);
+    }
+    this.chunks.clear();
+  }
+
   /** The client's view of a tile (Air for unloaded chunks). */
   getBlock(x: number, y: number): BlockId {
     const cx = Math.floor(x / CHUNK_WIDTH);
