@@ -110,6 +110,13 @@ export function blockDef(id: BlockId): BlockDef {
   return defs.get(id) ?? Blocks.air;
 }
 
+export function blockByName(name: string): BlockId | undefined {
+  for (const def of defs.values()) {
+    if (def.name === name) return def.id;
+  }
+  return undefined;
+}
+
 /** The item stack breaking this block yields, or null for nothing. */
 export function blockDrops(id: BlockId): { item: string; count: number } | null {
   const def = defs.get(id);

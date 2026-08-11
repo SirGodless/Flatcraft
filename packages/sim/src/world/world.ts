@@ -1,4 +1,5 @@
 import { CHUNK_HEIGHT, CHUNK_WIDTH } from "../constants.js";
+import { stampStructures } from "../structures/place.js";
 import { BlockId } from "./block.js";
 import { Chunk, chunkKey } from "./chunk.js";
 import { generateChunk } from "./gen.js";
@@ -36,6 +37,7 @@ export class World {
         this.dimension === "nether"
           ? generateNetherChunk(this.seed, cx, cy)
           : generateChunk(this.seed, cx, cy);
+      stampStructures(this.seed, this.dimension, chunk);
       this.setChunk(chunk);
     }
     return chunk;

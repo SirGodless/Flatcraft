@@ -65,6 +65,7 @@ import {
 } from "./portal.js";
 import type { SimSave } from "./save.js";
 import { clickStack } from "./slots.js";
+import { structureLootAt } from "./structures/place.js";
 import { DAY_LENGTH, daylightFactor, isNight } from "./time.js";
 import { blockDef, blockDrops, BlockId } from "./world/block.js";
 import { Biome, biomeAt, findSpawnX, surfaceHeight } from "./world/gen.js";
@@ -378,7 +379,8 @@ export class Simulation {
           }
         }
         if (block === BlockId.Chest) {
-          const chest = this.chests.get(furnaceKey(p.dimension, mining.x, mining.y));
+          // Materialize structure loot before spilling.
+          const chest = this.ensureChest(p.dimension, mining.x, mining.y);
           if (chest) {
             // Contents spill out as item entities, like Minecraft.
             for (const stack of chest.slots) {
@@ -1302,6 +1304,13 @@ export class Simulation {
     let chest = this.chests.get(key);
     if (!chest) {
       chest = { dimension, x, y, slots: new Array<ItemStack | null>(27).fill(null) };
+      // Structure chests come pre-filled with their rolled loot.
+      const loot = structureLootAt(this.worldOf(dimension).seed, dimension, x, y);
+      if (loot) {
+        loot.forEach((stack, i) => {
+          chest!.slots[i] = stack;
+        });
+      }
       this.chests.set(key, chest);
     }
     return chest;

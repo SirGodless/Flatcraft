@@ -1,0 +1,24 @@
+{
+  "dimension": "nether",
+  "placement": { "type": "underground", "chance": 0.05, "minY": 10, "maxY": 55 },
+  "anchor": [3, 3],
+  "pattern": [
+    "B     B",
+    "B     B",
+    "B..n..B",
+    "BBBBBBB"
+  ],
+  "key": {
+    "B": { "block": "flatcraft:basalt" },
+    ".": { "block": "flatcraft:air" },
+    "n": {
+      "block": "flatcraft:chest",
+      "loot": [
+        { "item": "flatcraft:gold_ingot", "count": 5, "chance": 0.8 },
+        { "item": "flatcraft:glowstone_dust", "count": 8, "chance": 0.7 },
+        { "item": "flatcraft:obsidian", "count": 3, "chance": 0.4 },
+        { "item": "flatcraft:flint_and_steel", "count": 1, "chance": 0.25 }
+      ]
+    }
+  }
+}

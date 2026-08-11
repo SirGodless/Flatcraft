@@ -1,0 +1,19 @@
+{
+  "dimension": "overworld",
+  "placement": { "type": "surface", "chance": 0.04, "biomes": ["plains", "forest"] },
+  "anchor": [3, 5],
+  "pattern": [
+    "PPPPPPP",
+    "P.....P",
+    "P.....P",
+    "G..t..G",
+    "P.....P",
+    "PPPPPPP"
+  ],
+  "key": {
+    "P": { "block": "flatcraft:oak_planks" },
+    "G": { "block": "flatcraft:glass" },
+    ".": { "block": "flatcraft:air" },
+    "t": { "block": "flatcraft:crafting_table" }
+  }
+}
