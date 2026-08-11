@@ -47,6 +47,7 @@ export class Renderer {
   private readonly app = new Application();
   private readonly worldContainer = new Container();
   private readonly players = new Map<PlayerId, PlayerMarker>();
+  private readonly miningOverlays = new Map<PlayerId, Graphics>();
   private hud!: Text;
   private hotbar!: HotbarUI;
   private craftingPanel!: CraftingPanelUI;
@@ -130,6 +131,11 @@ export class Renderer {
           marker.gfx.destroy();
           this.players.delete(event.player);
         }
+        const overlay = this.miningOverlays.get(event.player);
+        if (overlay) {
+          overlay.destroy();
+          this.miningOverlays.delete(event.player);
+        }
         break;
       }
       case "chunk_data":
@@ -146,6 +152,35 @@ export class Renderer {
       case "block_changed":
         this.worldView.setBlock(event.x, event.y, event.block);
         break;
+      case "mining_progress": {
+        let overlay = this.miningOverlays.get(event.player);
+        if (event.total === 0) {
+          if (overlay) {
+            overlay.destroy();
+            this.miningOverlays.delete(event.player);
+          }
+          break;
+        }
+        if (!overlay) {
+          overlay = new Graphics();
+          this.worldContainer.addChild(overlay);
+          this.miningOverlays.set(event.player, overlay);
+        }
+        const ratio = event.progress / event.total;
+        overlay.clear();
+        overlay.rect(0, 0, TILE_PX, TILE_PX).fill({ color: 0x000000, alpha: 0.2 + 0.5 * ratio });
+        // Cracks widen with progress.
+        const cracks = Math.floor(ratio * 4) + 1;
+        for (let i = 0; i < cracks; i++) {
+          const offset = 3 + i * 3;
+          overlay
+            .moveTo(offset, 2)
+            .lineTo(TILE_PX - 2, offset + 4)
+            .stroke({ color: 0x222222, width: 1, alpha: 0.8 });
+        }
+        overlay.position.set(event.x * TILE_PX, event.y * TILE_PX);
+        break;
+      }
       case "command_rejected":
         // Surfacing rejections in the UI comes with the HUD work later.
         break;
@@ -198,6 +233,6 @@ export class Renderer {
 
     const px = localX !== null ? Math.floor(localX) : Math.floor(this.camera.x / TILE_PX);
     const py = localY !== null ? Math.floor(localY) : Math.floor(this.camera.y / TILE_PX);
-    this.hud.text = `FlatCraft | tile ${px},${py} | zoom ${this.camera.zoom.toFixed(1)} | A/D walk, Space jump, LMB break, RMB place, 1-9 slot, E craft`;
+    this.hud.text = `FlatCraft | tile ${px},${py} | zoom ${this.camera.zoom.toFixed(1)} | A/D walk, Space jump, hold LMB mine, RMB place, 1-9 slot, E craft`;
   }
 }

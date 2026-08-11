@@ -65,9 +65,10 @@ describe("simulation", () => {
     const events = [
       ...sim.tick([{ player, command: { type: "join", name: "Tester" } }]),
       ...sim.tick([{ player, command: { type: "request_chunk", cx: 0, cy: 0 } }]),
-      ...sim.tick([{ player, command: { type: "break_block", x: target.x, y: target.y } }]),
+      ...sim.tick([{ player, command: { type: "start_mining", x: target.x, y: target.y } }]),
       ...sim.tick([{ player, command: { type: "move", dx: 1, jump: true } }]),
       ...sim.tick([]),
+      ...sim.tick([{ player, command: { type: "stop_mining" } }]),
       ...sim.tick([]),
     ];
     return { sim, events };
@@ -92,19 +93,19 @@ describe("simulation", () => {
     // Force a known-air tile above the surface (a tree might occupy it).
     sim.world.ensureChunk(Math.floor(x / 32), Math.floor((y - 3) / 32));
     sim.world.setBlock(x, y - 3, BlockId.Air);
-    const airResult = sim.tick([{ player, command: { type: "break_block", x, y: y - 3 } }]);
+    const airResult = sim.tick([{ player, command: { type: "start_mining", x, y: y - 3 } }]);
     expect(airResult).toContainEqual({
       to: player,
-      event: { type: "command_rejected", player, reason: "cannot break block" },
+      event: { type: "command_rejected", player, reason: "cannot mine" },
     });
 
     // Swap the surface block for bedrock (hardness -1): must be unbreakable.
     sim.world.ensureChunk(0, 0);
     sim.world.setBlock(x, y, BlockId.Bedrock);
-    const bedrockResult = sim.tick([{ player, command: { type: "break_block", x, y } }]);
+    const bedrockResult = sim.tick([{ player, command: { type: "start_mining", x, y } }]);
     expect(bedrockResult).toContainEqual({
       to: player,
-      event: { type: "command_rejected", player, reason: "cannot break block" },
+      event: { type: "command_rejected", player, reason: "cannot mine" },
     });
   });
 
@@ -122,33 +123,36 @@ describe("simulation", () => {
     });
   });
 
-  it("rejects breaking blocks beyond reach", () => {
+  it("rejects mining blocks beyond reach", () => {
     const sim = new Simulation(1);
     const player = sim.allocatePlayerId();
     sim.tick([{ player, command: { type: "join", name: "T" } }]);
-    const result = sim.tick([{ player, command: { type: "break_block", x: 50, y: 50 } }]);
+    const result = sim.tick([{ player, command: { type: "start_mining", x: 50, y: 50 } }]);
     expect(result).toContainEqual({
       to: player,
       event: { type: "command_rejected", player, reason: "out of reach" },
     });
   });
 
-  it("applies valid break then place, broadcasting block_changed", () => {
+  it("applies valid mine then place, broadcasting block_changed", () => {
     const sim = new Simulation(1);
     const player = sim.allocatePlayerId();
     sim.tick([{ player, command: { type: "join", name: "T" } }]);
+    const state = sim.players.get(player)!;
     const { x, y } = nearbySurface(1);
-    // Make the target a known block so the drop (and re-placement) is fixed.
+    // Known block + proper tool so the drop (and re-placement) is fixed.
     sim.world.ensureChunk(Math.floor(x / 32), Math.floor(y / 32));
     sim.world.setBlock(x, y, BlockId.Stone);
+    state.inventory[0] = { item: "wooden_pickaxe", count: 1 };
 
-    const broken = sim.tick([{ player, command: { type: "break_block", x, y } }]);
-    expect(broken).toContainEqual({
-      event: { type: "block_changed", x, y, block: BlockId.Air },
-    });
+    sim.tick([{ player, command: { type: "start_mining", x, y } }]);
+    for (let i = 0; i < 20 && sim.world.getBlock(x, y) !== BlockId.Air; i++) {
+      sim.tick([]);
+    }
     expect(sim.world.getBlock(x, y)).toBe(BlockId.Air);
 
-    // The drop (cobblestone) landed in slot 0; place it back.
+    // The drop (cobblestone) landed in slot 1; select it and place it back.
+    sim.tick([{ player, command: { type: "select_slot", index: 1 } }]);
     const placed = sim.tick([{ player, command: { type: "place_block", x, y } }]);
     expect(placed).toContainEqual({
       event: { type: "block_changed", x, y, block: BlockId.Cobblestone },

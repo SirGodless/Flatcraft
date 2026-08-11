@@ -48,6 +48,6 @@ npm run build      # build all packages
 3. ~~World generation: overworld~~ (biomes: desert/plains/forest/mountains, lakes, caves, ore veins, trees; nether comes with its own milestone later)
 4. ~~Physics & collision~~ (AABB player physics: gravity, jumping, walking, tile collision; server-side reach + entity-blocking checks; interpolated rendering)
 5. ~~Inventory & crafting~~ (36-slot inventory + hotbar, Minecraft-style block drops, recipes as datapack-style JSON files in `packages/sim/src/data/recipes/`, 2x2 anywhere / 3x3 needs a crafting table)
-6. Block interactions
+6. ~~Block interactions~~ (hold-to-mine with progress + crack overlay, Minecraft tool tiers/speeds, tier-gated drops; no durability by design)
 7. Entities/mobs
 8. Netcode: WebSocket transport, listen server & dedicated server

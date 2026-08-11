@@ -79,14 +79,42 @@ export function attachInput(target: HTMLElement, opts: InputOptions): InputHandl
     opts.camera.zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, opts.camera.zoom * factor));
   };
 
-  const onPointerDown = (e: PointerEvent): void => {
+  let miningTile: { x: number; y: number } | null = null;
+
+  const tileAt = (e: PointerEvent): { x: number; y: number } => {
     const { width, height } = opts.screenSize();
-    const tile = opts.camera.screenToTile(e.offsetX, e.offsetY, width, height);
+    return opts.camera.screenToTile(e.offsetX, e.offsetY, width, height);
+  };
+
+  const onPointerDown = (e: PointerEvent): void => {
+    const tile = tileAt(e);
     if (e.button === 0) {
-      opts.sendCommand({ type: "break_block", x: tile.x, y: tile.y });
+      miningTile = tile;
+      opts.sendCommand({ type: "start_mining", x: tile.x, y: tile.y });
     } else if (e.button === 2) {
       opts.sendCommand({ type: "place_block", x: tile.x, y: tile.y });
     }
+  };
+
+  // Keep mining whatever the cursor points at while the button is held.
+  const onPointerMove = (e: PointerEvent): void => {
+    if (!miningTile) return;
+    const tile = tileAt(e);
+    if (tile.x !== miningTile.x || tile.y !== miningTile.y) {
+      miningTile = tile;
+      opts.sendCommand({ type: "start_mining", x: tile.x, y: tile.y });
+    }
+  };
+
+  const stopMining = (): void => {
+    if (miningTile) {
+      miningTile = null;
+      opts.sendCommand({ type: "stop_mining" });
+    }
+  };
+
+  const onPointerUp = (e: PointerEvent): void => {
+    if (e.button === 0) stopMining();
   };
 
   const onContextMenu = (e: Event): void => {
@@ -97,6 +125,9 @@ export function attachInput(target: HTMLElement, opts: InputOptions): InputHandl
   window.addEventListener("keyup", onKeyUp);
   target.addEventListener("wheel", onWheel, { passive: false });
   target.addEventListener("pointerdown", onPointerDown);
+  target.addEventListener("pointermove", onPointerMove);
+  target.addEventListener("pointerup", onPointerUp);
+  target.addEventListener("pointerleave", stopMining);
   target.addEventListener("contextmenu", onContextMenu);
 
   return {
@@ -105,6 +136,9 @@ export function attachInput(target: HTMLElement, opts: InputOptions): InputHandl
       window.removeEventListener("keyup", onKeyUp);
       target.removeEventListener("wheel", onWheel);
       target.removeEventListener("pointerdown", onPointerDown);
+      target.removeEventListener("pointermove", onPointerMove);
+      target.removeEventListener("pointerup", onPointerUp);
+      target.removeEventListener("pointerleave", stopMining);
       target.removeEventListener("contextmenu", onContextMenu);
     },
   };

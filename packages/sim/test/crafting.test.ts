@@ -145,13 +145,17 @@ describe("crafting via commands", () => {
 });
 
 describe("drops and placement", () => {
-  it("breaking a block yields its drop into the inventory", () => {
+  it("mining a block with the right tool yields its drop into the inventory", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
     const x = Math.floor(state.x) + 1;
     const y = Math.floor(state.y);
     setBlock(sim, x, y, BlockId.Stone);
-    sim.tick([{ player, command: { type: "break_block", x, y } }]);
+    state.inventory[0] = { item: "wooden_pickaxe", count: 1 };
+    sim.tick([{ player, command: { type: "start_mining", x, y } }]);
+    for (let i = 0; i < 20 && sim.world.getBlock(x, y) !== BlockId.Air; i++) {
+      sim.tick([]);
+    }
     // Stone drops cobblestone, Minecraft-style.
     expect(countInInventory(state.inventory, "cobblestone")).toBe(1);
     expect(countInInventory(state.inventory, "stone")).toBe(0);

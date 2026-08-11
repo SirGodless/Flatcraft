@@ -12,7 +12,10 @@ export type Command =
   /** Sets the player's movement intent; it persists until the next move
    * command, so clients only send changes, not one command per tick. */
   | { type: "move"; dx: -1 | 0 | 1; jump: boolean }
-  | { type: "break_block"; x: number; y: number }
+  /** Start mining a block; progress accumulates every tick until the
+   * block breaks or a stop_mining/new start_mining arrives. */
+  | { type: "start_mining"; x: number; y: number }
+  | { type: "stop_mining" }
   /** Places whatever block item is in the selected hotbar slot. */
   | { type: "place_block"; x: number; y: number }
   | { type: "select_slot"; index: number }

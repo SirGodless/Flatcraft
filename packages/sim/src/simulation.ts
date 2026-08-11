@@ -13,6 +13,7 @@ import {
 } from "./inventory.js";
 import { itemDef } from "./items.js";
 import { createRng, type Rng } from "./math/rng.js";
+import { canHarvest, miningTicks } from "./mining.js";
 import {
   GRAVITY,
   JUMP_VELOCITY,
@@ -46,6 +47,8 @@ export interface PlayerState {
   inventory: InventorySlots;
   /** Selected hotbar slot, 0..8. */
   selected: number;
+  /** Block currently being mined, with accumulated progress ticks. */
+  mining: { x: number; y: number; progress: number } | null;
 }
 
 /** Reject chunk requests absurdly far out (bad client / future cheat guard). */
@@ -85,9 +88,79 @@ export class Simulation {
     for (const pc of commands) {
       this.apply(pc, out);
     }
+    this.stepMining(out);
     this.stepPlayers(out);
     this.tickCount++;
     return out;
+  }
+
+  private stepMining(out: OutboundEvent[]): void {
+    for (const p of this.players.values()) {
+      const mining = p.mining;
+      if (!mining) continue;
+
+      const clear = (): void => {
+        p.mining = null;
+        out.push({
+          event: { type: "mining_progress", player: p.id, x: mining.x, y: mining.y, progress: 0, total: 0 },
+        });
+      };
+
+      if (!this.withinReach(p.id, mining.x, mining.y)) {
+        clear();
+        continue;
+      }
+      const block = this.world.getBlockGenerating(mining.x, mining.y);
+      if (block === BlockId.Air || blockDef(block).hardness < 0) {
+        clear();
+        continue;
+      }
+
+      const held = p.inventory[p.selected] ?? null;
+      // Recomputed every tick, so switching the held item mid-mining
+      // changes the remaining time (progress is kept).
+      const total = miningTicks(block, held);
+      mining.progress++;
+
+      if (mining.progress < total) {
+        out.push({
+          event: {
+            type: "mining_progress",
+            player: p.id,
+            x: mining.x,
+            y: mining.y,
+            progress: mining.progress,
+            total,
+          },
+        });
+        continue;
+      }
+
+      clear();
+      if (this.world.setBlock(mining.x, mining.y, BlockId.Air)) {
+        out.push({ event: { type: "block_changed", x: mining.x, y: mining.y, block: BlockId.Air } });
+        if (canHarvest(block, held)) {
+          const drops = blockDrops(block);
+          if (drops) {
+            // Leftover that does not fit is lost until item entities exist.
+            addToInventory(p.inventory, drops.item, drops.count);
+            this.syncInventory(p, out);
+          }
+        }
+      }
+    }
+  }
+
+  private syncInventory(p: PlayerState, out: OutboundEvent[]): void {
+    out.push({
+      to: p.id,
+      event: {
+        type: "inventory_changed",
+        player: p.id,
+        slots: cloneInventory(p.inventory),
+        selected: p.selected,
+      },
+    });
   }
 
   private stepPlayers(out: OutboundEvent[]): void {
@@ -119,12 +192,7 @@ export class Simulation {
       reply({ type: "command_rejected", player, reason });
     };
     const syncInventory = (p: PlayerState): void => {
-      reply({
-        type: "inventory_changed",
-        player: p.id,
-        slots: cloneInventory(p.inventory),
-        selected: p.selected,
-      });
+      this.syncInventory(p, out);
     };
 
     switch (command.type) {
@@ -143,6 +211,7 @@ export class Simulation {
           input: { dx: 0, jump: false },
           inventory: createInventory(),
           selected: 0,
+          mining: null,
         };
         this.players.set(player, state);
         broadcast({ type: "player_joined", player, name: state.name, x, y });
@@ -226,7 +295,7 @@ export class Simulation {
         reply({ type: "chunk_data", cx, cy, tiles: Array.from(chunk.tiles) });
         break;
       }
-      case "break_block": {
+      case "start_mining": {
         const p = this.players.get(player);
         if (!p) {
           reject("not joined");
@@ -243,17 +312,22 @@ export class Simulation {
         }
         const current = this.world.getBlockGenerating(x, y);
         if (current === BlockId.Air || blockDef(current).hardness < 0) {
-          reject("cannot break block");
+          reject("cannot mine");
           break;
         }
-        if (this.world.setBlock(x, y, BlockId.Air)) {
-          broadcast({ type: "block_changed", x, y, block: BlockId.Air });
-          const drops = blockDrops(current);
-          if (drops) {
-            // Leftover that does not fit is lost until item entities exist.
-            addToInventory(p.inventory, drops.item, drops.count);
-            syncInventory(p);
-          }
+        p.mining = { x, y, progress: 0 };
+        break;
+      }
+      case "stop_mining": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        if (p.mining) {
+          const { x, y } = p.mining;
+          p.mining = null;
+          broadcast({ type: "mining_progress", player, x, y, progress: 0, total: 0 });
         }
         break;
       }
