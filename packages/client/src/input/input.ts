@@ -23,8 +23,10 @@ export interface InputOptions {
   onRightClickMob(x: number, y: number): boolean;
   /** Left-click at world coords (tile units, fractional); true = attacked a mob. */
   onAttackAt(x: number, y: number): boolean;
-  /** Wheel while UI is open; true = consumed (no zoom). */
+  /** Wheel while UI is open; true = consumed (no hotbar scroll). */
   onUiWheel(deltaY: number): boolean;
+  /** Wheel over the world: cycle the hotbar selection (+1 = next slot). */
+  onHotbarScroll(direction: 1 | -1): void;
   /** Raw pointer position for the cursor-stack overlay. */
   onPointerMove(x: number, y: number): void;
 }
@@ -85,6 +87,14 @@ export function attachInput(target: HTMLElement, opts: InputOptions): InputHandl
       opts.onToggleInventory();
       return;
     }
+    if (e.code === "Equal" || e.code === "NumpadAdd") {
+      zoomBy(1.15);
+      return;
+    }
+    if (e.code === "Minus" || e.code === "NumpadSubtract") {
+      zoomBy(1 / 1.15);
+      return;
+    }
     if (e.code === "Escape") {
       opts.onEscape();
       return;
@@ -97,10 +107,15 @@ export function attachInput(target: HTMLElement, opts: InputOptions): InputHandl
     syncMoveIntent();
   };
 
+  // Wheel cycles the hotbar (like Minecraft); zoom moved to +/- keys.
   const onWheel = (e: WheelEvent): void => {
     e.preventDefault();
     if (opts.onUiWheel(e.deltaY)) return;
-    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    if (e.deltaY === 0) return;
+    opts.onHotbarScroll(e.deltaY > 0 ? 1 : -1);
+  };
+
+  const zoomBy = (factor: number): void => {
     opts.camera.zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, opts.camera.zoom * factor));
   };
 

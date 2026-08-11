@@ -124,6 +124,8 @@ async function start(): Promise<void> {
       return true;
     },
     onUiWheel: (deltaY) => renderer.handleWheel(deltaY),
+    onHotbarScroll: (direction) =>
+      connection.send({ type: "select_slot", index: renderer.hotbarSlotAfter(direction) }),
     onPointerMove: (x, y) => renderer.setPointer(x, y),
   });
 

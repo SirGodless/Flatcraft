@@ -254,6 +254,11 @@ export class Renderer {
     return this.inventory[this.selectedSlot]?.item ?? null;
   }
 
+  /** The hotbar slot `steps` away from the selection, wrapping around. */
+  hotbarSlotAfter(steps: number): number {
+    return (((this.selectedSlot + steps) % 9) + 9) % 9;
+  }
+
   /** The local player's last known feet-center position, in tile coords. */
   localPlayerPos(): { x: number; y: number } | null {
     if (this.localPlayerId === null) return null;
@@ -839,6 +844,6 @@ export class Renderer {
 
     const px = localX !== null ? Math.floor(localX) : Math.floor(this.camera.x / TILE_PX);
     const py = localY !== null ? Math.floor(localY) : Math.floor(this.camera.y / TILE_PX);
-    this.hud.text = `FlatCraft | ${this.localDim} ${px},${py} | zoom ${this.camera.zoom.toFixed(1)} | A/D walk, Space jump, hold LMB mine, RMB place, 1-9 slot, E craft`;
+    this.hud.text = `FlatCraft | ${this.localDim} ${px},${py} | zoom ${this.camera.zoom.toFixed(1)} | A/D walk, Space jump, hold LMB mine, RMB place, 1-9/wheel slot, E craft, +/- zoom`;
   }
 }
