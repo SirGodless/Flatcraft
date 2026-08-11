@@ -155,9 +155,8 @@ describe("player physics", () => {
     const tileX = Math.floor(state.x);
     const tileY = Math.floor(state.y) - 1; // inside the player's legs
     setBlock(sim, tileX, tileY, BlockId.Air);
-    const result = sim.tick([
-      { player, command: { type: "place_block", x: tileX, y: tileY, block: BlockId.Stone } },
-    ]);
+    state.inventory[0] = { item: "cobblestone", count: 1 };
+    const result = sim.tick([{ player, command: { type: "place_block", x: tileX, y: tileY } }]);
     expect(result).toContainEqual({
       to: player,
       event: { type: "command_rejected", player, reason: "blocked by player" },

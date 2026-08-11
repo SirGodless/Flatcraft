@@ -1,4 +1,4 @@
-import { BlockId, type Command } from "@flatcraft/sim";
+import type { Command } from "@flatcraft/sim";
 import type { Camera } from "../render/camera.js";
 
 export type CommandSink = (command: Command) => void;
@@ -7,6 +7,7 @@ export interface InputOptions {
   camera: Camera;
   sendCommand: CommandSink;
   screenSize(): { width: number; height: number };
+  onToggleCraftingPanel(): void;
 }
 
 export interface InputHandle {
@@ -53,6 +54,17 @@ export function attachInput(target: HTMLElement, opts: InputOptions): InputHandl
   const onKeyDown = (e: KeyboardEvent): void => {
     if (GAME_KEYS.has(e.code)) e.preventDefault();
     if (e.repeat) return;
+    if (e.code.startsWith("Digit")) {
+      const slot = Number(e.code.slice(5)) - 1;
+      if (slot >= 0 && slot < 9) {
+        opts.sendCommand({ type: "select_slot", index: slot });
+        return;
+      }
+    }
+    if (e.code === "KeyE") {
+      opts.onToggleCraftingPanel();
+      return;
+    }
     held.add(e.code);
     syncMoveIntent();
   };
@@ -73,7 +85,7 @@ export function attachInput(target: HTMLElement, opts: InputOptions): InputHandl
     if (e.button === 0) {
       opts.sendCommand({ type: "break_block", x: tile.x, y: tile.y });
     } else if (e.button === 2) {
-      opts.sendCommand({ type: "place_block", x: tile.x, y: tile.y, block: BlockId.Stone });
+      opts.sendCommand({ type: "place_block", x: tile.x, y: tile.y });
     }
   };
 

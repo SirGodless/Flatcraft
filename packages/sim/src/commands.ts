@@ -1,5 +1,3 @@
-import type { BlockId } from "./world/block.js";
-
 /**
  * Commands are the ONLY way anything outside the simulation requests a state
  * change ("client says what it wants to do"). The simulation validates each
@@ -15,7 +13,12 @@ export type Command =
    * command, so clients only send changes, not one command per tick. */
   | { type: "move"; dx: -1 | 0 | 1; jump: boolean }
   | { type: "break_block"; x: number; y: number }
-  | { type: "place_block"; x: number; y: number; block: BlockId }
+  /** Places whatever block item is in the selected hotbar slot. */
+  | { type: "place_block"; x: number; y: number }
+  | { type: "select_slot"; index: number }
+  /** Craft a recipe by id (recipe-book style); the simulation checks
+   * ingredients and, for 3x3 recipes, a nearby crafting table. */
+  | { type: "craft"; recipe: string }
   | { type: "request_chunk"; cx: number; cy: number };
 
 /** A command attributed to the player who issued it. */

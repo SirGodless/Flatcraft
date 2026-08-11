@@ -1,7 +1,15 @@
 import { Application, Container, Graphics, Text } from "pixi.js";
-import { PLAYER_HEIGHT, PLAYER_WIDTH, TICK_MS, type PlayerId, type SimEvent } from "@flatcraft/sim";
+import {
+  PLAYER_HEIGHT,
+  PLAYER_WIDTH,
+  TICK_MS,
+  type InventorySlots,
+  type PlayerId,
+  type SimEvent,
+} from "@flatcraft/sim";
 import { Camera } from "./camera.js";
 import { createBlockTextures, TILE_PX } from "./textures.js";
+import { CraftingPanelUI, HotbarUI } from "./ui.js";
 import { CHUNK_PX_H, CHUNK_PX_W, WorldView } from "./worldView.js";
 
 export interface ChunkRange {
@@ -33,17 +41,24 @@ export class Renderer {
   worldView!: WorldView;
   /** Which player the camera follows; set by the bootstrap code. */
   localPlayerId: PlayerId | null = null;
+  /** Wired by the bootstrap code to send craft commands. */
+  onCraft: ((recipeId: string) => void) | null = null;
 
   private readonly app = new Application();
   private readonly worldContainer = new Container();
   private readonly players = new Map<PlayerId, PlayerMarker>();
   private hud!: Text;
+  private hotbar!: HotbarUI;
+  private craftingPanel!: CraftingPanelUI;
+  private inventory: InventorySlots = [];
+  private selectedSlot = 0;
 
   async init(container: HTMLElement): Promise<void> {
     await this.app.init({ resizeTo: container, background: "#87b9e7" });
     container.appendChild(this.app.canvas);
 
-    this.worldView = new WorldView(this.app.renderer, createBlockTextures());
+    const blockTextures = createBlockTextures();
+    this.worldView = new WorldView(this.app.renderer, blockTextures);
     this.worldContainer.addChild(this.worldView.container);
     this.app.stage.addChild(this.worldContainer);
 
@@ -53,6 +68,18 @@ export class Renderer {
     });
     this.hud.position.set(8, 8);
     this.app.stage.addChild(this.hud);
+
+    this.hotbar = new HotbarUI(blockTextures);
+    this.hotbar.update(this.inventory, this.selectedSlot);
+    this.app.stage.addChild(this.hotbar.container);
+
+    this.craftingPanel = new CraftingPanelUI(blockTextures);
+    this.craftingPanel.onCraft = (id) => this.onCraft?.(id);
+    this.app.stage.addChild(this.craftingPanel.container);
+  }
+
+  toggleCraftingPanel(): void {
+    this.craftingPanel.toggle();
   }
 
   get canvas(): HTMLCanvasElement {
@@ -108,6 +135,14 @@ export class Renderer {
       case "chunk_data":
         this.worldView.setChunk(event.cx, event.cy, event.tiles);
         break;
+      case "inventory_changed":
+        if (event.player === this.localPlayerId) {
+          this.inventory = event.slots;
+          this.selectedSlot = event.selected;
+          this.hotbar.update(this.inventory, this.selectedSlot);
+          this.craftingPanel.update(this.inventory);
+        }
+        break;
       case "block_changed":
         this.worldView.setBlock(event.x, event.y, event.block);
         break;
@@ -155,8 +190,14 @@ export class Renderer {
 
     this.camera.apply(this.worldContainer, this.screenWidth, this.screenHeight);
 
+    this.hotbar.container.position.set(
+      (this.screenWidth - this.hotbar.width) / 2,
+      this.screenHeight - this.hotbar.height - 8,
+    );
+    this.craftingPanel.container.position.set(12, 40);
+
     const px = localX !== null ? Math.floor(localX) : Math.floor(this.camera.x / TILE_PX);
     const py = localY !== null ? Math.floor(localY) : Math.floor(this.camera.y / TILE_PX);
-    this.hud.text = `FlatCraft | tile ${px},${py} | zoom ${this.camera.zoom.toFixed(1)} | A/D walk, Space jump, LMB break, RMB place, wheel zoom`;
+    this.hud.text = `FlatCraft | tile ${px},${py} | zoom ${this.camera.zoom.toFixed(1)} | A/D walk, Space jump, LMB break, RMB place, 1-9 slot, E craft`;
   }
 }

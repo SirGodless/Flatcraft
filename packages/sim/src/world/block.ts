@@ -22,6 +22,9 @@ export enum BlockId {
   RedstoneOre = 16,
   DiamondOre = 17,
   EmeraldOre = 18,
+  OakPlanks = 19,
+  CraftingTable = 20,
+  Cobblestone = 21,
 }
 
 export interface BlockDef {
@@ -30,6 +33,11 @@ export interface BlockDef {
   readonly solid: boolean;
   /** Base mining time in ticks; -1 = unbreakable (and not placeable). */
   readonly hardness: number;
+  /**
+   * What breaking this block yields. Omitted = an item with the block's
+   * own name; null = nothing (e.g. leaves for now).
+   */
+  readonly drops?: { item: string; count: number } | null;
 }
 
 const defs = new Map<BlockId, BlockDef>();
@@ -41,29 +49,40 @@ function register(def: BlockDef): BlockDef {
 
 export const Blocks = {
   air: register({ id: BlockId.Air, name: "air", solid: false, hardness: 0 }),
-  stone: register({ id: BlockId.Stone, name: "stone", solid: true, hardness: 30 }),
+  stone: register({ id: BlockId.Stone, name: "stone", solid: true, hardness: 30, drops: { item: "cobblestone", count: 1 } }),
   dirt: register({ id: BlockId.Dirt, name: "dirt", solid: true, hardness: 10 }),
-  grass: register({ id: BlockId.Grass, name: "grass", solid: true, hardness: 12 }),
-  bedrock: register({ id: BlockId.Bedrock, name: "bedrock", solid: true, hardness: -1 }),
+  grass: register({ id: BlockId.Grass, name: "grass", solid: true, hardness: 12, drops: { item: "dirt", count: 1 } }),
+  bedrock: register({ id: BlockId.Bedrock, name: "bedrock", solid: true, hardness: -1, drops: null }),
   sand: register({ id: BlockId.Sand, name: "sand", solid: true, hardness: 8 }),
   sandstone: register({ id: BlockId.Sandstone, name: "sandstone", solid: true, hardness: 24 }),
   gravel: register({ id: BlockId.Gravel, name: "gravel", solid: true, hardness: 9 }),
   // Static for now; fluid flow (and buckets) come later, so water can be
   // neither broken nor placed (hardness -1).
-  water: register({ id: BlockId.Water, name: "water", solid: false, hardness: -1 }),
+  water: register({ id: BlockId.Water, name: "water", solid: false, hardness: -1, drops: null }),
   // Trees are background scenery in a 2D world: they never block movement.
   oakLog: register({ id: BlockId.OakLog, name: "oak_log", solid: false, hardness: 25 }),
-  oakLeaves: register({ id: BlockId.OakLeaves, name: "oak_leaves", solid: false, hardness: 3 }),
+  oakLeaves: register({ id: BlockId.OakLeaves, name: "oak_leaves", solid: false, hardness: 3, drops: null }),
   snow: register({ id: BlockId.Snow, name: "snow", solid: true, hardness: 6 }),
-  coalOre: register({ id: BlockId.CoalOre, name: "coal_ore", solid: true, hardness: 35 }),
+  coalOre: register({ id: BlockId.CoalOre, name: "coal_ore", solid: true, hardness: 35, drops: { item: "coal", count: 1 } }),
   ironOre: register({ id: BlockId.IronOre, name: "iron_ore", solid: true, hardness: 40 }),
   goldOre: register({ id: BlockId.GoldOre, name: "gold_ore", solid: true, hardness: 40 }),
-  lapisOre: register({ id: BlockId.LapisOre, name: "lapis_ore", solid: true, hardness: 40 }),
-  redstoneOre: register({ id: BlockId.RedstoneOre, name: "redstone_ore", solid: true, hardness: 40 }),
-  diamondOre: register({ id: BlockId.DiamondOre, name: "diamond_ore", solid: true, hardness: 45 }),
-  emeraldOre: register({ id: BlockId.EmeraldOre, name: "emerald_ore", solid: true, hardness: 45 }),
+  lapisOre: register({ id: BlockId.LapisOre, name: "lapis_ore", solid: true, hardness: 40, drops: { item: "lapis_lazuli", count: 6 } }),
+  redstoneOre: register({ id: BlockId.RedstoneOre, name: "redstone_ore", solid: true, hardness: 40, drops: { item: "redstone", count: 4 } }),
+  diamondOre: register({ id: BlockId.DiamondOre, name: "diamond_ore", solid: true, hardness: 45, drops: { item: "diamond", count: 1 } }),
+  emeraldOre: register({ id: BlockId.EmeraldOre, name: "emerald_ore", solid: true, hardness: 45, drops: { item: "emerald", count: 1 } }),
+  oakPlanks: register({ id: BlockId.OakPlanks, name: "oak_planks", solid: true, hardness: 30 }),
+  craftingTable: register({ id: BlockId.CraftingTable, name: "crafting_table", solid: true, hardness: 30 }),
+  cobblestone: register({ id: BlockId.Cobblestone, name: "cobblestone", solid: true, hardness: 32 }),
 } as const;
 
 export function blockDef(id: BlockId): BlockDef {
   return defs.get(id) ?? Blocks.air;
+}
+
+/** The item stack breaking this block yields, or null for nothing. */
+export function blockDrops(id: BlockId): { item: string; count: number } | null {
+  const def = defs.get(id);
+  if (!def || def.id === BlockId.Air) return null;
+  if (def.drops === null) return null;
+  return def.drops ?? { item: def.name, count: 1 };
 }

@@ -39,6 +39,13 @@ const STYLES: Partial<Record<BlockId, BlockStyle>> = {
   [BlockId.OakLog]: { base: [104, 80, 48], noise: 0.1, stripe: true },
   [BlockId.OakLeaves]: { base: [64, 138, 52], noise: 0.22, holes: 0.16 },
   [BlockId.Snow]: { base: [238, 242, 248], noise: 0.04 },
+  [BlockId.OakPlanks]: { base: [166, 130, 78], noise: 0.07, stripe: true },
+  [BlockId.CraftingTable]: {
+    base: [150, 116, 68],
+    top: { color: [120, 92, 56], rows: 3 },
+    noise: 0.1,
+  },
+  [BlockId.Cobblestone]: { base: [110, 110, 114], noise: 0.22 },
   [BlockId.CoalOre]: ore([44, 44, 46]),
   [BlockId.IronOre]: ore([215, 172, 140]),
   [BlockId.GoldOre]: ore([250, 212, 80]),

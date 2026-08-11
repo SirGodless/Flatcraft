@@ -1,6 +1,17 @@
 import type { PlayerCommand, PlayerId } from "./commands.js";
 import type { OutboundEvent, SimEvent } from "./events.js";
 import { CHUNK_HEIGHT, CHUNK_WIDTH } from "./constants.js";
+import { RECIPES } from "./data/recipes/index.js";
+import {
+  addToInventory,
+  cloneInventory,
+  countInInventory,
+  createInventory,
+  HOTBAR_SIZE,
+  removeFromInventory,
+  type InventorySlots,
+} from "./inventory.js";
+import { itemDef } from "./items.js";
 import { createRng, type Rng } from "./math/rng.js";
 import {
   GRAVITY,
@@ -12,7 +23,7 @@ import {
   TERMINAL_VELOCITY,
   WALK_SPEED,
 } from "./physics.js";
-import { blockDef, BlockId } from "./world/block.js";
+import { blockDef, blockDrops, BlockId } from "./world/block.js";
 import { findSpawnX, surfaceHeight } from "./world/gen.js";
 import { World } from "./world/world.js";
 
@@ -32,6 +43,9 @@ export interface PlayerState {
   vy: number;
   onGround: boolean;
   input: PlayerInput;
+  inventory: InventorySlots;
+  /** Selected hotbar slot, 0..8. */
+  selected: number;
 }
 
 /** Reject chunk requests absurdly far out (bad client / future cheat guard). */
@@ -104,6 +118,14 @@ export class Simulation {
     const reject = (reason: string): void => {
       reply({ type: "command_rejected", player, reason });
     };
+    const syncInventory = (p: PlayerState): void => {
+      reply({
+        type: "inventory_changed",
+        player: p.id,
+        slots: cloneInventory(p.inventory),
+        selected: p.selected,
+      });
+    };
 
     switch (command.type) {
       case "join": {
@@ -119,9 +141,12 @@ export class Simulation {
           vy: 0,
           onGround: false,
           input: { dx: 0, jump: false },
+          inventory: createInventory(),
+          selected: 0,
         };
         this.players.set(player, state);
         broadcast({ type: "player_joined", player, name: state.name, x, y });
+        syncInventory(state);
         break;
       }
       case "leave": {
@@ -143,6 +168,49 @@ export class Simulation {
         p.input = { dx: command.dx, jump: command.jump };
         break;
       }
+      case "select_slot": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        if (!Number.isInteger(command.index) || command.index < 0 || command.index >= HOTBAR_SIZE) {
+          reject("invalid slot");
+          break;
+        }
+        p.selected = command.index;
+        syncInventory(p);
+        break;
+      }
+      case "craft": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        const recipe = RECIPES.get(command.recipe);
+        if (!recipe) {
+          reject("unknown recipe");
+          break;
+        }
+        if (recipe.gridSize === 3 && !this.craftingTableNearby(p)) {
+          reject("requires crafting table");
+          break;
+        }
+        for (const [item, count] of recipe.ingredients) {
+          if (countInInventory(p.inventory, item) < count) {
+            reject("missing ingredients");
+            return;
+          }
+        }
+        for (const [item, count] of recipe.ingredients) {
+          removeFromInventory(p.inventory, item, count);
+        }
+        // Leftover that does not fit is lost until item entities exist.
+        addToInventory(p.inventory, recipe.result.item, recipe.result.count);
+        syncInventory(p);
+        break;
+      }
       case "request_chunk": {
         const { cx, cy } = command;
         if (
@@ -159,6 +227,11 @@ export class Simulation {
         break;
       }
       case "break_block": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
         const { x, y } = command;
         if (!Number.isInteger(x) || !Number.isInteger(y)) {
           reject("invalid coordinates");
@@ -175,19 +248,34 @@ export class Simulation {
         }
         if (this.world.setBlock(x, y, BlockId.Air)) {
           broadcast({ type: "block_changed", x, y, block: BlockId.Air });
+          const drops = blockDrops(current);
+          if (drops) {
+            // Leftover that does not fit is lost until item entities exist.
+            addToInventory(p.inventory, drops.item, drops.count);
+            syncInventory(p);
+          }
         }
         break;
       }
       case "place_block": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
         const { x, y } = command;
         if (!Number.isInteger(x) || !Number.isInteger(y)) {
           reject("invalid coordinates");
           break;
         }
-        // Unknown ids fall back to air; hardness -1 covers bedrock, water etc.
-        const def = blockDef(command.block);
-        if (def.id === BlockId.Air || def.hardness < 0) {
-          reject("block not placeable");
+        const stack = p.inventory[p.selected];
+        if (!stack) {
+          reject("nothing to place");
+          break;
+        }
+        const def = itemDef(stack.item);
+        if (def?.block === undefined) {
+          reject("item not placeable");
           break;
         }
         if (!this.withinReach(player, x, y)) {
@@ -198,12 +286,17 @@ export class Simulation {
           reject("space occupied");
           break;
         }
-        if (this.tileIntersectsAnyPlayer(x, y)) {
+        if (blockDef(def.block).solid && this.tileIntersectsAnyPlayer(x, y)) {
           reject("blocked by player");
           break;
         }
-        if (this.world.setBlock(x, y, command.block)) {
-          broadcast({ type: "block_changed", x, y, block: command.block });
+        if (this.world.setBlock(x, y, def.block)) {
+          stack.count -= 1;
+          if (stack.count === 0) {
+            p.inventory[p.selected] = null;
+          }
+          broadcast({ type: "block_changed", x, y, block: def.block });
+          syncInventory(p);
         }
         break;
       }
@@ -223,6 +316,20 @@ export class Simulation {
       const overlapsX = tileX + 1 > p.x - PLAYER_WIDTH / 2 && tileX < p.x + PLAYER_WIDTH / 2;
       const overlapsY = tileY + 1 > p.y - PLAYER_HEIGHT && tileY < p.y;
       if (overlapsX && overlapsY) return true;
+    }
+    return false;
+  }
+
+  private craftingTableNearby(p: PlayerState): boolean {
+    const centerY = p.y - PLAYER_HEIGHT / 2;
+    const minX = Math.floor(p.x - REACH);
+    const maxX = Math.floor(p.x + REACH);
+    const minY = Math.floor(centerY - REACH);
+    const maxY = Math.floor(centerY + REACH);
+    for (let ty = minY; ty <= maxY; ty++) {
+      for (let tx = minX; tx <= maxX; tx++) {
+        if (this.world.getBlock(tx, ty) === BlockId.CraftingTable) return true;
+      }
     }
     return false;
   }

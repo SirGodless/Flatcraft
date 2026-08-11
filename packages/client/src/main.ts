@@ -30,10 +30,13 @@ async function start(): Promise<void> {
     }
   });
 
+  renderer.onCraft = (recipeId) => connection.send({ type: "craft", recipe: recipeId });
+
   const input = attachInput(renderer.canvas, {
     camera: renderer.camera,
     sendCommand: (command) => connection.send(command),
     screenSize: () => ({ width: renderer.screenWidth, height: renderer.screenHeight }),
+    onToggleCraftingPanel: () => renderer.toggleCraftingPanel(),
   });
 
   connection.send({ type: "join", name: "Player" });

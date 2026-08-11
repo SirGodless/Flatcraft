@@ -112,10 +112,10 @@ describe("simulation", () => {
     const sim = new Simulation(1);
     const player = sim.allocatePlayerId();
     sim.tick([{ player, command: { type: "join", name: "T" } }]);
+    const state = sim.players.get(player)!;
+    state.inventory[0] = { item: "dirt", count: 1 };
     const { x, y } = nearbySurface(1);
-    const result = sim.tick([
-      { player, command: { type: "place_block", x, y: y + 1, block: BlockId.Stone } },
-    ]);
+    const result = sim.tick([{ player, command: { type: "place_block", x, y: y + 1 } }]);
     expect(result).toContainEqual({
       to: player,
       event: { type: "command_rejected", player, reason: "space occupied" },
@@ -138,6 +138,9 @@ describe("simulation", () => {
     const player = sim.allocatePlayerId();
     sim.tick([{ player, command: { type: "join", name: "T" } }]);
     const { x, y } = nearbySurface(1);
+    // Make the target a known block so the drop (and re-placement) is fixed.
+    sim.world.ensureChunk(Math.floor(x / 32), Math.floor(y / 32));
+    sim.world.setBlock(x, y, BlockId.Stone);
 
     const broken = sim.tick([{ player, command: { type: "break_block", x, y } }]);
     expect(broken).toContainEqual({
@@ -145,11 +148,12 @@ describe("simulation", () => {
     });
     expect(sim.world.getBlock(x, y)).toBe(BlockId.Air);
 
-    const placed = sim.tick([{ player, command: { type: "place_block", x, y, block: BlockId.Dirt } }]);
+    // The drop (cobblestone) landed in slot 0; place it back.
+    const placed = sim.tick([{ player, command: { type: "place_block", x, y } }]);
     expect(placed).toContainEqual({
-      event: { type: "block_changed", x, y, block: BlockId.Dirt },
+      event: { type: "block_changed", x, y, block: BlockId.Cobblestone },
     });
-    expect(sim.world.getBlock(x, y)).toBe(BlockId.Dirt);
+    expect(sim.world.getBlock(x, y)).toBe(BlockId.Cobblestone);
   });
 
   it("chunk_data replies are addressed to the requesting player only", () => {

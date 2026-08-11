@@ -1,4 +1,5 @@
 import type { PlayerId } from "./commands.js";
+import type { ItemStack } from "./inventory.js";
 import type { BlockId } from "./world/block.js";
 
 /**
@@ -12,6 +13,8 @@ export type SimEvent =
   | { type: "player_moved"; player: PlayerId; x: number; y: number }
   | { type: "block_changed"; x: number; y: number; block: BlockId }
   | { type: "chunk_data"; cx: number; cy: number; tiles: number[] }
+  /** Full inventory sync for its owner (small enough to send whole). */
+  | { type: "inventory_changed"; player: PlayerId; slots: (ItemStack | null)[]; selected: number }
   | { type: "command_rejected"; player: PlayerId; reason: string };
 
 /**
