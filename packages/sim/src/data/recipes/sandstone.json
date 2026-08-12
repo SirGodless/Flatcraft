@@ -1,0 +1,6 @@
+{
+  "type": "flatcraft:crafting_shaped",
+  "pattern": ["##", "##"],
+  "key": { "#": { "item": "flatcraft:sand" } },
+  "result": { "item": "flatcraft:sandstone" }
+}

@@ -1,18 +1,24 @@
 {
   "name": "@flatcraft/dedicated",
   "version": "0.1.0",
-  "description": "Headless dedicated server entry point (Node). No rendering, no DOM. Networking arrives once the singleplayer core is done.",
+  "description": "Headless dedicated server (Node): serves the browser client, WebSocket game transport, world persistence, accounts.",
   "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node --experimental-strip-types src/index.ts",
+    "build": "esbuild src/main.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/server.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --external:bufferutil --external:utf-8-validate",
+    "start": "npm run build && node dist/server.mjs",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@flatcraft/server": "*",
-    "@flatcraft/sim": "*"
+    "@flatcraft/sim": "*",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0",
+    "esbuild": "^0.24.0",
+    "vitest": "^2.1.0"
   }
 }

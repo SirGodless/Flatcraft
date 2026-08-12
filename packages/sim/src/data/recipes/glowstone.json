@@ -1,0 +1,6 @@
+{
+  "type": "flatcraft:crafting_shaped",
+  "pattern": ["##", "##"],
+  "key": { "#": { "item": "flatcraft:glowstone_dust" } },
+  "result": { "item": "flatcraft:glowstone" }
+}

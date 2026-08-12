@@ -1,15 +1,168 @@
-import type { PlayerCommand, PlayerId } from "./commands.js";
-import type { SimEvent } from "./events.js";
-import { createRng, type Rng } from "./math/rng.js";
-import { blockDef, BlockId } from "./world/block.js";
-import { World } from "./world/world.js";
+import type { PlayerCommand, PlayerId, SlotRef } from "./commands.js";
+import type { OutboundEvent, SimEvent } from "./events.js";
+import { CHUNK_HEIGHT, CHUNK_WIDTH } from "./constants.js";
+import { CRAFT_GRID_SIZE, matchGrid, SMALL_GRID_INDICES } from "./crafting/match.js";
+import { DEFAULT_COOK_TICKS, fuelTicks } from "./crafting/recipe.js";
+import { RECIPES } from "./data/recipes/index.js";
+import { createFurnace, furnaceIdle, furnaceKey, stepFurnace, type FurnaceState } from "./furnace.js";
+import {
+  ARROW_DAMAGE,
+  ARROW_TTL,
+  ATTACK_REACH,
+  BOW_ARROW_SPEED,
+  BOW_COOLDOWN,
+  BOW_DAMAGE,
+  BURNING_MOBS,
+  CREEPER_FUSE,
+  CREEPER_TRIGGER_RANGE,
+  ENTITY_SIZES,
+  EXPLOSION_BLOCK_RADIUS,
+  EXPLOSION_DAMAGE_RADIUS,
+  EXPLOSION_MAX_DAMAGE,
+  ITEM_DESPAWN_TICKS,
+  ITEM_PICKUP_DELAY,
+  ITEM_PICKUP_RADIUS,
+  MELEE_MOBS,
+  MOB_CAP,
+  MOB_DESPAWN_RANGE,
+  MOB_LOOT,
+  MOB_STATS,
+  PASSIVE_MOBS,
+  SKELETON_RANGE,
+  WANDERING_MOBS,
+  SKELETON_SHOOT_COOLDOWN,
+  ZOMBIE_ATTACK_COOLDOWN,
+  ZOMBIE_DAMAGE,
+  ZOMBIE_FOLLOW_RANGE,
+  type ArrowEntity,
+  type Entity,
+  type EntityId,
+  type ItemEntity,
+  type MobEntity,
+  type MobKind,
+} from "./entities.js";
+import {
+  attackDamage,
+  HURT_COOLDOWN_TICKS,
+  PLAYER_ATTACK_COOLDOWN,
+  PLAYER_MAX_HEALTH,
+  REGEN_INTERVAL_TICKS,
+  SAFE_FALL_TILES,
+} from "./combat.js";
+import {
+  addToInventory,
+  cloneInventory,
+  countInInventory,
+  createInventory,
+  HOTBAR_SIZE,
+  INVENTORY_SIZE,
+  removeFromInventory,
+  type InventorySlots,
+  type ItemStack,
+} from "./inventory.js";
+import { itemDef } from "./items.js";
+import {
+  EFFECT_DURATION_TICKS,
+  ENCHANT_LAPIS_COST,
+  ENCHANT_MAX_LEVEL,
+  enchantFor,
+  potionEffect,
+  REGEN_EFFECT_INTERVAL,
+  SPEED_MULTIPLIER,
+  STRENGTH_BONUS,
+} from "./effects.js";
+import {
+  EXHAUST_JUMP,
+  EXHAUST_MINE,
+  EXHAUST_REGEN,
+  EXHAUST_WALK,
+  EXHAUSTION_PER_POINT,
+  HUNGER_REGEN_MIN,
+  PLAYER_MAX_HUNGER,
+  STARVE_INTERVAL_TICKS,
+  STARVE_MIN_HEALTH,
+} from "./hunger.js";
+import { rngNext, type Rng, type RngState } from "./math/rng.js";
+import { canHarvest, miningTicks } from "./mining.js";
+import {
+  ELYTRA_GLIDE_BOOST,
+  ELYTRA_SINK,
+  GRAVITY,
+  JUMP_VELOCITY,
+  PLAYER_HEIGHT,
+  PLAYER_WIDTH,
+  REACH,
+  stepBody,
+  TERMINAL_VELOCITY,
+  WALK_SPEED,
+} from "./physics.js";
+import {
+  buildPortal,
+  findPortalInterior,
+  nearPortal,
+  NETHER_SCALE,
+  PORTAL_COOLDOWN,
+  PORTAL_TICKS,
+} from "./portal.js";
+import type { SimSave } from "./save.js";
+import { clickStack } from "./slots.js";
+import { placementsNear, structureLootAt } from "./structures/place.js";
+import { TRADES } from "./data/trades/index.js";
+import { DAY_LENGTH, daylightFactor, isNight } from "./time.js";
+import { blockDef, blockDrops, BlockId } from "./world/block.js";
+import { Biome, biomeAt, findSpawnX, surfaceHeight } from "./world/gen.js";
+import { LAVA_LEVEL } from "./world/nether.js";
+import { World, type Dimension } from "./world/world.js";
+
+/** The player's current movement intent, kept until the next move command. */
+export interface PlayerInput {
+  dx: -1 | 0 | 1;
+  jump: boolean;
+}
 
 export interface PlayerState {
   id: PlayerId;
   name: string;
+  dimension: Dimension;
+  /** Feet-center position in tiles (see physics.ts for the AABB layout). */
   x: number;
   y: number;
+  vx: number;
+  vy: number;
+  onGround: boolean;
+  input: PlayerInput;
+  inventory: InventorySlots;
+  /** Selected hotbar slot, 0..8. */
+  selected: number;
+  /** Stack held on the cursor while a UI is open. */
+  cursor: ItemStack | null;
+  /** Personal 3x3 crafting grid (only the 2x2 corner without a table). */
+  craftGrid: (ItemStack | null)[];
+  /** Block currently being mined, with accumulated progress ticks. */
+  mining: { x: number; y: number; progress: number } | null;
+  health: number;
+  /** Hunger bar, 0..PLAYER_MAX_HUNGER. */
+  hunger: number;
+  /** Accumulated activity; drains hunger at EXHAUSTION_PER_POINT. */
+  exhaustion: number;
+  /** Invulnerability frames after taking a hit. */
+  hurtCooldown: number;
+  /** Ticks until the next melee attack is allowed. */
+  attackCooldown: number;
+  /** Knockback velocity, decays and adds onto walking. */
+  kbX: number;
+  /** Tiles fallen so far in the current fall. */
+  fallDistance: number;
+  /** Active potion effects, remaining ticks by effect id. */
+  effects: Record<string, number>;
+  /** Consecutive ticks standing inside a nether portal. */
+  portalTicks: number;
+  /** Ticks left before a portal can trigger again after arriving. */
+  portalCooldown: number;
 }
+
+/** Reject chunk requests absurdly far out (bad client / future cheat guard). */
+const MAX_CHUNK_COORD = 1_000_000;
 
 /**
  * The authoritative game simulation. Deterministic and tick-based:
@@ -18,16 +171,104 @@ export interface PlayerState {
  * any other ambient environment - all inputs arrive via commands.
  */
 export class Simulation {
-  readonly world: World;
+  readonly worlds: Record<Dimension, World>;
   readonly players = new Map<PlayerId, PlayerState>();
+  readonly furnaces = new Map<string, FurnaceState>();
+  /** Chest contents, keyed like furnaces: "dim:x,y". */
+  readonly chests = new Map<string, { dimension: Dimension; x: number; y: number; slots: (ItemStack | null)[] }>();
+  readonly entities = new Map<EntityId, Entity>();
+  /** Known portal interiors (bottom-left of interior), per dimension. */
+  readonly portals: Record<Dimension, Map<string, { x: number; y: number }>> = {
+    overworld: new Map(),
+    nether: new Map(),
+  };
   tickCount = 0;
+  /** Time of day in ticks, 0..DAY_LENGTH (writable, e.g. for tests). */
+  timeOfDay = 0;
 
   private readonly rng: Rng;
+  private readonly rngState: RngState;
   private nextPlayerId: PlayerId = 1;
+  private nextEntityId: EntityId = 1;
+  /** Disconnected players' state, by name, adopted on rejoin. */
+  private readonly savedPlayers = new Map<string, PlayerState>();
 
   constructor(seed: number) {
-    this.world = new World(seed);
-    this.rng = createRng(seed);
+    this.worlds = {
+      overworld: new World(seed, "overworld"),
+      nether: new World(seed, "nether"),
+    };
+    this.rngState = { s: seed >>> 0 };
+    this.rng = () => rngNext(this.rngState);
+  }
+
+  /** Snapshot the complete simulation state as plain serializable data. */
+  serialize(): SimSave {
+    return {
+      version: 1,
+      seed: this.world.seed,
+      tickCount: this.tickCount,
+      timeOfDay: this.timeOfDay,
+      rng: this.rngState.s,
+      nextPlayerId: this.nextPlayerId,
+      nextEntityId: this.nextEntityId,
+      worlds: {
+        overworld: this.worlds.overworld.serializeChunks(),
+        nether: this.worlds.nether.serializeChunks(),
+      },
+      furnaces: [...this.furnaces.values()].map((f) => structuredClone(f)),
+      chests: [...this.chests.values()].map((c) => structuredClone(c)),
+      portals: {
+        overworld: [...this.portals.overworld.values()],
+        nether: [...this.portals.nether.values()],
+      },
+      entities: [...this.entities.values()].map((e) => structuredClone(e)),
+      // Both connected and previously saved players, by name.
+      players: [
+        ...[...this.players.values()].map((p) => structuredClone(p)),
+        ...[...this.savedPlayers.values()].map((p) => structuredClone(p)),
+      ],
+    };
+  }
+
+  /** Rebuild a simulation from a snapshot. */
+  static deserialize(save: SimSave): Simulation {
+    const sim = new Simulation(save.seed);
+    sim.tickCount = save.tickCount;
+    sim.timeOfDay = save.timeOfDay;
+    sim.rngState.s = save.rng;
+    sim.nextPlayerId = save.nextPlayerId;
+    sim.nextEntityId = save.nextEntityId;
+    sim.worlds.overworld.loadChunks(save.worlds.overworld);
+    sim.worlds.nether.loadChunks(save.worlds.nether);
+    for (const f of save.furnaces) {
+      sim.furnaces.set(furnaceKey(f.dimension, f.x, f.y), structuredClone(f));
+    }
+    for (const c of save.chests ?? []) {
+      sim.chests.set(furnaceKey(c.dimension, c.x, c.y), structuredClone(c));
+    }
+    for (const dim of ["overworld", "nether"] as const) {
+      for (const pos of save.portals[dim]) {
+        sim.portals[dim].set(`${pos.x},${pos.y}`, { ...pos });
+      }
+    }
+    for (const e of save.entities) {
+      sim.entities.set(e.id, structuredClone(e));
+    }
+    // Players wait as "saved" until someone joins with their name.
+    for (const p of save.players) {
+      sim.savedPlayers.set(p.name, structuredClone(p));
+    }
+    return sim;
+  }
+
+  /** The overworld (kept for compatibility; use worldOf for others). */
+  get world(): World {
+    return this.worlds.overworld;
+  }
+
+  worldOf(dimension: Dimension): World {
+    return this.worlds[dimension];
   }
 
   /** Reserve a player id for a new connection (embedded or remote). */
@@ -35,58 +276,1569 @@ export class Simulation {
     return this.nextPlayerId++;
   }
 
-  /**
-   * Advance the world by exactly one tick, applying the given commands in
-   * order. Returns the events produced, for clients/transports to consume.
-   */
-  tick(commands: readonly PlayerCommand[]): SimEvent[] {
-    const events: SimEvent[] = [];
+  tick(commands: readonly PlayerCommand[]): OutboundEvent[] {
+    const out: OutboundEvent[] = [];
     for (const pc of commands) {
-      this.apply(pc, events);
+      this.apply(pc, out);
     }
-    // Entity/physics updates per tick will run here once implemented.
+    this.stepMining(out);
+    this.stepFurnaces(out);
+    this.stepEntities(out);
+    this.stepPlayers(out);
+    this.stepSpawning(out);
     this.tickCount++;
-    return events;
+    this.timeOfDay = (this.timeOfDay + 1) % DAY_LENGTH;
+    if (this.tickCount % 100 === 0) {
+      out.push({ event: { type: "time_changed", time: this.timeOfDay } });
+    }
+    return out;
   }
 
-  private apply({ player, command }: PlayerCommand, events: SimEvent[]): void {
+  /** Spawn an item lying in the world (block drops, mob loot, death drops). */
+  spawnItem(dimension: Dimension, x: number, y: number, stack: ItemStack, out: OutboundEvent[]): ItemEntity {
+    const entity: ItemEntity = {
+      id: this.nextEntityId++,
+      kind: "item",
+      dimension,
+      x,
+      y,
+      vx: (this.rng() - 0.5) * 0.15,
+      vy: -0.15,
+      onGround: false,
+      stack: { ...stack },
+      age: 0,
+      pickupDelay: ITEM_PICKUP_DELAY,
+    };
+    this.entities.set(entity.id, entity);
+    out.push({
+      event: { type: "entity_spawned", id: entity.id, kind: "item", dim: dimension, x, y, stack: { ...stack } },
+    });
+    return entity;
+  }
+
+  spawnMob(kind: MobKind, x: number, y: number, out: OutboundEvent[], dimension: Dimension = "overworld"): MobEntity {
+    const entity: MobEntity = {
+      id: this.nextEntityId++,
+      kind,
+      dimension,
+      x,
+      y,
+      vx: 0,
+      vy: 0,
+      onGround: false,
+      health: MOB_STATS[kind].health,
+      hurtCooldown: 0,
+      attackCooldown: 0,
+      wanderDir: 0,
+      wanderTimer: 0,
+    };
+    this.entities.set(entity.id, entity);
+    out.push({ event: { type: "entity_spawned", id: entity.id, kind, dim: dimension, x, y } });
+    return entity;
+  }
+
+  private removeEntity(id: EntityId, out: OutboundEvent[]): void {
+    if (this.entities.delete(id)) {
+      out.push({ event: { type: "entity_removed", id } });
+    }
+  }
+
+  private stepFurnaces(out: OutboundEvent[]): void {
+    for (const state of this.furnaces.values()) {
+      const changed = stepFurnace(state, RECIPES.values());
+      if (changed && (this.tickCount % 4 === 0 || furnaceIdle(state))) {
+        out.push({ event: this.furnaceEvent(state) });
+      }
+    }
+  }
+
+  private furnaceEvent(state: FurnaceState): SimEvent {
+    const recipe = state.input
+      ? [...RECIPES.values()].find((r) => r.kind === "smelting" && r.ingredients.has(state.input!.item))
+      : undefined;
+    return {
+      type: "furnace_changed",
+      dim: state.dimension,
+      x: state.x,
+      y: state.y,
+      input: state.input ? { ...state.input } : null,
+      fuel: state.fuel ? { ...state.fuel } : null,
+      output: state.output ? { ...state.output } : null,
+      burnLeft: state.burnLeft,
+      burnTotal: state.burnTotal,
+      cookProgress: state.cookProgress,
+      cookTotal: recipe?.cookingTime ?? DEFAULT_COOK_TICKS,
+    };
+  }
+
+  private stepMining(out: OutboundEvent[]): void {
+    for (const p of this.players.values()) {
+      const mining = p.mining;
+      if (!mining) continue;
+      const world = this.worldOf(p.dimension);
+
+      const clear = (): void => {
+        p.mining = null;
+        out.push({
+          event: { type: "mining_progress", player: p.id, x: mining.x, y: mining.y, progress: 0, total: 0 },
+        });
+      };
+
+      if (!this.withinReach(p.id, mining.x, mining.y)) {
+        clear();
+        continue;
+      }
+      const block = world.getBlockGenerating(mining.x, mining.y);
+      if (block === BlockId.Air || blockDef(block).hardness < 0) {
+        clear();
+        continue;
+      }
+
+      const held = p.inventory[p.selected] ?? null;
+      const total = miningTicks(block, held);
+      mining.progress++;
+
+      if (mining.progress < total) {
+        out.push({
+          event: {
+            type: "mining_progress",
+            player: p.id,
+            x: mining.x,
+            y: mining.y,
+            progress: mining.progress,
+            total,
+          },
+        });
+        continue;
+      }
+
+      clear();
+      if (world.setBlock(mining.x, mining.y, BlockId.Air)) {
+        out.push({
+          event: { type: "block_changed", dim: p.dimension, x: mining.x, y: mining.y, block: BlockId.Air },
+        });
+        if (block === BlockId.Furnace) {
+          const state = this.furnaces.get(furnaceKey(p.dimension, mining.x, mining.y));
+          if (state) {
+            for (const stack of [state.input, state.fuel, state.output]) {
+              if (stack) addToInventory(p.inventory, stack.item, stack.count);
+            }
+            this.furnaces.delete(furnaceKey(p.dimension, mining.x, mining.y));
+          }
+        }
+        if (block === BlockId.Chest) {
+          // Materialize structure loot before spilling.
+          const chest = this.ensureChest(p.dimension, mining.x, mining.y);
+          if (chest) {
+            // Contents spill out as item entities, like Minecraft.
+            for (const stack of chest.slots) {
+              if (stack) this.spawnItem(p.dimension, mining.x + 0.5, mining.y + 0.5, stack, out);
+            }
+            this.chests.delete(furnaceKey(p.dimension, mining.x, mining.y));
+          }
+        }
+        if (canHarvest(block, held)) {
+          // Gravel sometimes yields flint instead, like Minecraft.
+          const drops =
+            block === BlockId.Gravel && this.rng() < 0.25
+              ? { item: "flint", count: 1 }
+              : blockDrops(block);
+          if (drops) {
+            this.spawnItem(p.dimension, mining.x + 0.5, mining.y + 0.75, drops, out);
+          }
+        }
+        this.syncInventory(p, out);
+      }
+    }
+  }
+
+  private stepEntities(out: OutboundEvent[]): void {
+    for (const entity of [...this.entities.values()]) {
+      const prevX = entity.x;
+      const prevY = entity.y;
+      const size = ENTITY_SIZES[entity.kind];
+      const world = this.worldOf(entity.dimension);
+
+      if (entity.kind === "item") {
+        entity.age++;
+        if (entity.pickupDelay > 0) entity.pickupDelay--;
+        if (entity.age >= ITEM_DESPAWN_TICKS) {
+          this.removeEntity(entity.id, out);
+          continue;
+        }
+        // Items burn up in lava.
+        if (world.getBlockGenerating(Math.floor(entity.x), Math.floor(entity.y - 0.1)) === BlockId.Lava) {
+          this.removeEntity(entity.id, out);
+          continue;
+        }
+        entity.vx *= 0.85;
+        if (Math.abs(entity.vx) < 0.005) entity.vx = 0;
+        entity.vy = Math.min(entity.vy + GRAVITY, TERMINAL_VELOCITY);
+        stepBody(world, entity, size.width, size.height);
+        if (entity.pickupDelay === 0) {
+          const taker = this.playerNearBox(entity.dimension, entity.x, entity.y - size.height / 2, ITEM_PICKUP_RADIUS);
+          if (taker) {
+            const leftover = addToInventory(taker.inventory, entity.stack.item, entity.stack.count);
+            if (leftover === 0) {
+              this.removeEntity(entity.id, out);
+            } else {
+              entity.stack = { item: entity.stack.item, count: leftover };
+            }
+            this.syncInventory(taker, out);
+          }
+        }
+      } else if (entity.kind === "arrow") {
+        entity.ttl--;
+        if (entity.ttl <= 0) {
+          this.removeEntity(entity.id, out);
+          continue;
+        }
+        entity.vy = Math.min(entity.vy + GRAVITY * 0.6, TERMINAL_VELOCITY);
+        const beforeVx = entity.vx;
+        stepBody(world, entity, size.width, size.height);
+        // Stuck in a wall or floor: gone.
+        if ((beforeVx !== 0 && entity.vx === 0) || entity.onGround) {
+          this.removeEntity(entity.id, out);
+          continue;
+        }
+        if (entity.owner !== undefined) {
+          // Player-shot arrows hit mobs, not players.
+          const mob = this.mobNear(entity.dimension, entity.x, entity.y, 0.3);
+          if (mob) {
+            mob.hurtCooldown = 0; // arrows always connect
+            this.hurtMob(mob, entity.damage, out, entity.x - entity.vx * 5);
+            this.removeEntity(entity.id, out);
+            continue;
+          }
+        } else {
+          const hit = this.playerNearBox(entity.dimension, entity.x, entity.y, 0.3);
+          if (hit) {
+            this.hurtPlayer(hit, entity.damage, out, entity.x - entity.vx * 5);
+            this.removeEntity(entity.id, out);
+            continue;
+          }
+        }
+        if (entity.x !== prevX || entity.y !== prevY) {
+          out.push({ event: { type: "entity_moved", id: entity.id, x: entity.x, y: entity.y } });
+        }
+        continue;
+      } else {
+        if (entity.hurtCooldown > 0) entity.hurtCooldown--;
+        if (entity.attackCooldown > 0) entity.attackCooldown--;
+
+        // Lava hurts mobs too.
+        if (world.getBlockGenerating(Math.floor(entity.x), Math.floor(entity.y - 0.1)) === BlockId.Lava) {
+          this.hurtMob(entity, 2, out);
+          if (!this.entities.has(entity.id)) continue;
+        }
+
+        // Daylight burning for undead (not in the nether).
+        if (
+          BURNING_MOBS.includes(entity.kind) &&
+          entity.dimension === "overworld" &&
+          this.tickCount % 40 === 0 &&
+          daylightFactor(this.timeOfDay) > 0.5 &&
+          entity.y <= surfaceHeight(world.seed, Math.floor(entity.x))
+        ) {
+          this.hurtMob(entity, 1, out);
+          if (!this.entities.has(entity.id)) continue;
+        }
+
+        let dir: -1 | 0 | 1 = 0;
+        const target = this.nearestPlayer(entity.dimension, entity.x, entity.y);
+        const inRange =
+          target !== null &&
+          Math.abs(target.p.x - entity.x) <= ZOMBIE_FOLLOW_RANGE &&
+          target.dist <= ZOMBIE_FOLLOW_RANGE * 1.5;
+
+        if (MELEE_MOBS.includes(entity.kind)) {
+          if (target && inRange) {
+            const dx = target.p.x - entity.x;
+            dir = Math.abs(dx) > 0.4 ? (dx > 0 ? 1 : -1) : 0;
+            if (entity.attackCooldown === 0 && this.entityTouchesPlayer(entity, target.p)) {
+              entity.attackCooldown = ZOMBIE_ATTACK_COOLDOWN;
+              this.hurtPlayer(target.p, ZOMBIE_DAMAGE, out, entity.x);
+            }
+          }
+        } else if (entity.kind === "skeleton") {
+          if (target && target.dist <= SKELETON_RANGE + 2) {
+            const dx = target.p.x - entity.x;
+            // Kite: back off when close, approach when far.
+            dir = target.dist < 5 ? (dx > 0 ? -1 : 1) : target.dist > 9 ? (dx > 0 ? 1 : -1) : 0;
+            if (entity.attackCooldown === 0 && target.dist <= SKELETON_RANGE) {
+              entity.attackCooldown = SKELETON_SHOOT_COOLDOWN;
+              this.shootArrow(entity, target.p, out);
+            }
+          }
+        } else if (entity.kind === "creeper") {
+          if (entity.fuse !== undefined && entity.fuse >= 0) {
+            // Hissing: stand still and count down.
+            entity.fuse--;
+            if (entity.fuse < 0) {
+              this.explode(entity, out);
+              continue;
+            }
+          } else if (target && inRange) {
+            const dx = target.p.x - entity.x;
+            dir = Math.abs(dx) > 0.4 ? (dx > 0 ? 1 : -1) : 0;
+            if (target.dist <= CREEPER_TRIGGER_RANGE) {
+              entity.fuse = CREEPER_FUSE;
+            }
+          }
+        } else if (WANDERING_MOBS.includes(entity.kind)) {
+          entity.wanderTimer--;
+          if (entity.wanderTimer <= 0) {
+            const roll = this.rng();
+            entity.wanderDir = roll < 0.4 ? 0 : roll < 0.7 ? 1 : -1;
+            entity.wanderTimer = 40 + Math.floor(this.rng() * 80);
+          }
+          dir = entity.wanderDir;
+        }
+
+        entity.vx = dir * MOB_STATS[entity.kind].speed;
+        if (world.getBlockGenerating(Math.floor(entity.x), Math.floor(entity.y)) === BlockId.SoulSand) {
+          entity.vx *= 0.4;
+        }
+        entity.vy = Math.min(entity.vy + GRAVITY, TERMINAL_VELOCITY);
+        stepBody(world, entity, size.width, size.height);
+        if (dir !== 0 && entity.vx === 0 && entity.onGround) {
+          entity.vy = JUMP_VELOCITY;
+        }
+
+        const nearest = this.nearestPlayer(entity.dimension, entity.x, entity.y);
+        if (!nearest || nearest.dist > MOB_DESPAWN_RANGE) {
+          this.removeEntity(entity.id, out);
+          continue;
+        }
+      }
+
+      if (entity.x !== prevX || entity.y !== prevY) {
+        out.push({ event: { type: "entity_moved", id: entity.id, x: entity.x, y: entity.y } });
+      }
+    }
+  }
+
+  private stepSpawning(out: OutboundEvent[]): void {
+    if (this.tickCount % 50 !== 0 || this.players.size === 0) return;
+    let mobCount = 0;
+    for (const e of this.entities.values()) {
+      if (e.kind !== "item") mobCount++;
+    }
+    if (mobCount >= MOB_CAP) return;
+
+    const players = [...this.players.values()];
+    const anchor = players[Math.floor(this.rng() * players.length)]!;
+    const world = this.worldOf(anchor.dimension);
+    const offset = 12 + Math.floor(this.rng() * 20);
+    const x = Math.floor(anchor.x) + (this.rng() < 0.5 ? -offset : offset);
+
+    const pickMob = (kinds: readonly MobKind[]): MobKind =>
+      kinds[Math.floor(this.rng() * kinds.length)]!;
+
+    const spawnInPocket = (yStart: number, yEnd: number, kind: MobKind): boolean => {
+      for (let y = yStart; y < yEnd; y++) {
+        const feetFree = world.getBlockGenerating(x, y - 1) === BlockId.Air;
+        const headFree = world.getBlockGenerating(x, y - 2) === BlockId.Air;
+        const floorSolid = blockDef(world.getBlockGenerating(x, y)).solid;
+        if (feetFree && headFree && floorSolid) {
+          this.spawnMob(kind, x + 0.5, y, out, anchor.dimension);
+          return true;
+        }
+      }
+      return false;
+    };
+
+    // Villagers move into houses: if a house stands near the player and
+    // has no villager around, one appears.
+    if (anchor.dimension === "overworld" && this.tickCount % 200 === 0) {
+      const pcx = Math.floor(anchor.x / CHUNK_WIDTH);
+      for (let cx = pcx - 2; cx <= pcx + 2; cx++) {
+        for (let cy = -2; cy <= 3; cy++) {
+          for (const placement of placementsNear(world.seed, "overworld", cx, cy)) {
+            if (placement.structure.id !== "house") continue;
+            const homeX = placement.originX + 3.5;
+            const homeY = placement.originY + 4;
+            let occupied = false;
+            for (const e of this.entities.values()) {
+              if (e.kind === "villager" && Math.abs(e.x - homeX) < 20) occupied = true;
+            }
+            if (!occupied) {
+              this.spawnMob("villager", homeX, homeY, out);
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    if (anchor.dimension === "nether") {
+      const yStart = 10 + Math.floor(this.rng() * 50);
+      spawnInPocket(yStart, yStart + 16, "zombified_piglin");
+      return;
+    }
+
+    const surface = surfaceHeight(world.seed, x);
+    const night = isNight(this.timeOfDay);
+    const hostiles: readonly MobKind[] = ["zombie", "zombie", "skeleton", "creeper"];
+    if (this.rng() < 0.5) {
+      if (night) {
+        // At night, hostile mobs rise on the surface instead of animals.
+        const kind = pickMob(hostiles);
+        const feetFree = world.getBlockGenerating(x, surface - 1) === BlockId.Air;
+        const headFree = world.getBlockGenerating(x, surface - 2) === BlockId.Air;
+        if (feetFree && headFree && blockDef(world.getBlockGenerating(x, surface)).solid) {
+          this.spawnMob(kind, x + 0.5, surface, out);
+        }
+        return;
+      }
+      if (world.getBlockGenerating(x, surface) !== BlockId.Grass) return;
+      const biome = biomeAt(world.seed, x);
+      if (biome !== Biome.Plains && biome !== Biome.Forest) return;
+      this.spawnMob(pickMob(PASSIVE_MOBS), x + 0.5, surface, out);
+    } else {
+      const yStart = surface + 6 + Math.floor(this.rng() * 40);
+      spawnInPocket(yStart, yStart + 12, pickMob(hostiles));
+    }
+  }
+
+  private stepPlayers(out: OutboundEvent[]): void {
+    for (const p of this.players.values()) {
+      const prevX = p.x;
+      const prevY = p.y;
+      const wasOnGround = p.onGround;
+      const world = this.worldOf(p.dimension);
+
+      if (p.hurtCooldown > 0) p.hurtCooldown--;
+      if (p.attackCooldown > 0) p.attackCooldown--;
+
+      // Potion effects tick down; expiry syncs the client.
+      let effectsChanged = false;
+      for (const key of Object.keys(p.effects)) {
+        p.effects[key]!--;
+        if (p.effects[key]! <= 0) {
+          delete p.effects[key];
+          effectsChanged = true;
+        }
+      }
+      if (effectsChanged) {
+        out.push({ to: p.id, event: { type: "player_effects", player: p.id, effects: { ...p.effects } } });
+      }
+      if (p.effects["regeneration"] !== undefined && this.tickCount % REGEN_EFFECT_INTERVAL === 0 && p.health < PLAYER_MAX_HEALTH) {
+        p.health++;
+        out.push({ event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
+      }
+
+      const speedFactor = p.effects["speed"] !== undefined ? SPEED_MULTIPLIER : 1;
+      p.vx = p.input.dx * WALK_SPEED * speedFactor + p.kbX;
+      p.kbX *= 0.6;
+      if (Math.abs(p.kbX) < 0.01) p.kbX = 0;
+      if (world.getBlockGenerating(Math.floor(p.x), Math.floor(p.y)) === BlockId.SoulSand) {
+        p.vx *= 0.4;
+      }
+      if (p.input.jump && p.onGround) {
+        p.vy = JUMP_VELOCITY;
+        p.exhaustion += EXHAUST_JUMP;
+      }
+      p.vy = Math.min(p.vy + GRAVITY, TERMINAL_VELOCITY);
+
+      // Elytra gliding: hold jump while falling with wings in the
+      // inventory - slow descent, fast horizontal travel, no fall damage.
+      if (
+        !p.onGround &&
+        p.input.jump &&
+        p.vy > 0 &&
+        p.inventory.some((s) => s?.item === "elytra")
+      ) {
+        p.vy = Math.min(p.vy, ELYTRA_SINK);
+        p.vx = p.input.dx * WALK_SPEED * ELYTRA_GLIDE_BOOST * speedFactor + p.kbX;
+        p.fallDistance = 0;
+      }
+      stepBody(world, p, PLAYER_WIDTH, PLAYER_HEIGHT);
+
+      // Fall damage: accumulate while falling, apply on landing.
+      if (p.y > prevY) {
+        p.fallDistance += p.y - prevY;
+      } else if (p.vy < 0) {
+        p.fallDistance = 0;
+      }
+      if (p.onGround && !wasOnGround) {
+        const excess = Math.floor(p.fallDistance - SAFE_FALL_TILES);
+        p.fallDistance = 0;
+        if (excess > 0) {
+          p.hurtCooldown = 0;
+          this.hurtPlayer(p, excess, out);
+        }
+      }
+
+      // Lava.
+      if (world.getBlockGenerating(Math.floor(p.x), Math.floor(p.y - 0.5)) === BlockId.Lava) {
+        this.hurtPlayer(p, 2, out);
+      }
+
+      // Nether portals: standing next to one counts (2D adaptation).
+      const inPortal = nearPortal(world, p.x, p.y - 0.9);
+      if (inPortal) {
+        if (p.portalCooldown === 0) {
+          p.portalTicks++;
+          if (p.portalTicks >= PORTAL_TICKS) {
+            this.teleportThroughPortal(p, out);
+          }
+        }
+      } else {
+        p.portalTicks = 0;
+        if (p.portalCooldown > 0) p.portalCooldown--;
+      }
+
+      // Hunger: activity accumulates exhaustion, which drains the bar.
+      if (p.input.dx !== 0) p.exhaustion += EXHAUST_WALK;
+      if (p.mining) p.exhaustion += EXHAUST_MINE;
+      if (p.exhaustion >= EXHAUSTION_PER_POINT) {
+        p.exhaustion -= EXHAUSTION_PER_POINT;
+        if (p.hunger > 0) {
+          p.hunger--;
+          out.push({ to: p.id, event: { type: "player_hunger", player: p.id, hunger: p.hunger, max: PLAYER_MAX_HUNGER } });
+        }
+      }
+
+      // Passive regeneration - only on a nearly full hunger bar, and
+      // regenerating makes you hungrier (like Minecraft).
+      if (
+        this.tickCount % REGEN_INTERVAL_TICKS === 0 &&
+        p.health > 0 &&
+        p.health < PLAYER_MAX_HEALTH &&
+        p.hunger >= HUNGER_REGEN_MIN
+      ) {
+        p.health++;
+        p.exhaustion += EXHAUST_REGEN;
+        out.push({ event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
+      }
+
+      // Starving: an empty bar wears you down to 1 HP (never kills).
+      if (
+        p.hunger === 0 &&
+        this.tickCount % STARVE_INTERVAL_TICKS === 0 &&
+        p.health > STARVE_MIN_HEALTH
+      ) {
+        this.hurtPlayer(p, 1, out);
+      }
+
+      if (p.x !== prevX || p.y !== prevY) {
+        out.push({ event: { type: "player_moved", player: p.id, x: p.x, y: p.y } });
+      }
+    }
+  }
+
+  private teleportThroughPortal(p: PlayerState, out: OutboundEvent[]): void {
+    const targetDim: Dimension = p.dimension === "overworld" ? "nether" : "overworld";
+    const targetWorld = this.worldOf(targetDim);
+    const xt = Math.round(p.dimension === "overworld" ? p.x / NETHER_SCALE : p.x * NETHER_SCALE);
+
+    // Reuse a known portal nearby, otherwise build one.
+    let arrival: { x: number; y: number } | null = null;
+    for (const pos of this.portals[targetDim].values()) {
+      if (Math.abs(pos.x - xt) <= 16 && (!arrival || Math.abs(pos.x - xt) < Math.abs(arrival.x - xt))) {
+        arrival = pos;
+      }
+    }
+    if (!arrival) {
+      let by: number;
+      if (targetDim === "nether") {
+        // Find open floor space in the nether band, else carve at y=40.
+        by = 40;
+        for (let y = 10; y < LAVA_LEVEL - 4; y++) {
+          const floorSolid = blockDef(targetWorld.getBlockGenerating(xt, y + 1)).solid;
+          const space =
+            targetWorld.getBlockGenerating(xt, y) === BlockId.Air &&
+            targetWorld.getBlockGenerating(xt, y - 1) === BlockId.Air;
+          if (floorSolid && space) {
+            by = y;
+            break;
+          }
+        }
+      } else {
+        by = surfaceHeight(targetWorld.seed, xt) - 1;
+      }
+      const changes = buildPortal(targetWorld, xt, by);
+      for (const c of changes) {
+        out.push({ event: { type: "block_changed", dim: targetDim, x: c.x, y: c.y, block: c.block } });
+      }
+      arrival = { x: xt, y: by };
+      this.portals[targetDim].set(`${xt},${by}`, arrival);
+    }
+
+    p.dimension = targetDim;
+    // Arrive beside the frame (in 2D the interior is walled off).
+    p.x = arrival.x - 2.5;
+    p.y = arrival.y + 1;
+    p.vx = 0;
+    p.vy = 0;
+    p.kbX = 0;
+    p.fallDistance = 0;
+    p.portalTicks = 0;
+    p.portalCooldown = PORTAL_COOLDOWN;
+    p.mining = null;
+    out.push({ event: { type: "player_dimension", player: p.id, dim: targetDim, x: p.x, y: p.y } });
+  }
+
+  private hurtMob(entity: MobEntity, amount: number, out: OutboundEvent[], fromX?: number): void {
+    if (amount <= 0 || entity.hurtCooldown > 0) return;
+    entity.hurtCooldown = HURT_COOLDOWN_TICKS;
+    entity.health -= amount;
+    if (fromX !== undefined) {
+      entity.vx += (entity.x >= fromX ? 1 : -1) * 0.3;
+      entity.vy = Math.min(entity.vy, -0.2);
+    }
+    if (entity.health > 0) {
+      out.push({ event: { type: "entity_hurt", id: entity.id, health: entity.health } });
+      return;
+    }
+    for (const loot of MOB_LOOT[entity.kind] ?? []) {
+      const roll = this.rng();
+      const countRoll = this.rng();
+      if (roll < loot.chance) {
+        const count = 1 + Math.floor(countRoll * loot.max);
+        this.spawnItem(entity.dimension, entity.x, entity.y - 0.5, { item: loot.item, count }, out);
+      }
+    }
+    this.removeEntity(entity.id, out);
+  }
+
+  private shootArrow(from: MobEntity, target: PlayerState, out: OutboundEvent[]): void {
+    const originY = from.y - ENTITY_SIZES[from.kind].height * 0.75;
+    const dx = target.x - from.x;
+    const dy = target.y - PLAYER_HEIGHT / 2 - originY;
+    const dist = Math.max(1, Math.hypot(dx, dy));
+    const arrow: ArrowEntity = {
+      id: this.nextEntityId++,
+      kind: "arrow",
+      dimension: from.dimension,
+      x: from.x + Math.sign(dx) * 0.5,
+      y: originY,
+      vx: (dx / dist) * 0.6,
+      // Arc the shot slightly upward for the travel time.
+      vy: (dy / dist) * 0.6 - dist * 0.015,
+      onGround: false,
+      damage: ARROW_DAMAGE,
+      ttl: ARROW_TTL,
+    };
+    this.entities.set(arrow.id, arrow);
+    out.push({
+      event: { type: "entity_spawned", id: arrow.id, kind: "arrow", dim: arrow.dimension, x: arrow.x, y: arrow.y },
+    });
+  }
+
+  private explode(creeper: MobEntity, out: OutboundEvent[]): void {
+    const world = this.worldOf(creeper.dimension);
+    const cx = creeper.x;
+    const cy = creeper.y - ENTITY_SIZES.creeper.height / 2;
+    this.removeEntity(creeper.id, out);
+
+    // Blast a crater (tough blocks survive; nothing drops).
+    const r = EXPLOSION_BLOCK_RADIUS;
+    for (let ty = Math.floor(cy - r); ty <= Math.floor(cy + r); ty++) {
+      for (let tx = Math.floor(cx - r); tx <= Math.floor(cx + r); tx++) {
+        if (Math.hypot(tx + 0.5 - cx, ty + 0.5 - cy) > r) continue;
+        const block = world.getBlockGenerating(tx, ty);
+        const def = blockDef(block);
+        if (block === BlockId.Air || def.hardness < 0 || def.hardness >= 100) continue;
+        world.setBlock(tx, ty, BlockId.Air);
+        out.push({ event: { type: "block_changed", dim: creeper.dimension, x: tx, y: ty, block: BlockId.Air } });
+      }
+    }
+
+    // Hurt anything nearby, scaled by distance.
+    for (const p of this.players.values()) {
+      if (p.dimension !== creeper.dimension) continue;
+      const dist = Math.hypot(p.x - cx, p.y - PLAYER_HEIGHT / 2 - cy);
+      if (dist > EXPLOSION_DAMAGE_RADIUS) continue;
+      p.hurtCooldown = 0; // explosions pierce invulnerability frames
+      this.hurtPlayer(p, Math.round(EXPLOSION_MAX_DAMAGE * (1 - dist / EXPLOSION_DAMAGE_RADIUS)), out, cx);
+    }
+    for (const other of this.entities.values()) {
+      if (other.kind === "item" || other.kind === "arrow") continue;
+      if (other.dimension !== creeper.dimension) continue;
+      const dist = Math.hypot(other.x - cx, other.y - cy);
+      if (dist > EXPLOSION_DAMAGE_RADIUS) continue;
+      other.hurtCooldown = 0;
+      this.hurtMob(other, Math.round(EXPLOSION_MAX_DAMAGE * (1 - dist / EXPLOSION_DAMAGE_RADIUS)), out, cx);
+    }
+  }
+
+  private nearestPlayer(dimension: Dimension, x: number, y: number): { p: PlayerState; dist: number } | null {
+    let best: { p: PlayerState; dist: number } | null = null;
+    for (const p of this.players.values()) {
+      if (p.dimension !== dimension) continue;
+      const dist = Math.hypot(p.x - x, p.y - PLAYER_HEIGHT / 2 - y);
+      if (!best || dist < best.dist) best = { p, dist };
+    }
+    return best;
+  }
+
+  /** Mob whose AABB (expanded by radius) contains the point. */
+  private mobNear(dimension: Dimension, x: number, y: number, radius: number): MobEntity | null {
+    for (const entity of this.entities.values()) {
+      if (entity.kind === "item" || entity.kind === "arrow") continue;
+      if (entity.dimension !== dimension) continue;
+      const size = ENTITY_SIZES[entity.kind];
+      const dx = Math.max(0, Math.abs(x - entity.x) - size.width / 2);
+      const top = entity.y - size.height;
+      const dy = y < top ? top - y : y > entity.y ? y - entity.y : 0;
+      if (Math.hypot(dx, dy) <= radius) return entity;
+    }
+    return null;
+  }
+
+  /** Player whose AABB (expanded by radius) contains the point. */
+  private playerNearBox(dimension: Dimension, x: number, y: number, radius: number): PlayerState | null {
+    for (const p of this.players.values()) {
+      if (p.dimension !== dimension) continue;
+      const dx = Math.max(0, Math.abs(x - p.x) - PLAYER_WIDTH / 2);
+      const top = p.y - PLAYER_HEIGHT;
+      const dy = y < top ? top - y : y > p.y ? y - p.y : 0;
+      if (Math.hypot(dx, dy) <= radius) return p;
+    }
+    return null;
+  }
+
+  private entityTouchesPlayer(entity: MobEntity, p: PlayerState): boolean {
+    const size = ENTITY_SIZES[entity.kind];
+    const overlapsX = Math.abs(entity.x - p.x) < (size.width + PLAYER_WIDTH) / 2 + 0.2;
+    const overlapsY = entity.y > p.y - PLAYER_HEIGHT - 0.2 && entity.y - size.height < p.y + 0.2;
+    return overlapsX && overlapsY;
+  }
+
+  private hurtPlayer(p: PlayerState, amount: number, out: OutboundEvent[], fromX?: number): void {
+    if (amount <= 0 || p.hurtCooldown > 0) return;
+    p.hurtCooldown = HURT_COOLDOWN_TICKS;
+    p.health -= amount;
+    if (fromX !== undefined) {
+      p.kbX = (p.x >= fromX ? 1 : -1) * 0.35;
+      p.vy = Math.min(p.vy, -0.2);
+    }
+    if (p.health <= 0) {
+      // Death: drop the inventory (and grid/cursor) as item entities,
+      // respawn at the overworld spawn.
+      this.dumpGridAndCursor(p);
+      for (let i = 0; i < p.inventory.length; i++) {
+        const stack = p.inventory[i];
+        if (stack) {
+          this.spawnItem(p.dimension, p.x, p.y - 1, stack, out);
+          p.inventory[i] = null;
+        }
+      }
+      const fromDim = p.dimension;
+      const spawnX = findSpawnX(this.world.seed);
+      p.dimension = "overworld";
+      p.x = spawnX + 0.5;
+      p.y = surfaceHeight(this.world.seed, spawnX);
+      p.vx = 0;
+      p.vy = 0;
+      p.kbX = 0;
+      p.fallDistance = 0;
+      p.health = PLAYER_MAX_HEALTH;
+      p.hunger = PLAYER_MAX_HUNGER;
+      p.exhaustion = 0;
+      p.mining = null;
+      p.portalTicks = 0;
+      p.portalCooldown = 0;
+      out.push({ to: p.id, event: { type: "player_hunger", player: p.id, hunger: p.hunger, max: PLAYER_MAX_HUNGER } });
+      if (fromDim !== "overworld") {
+        out.push({ event: { type: "player_dimension", player: p.id, dim: "overworld", x: p.x, y: p.y } });
+      } else {
+        out.push({ event: { type: "player_moved", player: p.id, x: p.x, y: p.y } });
+      }
+      this.syncInventory(p, out);
+    }
+    out.push({ event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
+  }
+
+  private syncInventory(p: PlayerState, out: OutboundEvent[]): void {
+    out.push({
+      to: p.id,
+      event: {
+        type: "inventory_changed",
+        player: p.id,
+        slots: cloneInventory(p.inventory),
+        selected: p.selected,
+        cursor: p.cursor ? { ...p.cursor } : null,
+        craftGrid: cloneInventory(p.craftGrid),
+      },
+    });
+  }
+
+  private apply({ player, command }: PlayerCommand, out: OutboundEvent[]): void {
+    const broadcast = (event: SimEvent): void => {
+      out.push({ event });
+    };
+    const reply = (event: SimEvent): void => {
+      out.push({ to: player, event });
+    };
+    const reject = (reason: string): void => {
+      reply({ type: "command_rejected", player, reason });
+    };
+    const syncInventory = (p: PlayerState): void => {
+      this.syncInventory(p, out);
+    };
+
     switch (command.type) {
       case "join": {
-        const state: PlayerState = { id: player, name: command.name, x: 0, y: 0 };
+        // One live player per name (names are identity for saves/rejoins).
+        if ([...this.players.values()].some((p) => p.name === command.name)) {
+          reject("name already in use");
+          break;
+        }
+        // Tell the joiner who is already in the world.
+        const replayPlayers = (): void => {
+          for (const other of this.players.values()) {
+            if (other.id === player) continue;
+            reply({
+              type: "player_joined",
+              player: other.id,
+              name: other.name,
+              x: other.x,
+              y: other.y,
+              dim: other.dimension,
+            });
+          }
+        };
+        // A returning player (same name) picks up exactly where they left.
+        const saved = this.savedPlayers.get(command.name);
+        if (saved) {
+          this.savedPlayers.delete(command.name);
+          const state: PlayerState = { ...structuredClone(saved), id: player };
+          // Pre-hunger saves lack these fields; default them on adoption.
+          state.hunger = Number.isFinite(state.hunger) ? state.hunger : PLAYER_MAX_HUNGER;
+          state.exhaustion = Number.isFinite(state.exhaustion) ? state.exhaustion : 0;
+          this.players.set(player, state);
+          broadcast({
+            type: "player_joined",
+            player,
+            name: state.name,
+            x: state.x,
+            y: state.y,
+            dim: state.dimension,
+          });
+          this.syncInventory(state, out);
+          reply({ type: "player_health", player, health: state.health, max: PLAYER_MAX_HEALTH });
+          reply({ type: "player_hunger", player, hunger: state.hunger, max: PLAYER_MAX_HUNGER });
+          reply({ type: "time_changed", time: this.timeOfDay });
+          reply({ type: "player_dimension", player, dim: state.dimension, x: state.x, y: state.y });
+          replayPlayers();
+          for (const entity of this.entities.values()) {
+            reply({
+              type: "entity_spawned",
+              id: entity.id,
+              kind: entity.kind,
+              dim: entity.dimension,
+              x: entity.x,
+              y: entity.y,
+              ...(entity.kind === "item" ? { stack: { ...entity.stack } } : {}),
+            });
+          }
+          break;
+        }
+        const spawnX = findSpawnX(this.world.seed);
+        const x = spawnX + 0.5;
+        const y = surfaceHeight(this.world.seed, spawnX);
+        const state: PlayerState = {
+          id: player,
+          name: command.name,
+          dimension: "overworld",
+          x,
+          y,
+          vx: 0,
+          vy: 0,
+          onGround: false,
+          input: { dx: 0, jump: false },
+          inventory: createInventory(),
+          selected: 0,
+          cursor: null,
+          craftGrid: new Array<ItemStack | null>(CRAFT_GRID_SIZE).fill(null),
+          mining: null,
+          health: PLAYER_MAX_HEALTH,
+          hunger: PLAYER_MAX_HUNGER,
+          exhaustion: 0,
+          hurtCooldown: 0,
+          attackCooldown: 0,
+          kbX: 0,
+          fallDistance: 0,
+          effects: {},
+          portalTicks: 0,
+          portalCooldown: 0,
+        };
         this.players.set(player, state);
-        events.push({ type: "player_joined", player, name: state.name, x: state.x, y: state.y });
+        broadcast({ type: "player_joined", player, name: state.name, x, y, dim: "overworld" });
+        syncInventory(state);
+        reply({ type: "player_health", player, health: state.health, max: PLAYER_MAX_HEALTH });
+        reply({ type: "player_hunger", player, hunger: state.hunger, max: PLAYER_MAX_HUNGER });
+        reply({ type: "time_changed", time: this.timeOfDay });
+        replayPlayers();
+        for (const entity of this.entities.values()) {
+          reply({
+            type: "entity_spawned",
+            id: entity.id,
+            kind: entity.kind,
+            dim: entity.dimension,
+            x: entity.x,
+            y: entity.y,
+            ...(entity.kind === "item" ? { stack: { ...entity.stack } } : {}),
+          });
+        }
         break;
       }
       case "leave": {
-        if (this.players.delete(player)) {
-          events.push({ type: "player_left", player });
+        const p = this.players.get(player);
+        if (p && this.players.delete(player)) {
+          // Keep the state for a future rejoin (and for saves).
+          this.savedPlayers.set(p.name, p);
+          broadcast({ type: "player_left", player });
         }
         break;
       }
-      case "break_block": {
-        const current = this.world.getBlock(command.x, command.y);
-        if (current === BlockId.Air || blockDef(current).hardness < 0) {
-          events.push({ type: "command_rejected", player, reason: "cannot break block" });
+      case "move": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
           break;
         }
-        if (this.world.setBlock(command.x, command.y, BlockId.Air)) {
-          events.push({ type: "block_changed", x: command.x, y: command.y, block: BlockId.Air });
+        if (![-1, 0, 1].includes(command.dx) || typeof command.jump !== "boolean") {
+          reject("invalid input");
+          break;
         }
+        p.input = { dx: command.dx, jump: command.jump };
+        break;
+      }
+      case "select_slot": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        if (!Number.isInteger(command.index) || command.index < 0 || command.index >= HOTBAR_SIZE) {
+          reject("invalid slot");
+          break;
+        }
+        p.selected = command.index;
+        syncInventory(p);
+        break;
+      }
+      case "craft": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        const recipe = RECIPES.get(command.recipe);
+        if (!recipe || recipe.kind === "smelting") {
+          reject("unknown recipe");
+          break;
+        }
+        if (recipe.kind === "brewing" && !this.blockNearby(p, BlockId.BrewingStand)) {
+          reject("requires brewing stand");
+          break;
+        }
+        if (recipe.kind === "crafting" && recipe.gridSize === 3 && !this.blockNearby(p, BlockId.CraftingTable)) {
+          reject("requires crafting table");
+          break;
+        }
+        for (const [item, count] of recipe.ingredients) {
+          if (countInInventory(p.inventory, item) < count) {
+            reject("missing ingredients");
+            return;
+          }
+        }
+        for (const [item, count] of recipe.ingredients) {
+          removeFromInventory(p.inventory, item, count);
+        }
+        addToInventory(p.inventory, recipe.result.item, recipe.result.count);
+        syncInventory(p);
+        break;
+      }
+      case "slot_click": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        if (command.button !== "left" && command.button !== "right") {
+          reject("invalid button");
+          break;
+        }
+        this.applySlotClick(p, command.slot, command.button, reject, broadcast);
+        syncInventory(p);
+        break;
+      }
+      case "return_grid": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        this.dumpGridAndCursor(p);
+        syncInventory(p);
+        break;
+      }
+      case "open_furnace": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        const { x, y } = command;
+        if (!Number.isInteger(x) || !Number.isInteger(y) || !this.withinReach(player, x, y)) {
+          reject("out of reach");
+          break;
+        }
+        if (this.worldOf(p.dimension).getBlockGenerating(x, y) !== BlockId.Furnace) {
+          reject("no furnace there");
+          break;
+        }
+        let state = this.furnaces.get(furnaceKey(p.dimension, x, y));
+        if (!state) {
+          state = createFurnace(p.dimension, x, y);
+          this.furnaces.set(furnaceKey(p.dimension, x, y), state);
+        }
+        reply(this.furnaceEvent(state));
+        break;
+      }
+      case "open_chest": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        const { x, y } = command;
+        if (!Number.isInteger(x) || !Number.isInteger(y) || !this.withinReach(player, x, y)) {
+          reject("out of reach");
+          break;
+        }
+        if (this.worldOf(p.dimension).getBlockGenerating(x, y) !== BlockId.Chest) {
+          reject("no chest there");
+          break;
+        }
+        const chest = this.ensureChest(p.dimension, x, y);
+        reply({ type: "chest_changed", dim: p.dimension, x, y, slots: cloneInventory(chest.slots) });
+        break;
+      }
+      case "request_chunk": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        const { cx, cy } = command;
+        if (
+          !Number.isInteger(cx) ||
+          !Number.isInteger(cy) ||
+          Math.abs(cx) > MAX_CHUNK_COORD ||
+          Math.abs(cy) > MAX_CHUNK_COORD
+        ) {
+          reject("invalid chunk coordinates");
+          break;
+        }
+        const chunk = this.worldOf(p.dimension).ensureChunk(cx, cy);
+        reply({
+          type: "chunk_data",
+          dim: p.dimension,
+          cx,
+          cy,
+          tiles: Array.from(chunk.tiles),
+          walls: Array.from(chunk.walls),
+        });
+        break;
+      }
+      case "start_mining": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        const { x, y } = command;
+        if (!Number.isInteger(x) || !Number.isInteger(y)) {
+          reject("invalid coordinates");
+          break;
+        }
+        if (!this.withinReach(player, x, y)) {
+          reject("out of reach");
+          break;
+        }
+        const current = this.worldOf(p.dimension).getBlockGenerating(x, y);
+        if (current === BlockId.Air || blockDef(current).hardness < 0) {
+          reject("cannot mine");
+          break;
+        }
+        p.mining = { x, y, progress: 0 };
+        break;
+      }
+      case "stop_mining": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        if (p.mining) {
+          const { x, y } = p.mining;
+          p.mining = null;
+          broadcast({ type: "mining_progress", player, x, y, progress: 0, total: 0 });
+        }
+        break;
+      }
+      case "attack": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        if (p.attackCooldown > 0) {
+          break;
+        }
+        const entity = this.entities.get(command.entity);
+        if (!entity || entity.kind === "item" || entity.kind === "arrow" || entity.dimension !== p.dimension) {
+          reject("no such target");
+          break;
+        }
+        const size = ENTITY_SIZES[entity.kind];
+        const dist = Math.hypot(entity.x - p.x, entity.y - size.height / 2 - (p.y - PLAYER_HEIGHT / 2));
+        if (dist > ATTACK_REACH) {
+          reject("out of reach");
+          break;
+        }
+        p.attackCooldown = PLAYER_ATTACK_COOLDOWN;
+        const strength = p.effects["strength"] !== undefined ? STRENGTH_BONUS : 0;
+        this.hurtMob(entity, attackDamage(p.inventory[p.selected] ?? null) + strength, out, p.x);
+        break;
+      }
+      case "trade": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        const villager = this.entities.get(command.entity);
+        if (!villager || villager.kind !== "villager" || villager.dimension !== p.dimension) {
+          reject("no villager");
+          break;
+        }
+        if (Math.hypot(villager.x - p.x, villager.y - p.y) > ATTACK_REACH + 1) {
+          reject("out of reach");
+          break;
+        }
+        const trade = TRADES[command.trade];
+        if (!trade) {
+          reject("unknown trade");
+          break;
+        }
+        if (!removeFromInventory(p.inventory, trade.cost.item, trade.cost.count)) {
+          reject("missing items");
+          break;
+        }
+        addToInventory(p.inventory, trade.result.item, trade.result.count);
+        syncInventory(p);
+        break;
+      }
+      case "use_item": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        const stack = p.inventory[p.selected];
+        if (!stack) {
+          reject("nothing to use");
+          break;
+        }
+        const effect = potionEffect(stack.item);
+        const food = itemDef(stack.item)?.food;
+        if (effect) {
+          stack.count -= 1;
+          if (stack.count === 0) p.inventory[p.selected] = null;
+          // Drinking returns the bottle.
+          addToInventory(p.inventory, "glass_bottle", 1);
+          p.effects[effect] = EFFECT_DURATION_TICKS;
+          syncInventory(p);
+          reply({ type: "player_effects", player: p.id, effects: { ...p.effects } });
+          break;
+        }
+        if (food !== undefined) {
+          if (p.hunger >= PLAYER_MAX_HUNGER) {
+            reject("not hungry");
+            break;
+          }
+          stack.count -= 1;
+          if (stack.count === 0) p.inventory[p.selected] = null;
+          p.hunger = Math.min(PLAYER_MAX_HUNGER, p.hunger + food);
+          syncInventory(p);
+          reply({ type: "player_hunger", player: p.id, hunger: p.hunger, max: PLAYER_MAX_HUNGER });
+          break;
+        }
+        reject("nothing to use");
+        break;
+      }
+      case "shoot": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        const { dx, dy } = command;
+        if (typeof dx !== "number" || typeof dy !== "number" || !Number.isFinite(dx) || !Number.isFinite(dy)) {
+          reject("invalid direction");
+          break;
+        }
+        const len = Math.hypot(dx, dy);
+        if (len < 1e-6) {
+          reject("invalid direction");
+          break;
+        }
+        if (p.inventory[p.selected]?.item !== "bow") {
+          reject("no bow");
+          break;
+        }
+        if (p.attackCooldown > 0) {
+          break;
+        }
+        if (!removeFromInventory(p.inventory, "arrow", 1)) {
+          reject("no arrows");
+          break;
+        }
+        p.attackCooldown = BOW_COOLDOWN;
+        const originY = p.y - PLAYER_HEIGHT * 0.6;
+        const arrow: ArrowEntity = {
+          id: this.nextEntityId++,
+          kind: "arrow",
+          dimension: p.dimension,
+          x: p.x + (dx / len) * 0.8,
+          y: originY + (dy / len) * 0.8,
+          vx: (dx / len) * BOW_ARROW_SPEED,
+          vy: (dy / len) * BOW_ARROW_SPEED,
+          onGround: false,
+          damage: BOW_DAMAGE,
+          ttl: ARROW_TTL,
+          owner: player,
+        };
+        this.entities.set(arrow.id, arrow);
+        broadcast({
+          type: "entity_spawned",
+          id: arrow.id,
+          kind: "arrow",
+          dim: arrow.dimension,
+          x: arrow.x,
+          y: arrow.y,
+        });
+        syncInventory(p);
+        break;
+      }
+      case "enchant": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        if (!this.blockNearby(p, BlockId.EnchantingTable)) {
+          reject("requires enchanting table");
+          break;
+        }
+        const stack = p.inventory[p.selected];
+        const enchId = stack ? enchantFor(stack) : null;
+        if (!stack || !enchId) {
+          reject("cannot enchant this");
+          break;
+        }
+        const existing = stack.ench?.find((e) => e.id === enchId);
+        if (existing && existing.level >= ENCHANT_MAX_LEVEL) {
+          reject("already maxed");
+          break;
+        }
+        if (!removeFromInventory(p.inventory, "lapis_lazuli", ENCHANT_LAPIS_COST)) {
+          reject("missing lapis");
+          break;
+        }
+        if (existing) {
+          existing.level++;
+        } else {
+          stack.ench = [...(stack.ench ?? []), { id: enchId, level: 1 }];
+        }
+        syncInventory(p);
         break;
       }
       case "place_block": {
-        if (this.world.getBlock(command.x, command.y) !== BlockId.Air) {
-          events.push({ type: "command_rejected", player, reason: "space occupied" });
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
           break;
         }
-        if (this.world.setBlock(command.x, command.y, command.block)) {
-          events.push({ type: "block_changed", x: command.x, y: command.y, block: command.block });
+        const { x, y } = command;
+        if (!Number.isInteger(x) || !Number.isInteger(y)) {
+          reject("invalid coordinates");
+          break;
+        }
+        const world = this.worldOf(p.dimension);
+        const stack = p.inventory[p.selected];
+        if (!stack) {
+          reject("nothing to place");
+          break;
+        }
+        if (!this.withinReach(player, x, y)) {
+          reject("out of reach");
+          break;
+        }
+        // Flint and steel lights portals instead of placing a block.
+        if (stack.item === "flint_and_steel") {
+          const interior = findPortalInterior(world, x, y);
+          if (!interior) {
+            reject("no portal frame");
+            break;
+          }
+          for (let ty = interior.top; ty <= interior.bottom; ty++) {
+            for (let tx = interior.left; tx <= interior.right; tx++) {
+              world.setBlock(tx, ty, BlockId.NetherPortal);
+              broadcast({ type: "block_changed", dim: p.dimension, x: tx, y: ty, block: BlockId.NetherPortal });
+            }
+          }
+          this.portals[p.dimension].set(`${interior.left},${interior.bottom}`, {
+            x: interior.left,
+            y: interior.bottom,
+          });
+          break;
+        }
+        const def = itemDef(stack.item);
+        if (def?.block === undefined) {
+          reject("item not placeable");
+          break;
+        }
+        if (world.getBlockGenerating(x, y) !== BlockId.Air) {
+          reject("space occupied");
+          break;
+        }
+        if (blockDef(def.block).solid && this.tileIntersectsAnyPlayer(p.dimension, x, y)) {
+          reject("blocked by player");
+          break;
+        }
+        if (world.setBlock(x, y, def.block)) {
+          stack.count -= 1;
+          if (stack.count === 0) {
+            p.inventory[p.selected] = null;
+          }
+          broadcast({ type: "block_changed", dim: p.dimension, x, y, block: def.block });
+          syncInventory(p);
         }
         break;
       }
-      case "move":
-        // Movement will be resolved by the physics step once it exists.
-        break;
     }
+  }
+
+  private applySlotClick(
+    p: PlayerState,
+    slot: SlotRef,
+    button: "left" | "right",
+    reject: (reason: string) => void,
+    broadcast: (event: SimEvent) => void,
+  ): void {
+    switch (slot.container) {
+      case "inventory": {
+        if (!Number.isInteger(slot.index) || slot.index < 0 || slot.index >= INVENTORY_SIZE) {
+          reject("invalid slot");
+          return;
+        }
+        const result = clickStack(p.cursor, p.inventory[slot.index] ?? null, button);
+        p.cursor = result.cursor;
+        p.inventory[slot.index] = result.slot;
+        return;
+      }
+      case "craft_grid": {
+        if (!Number.isInteger(slot.index) || slot.index < 0 || slot.index >= CRAFT_GRID_SIZE) {
+          reject("invalid slot");
+          return;
+        }
+        const tableNearby = this.blockNearby(p, BlockId.CraftingTable);
+        if (!tableNearby && !SMALL_GRID_INDICES.includes(slot.index)) {
+          reject("requires crafting table");
+          return;
+        }
+        const result = clickStack(p.cursor, p.craftGrid[slot.index] ?? null, button);
+        p.cursor = result.cursor;
+        p.craftGrid[slot.index] = result.slot;
+        return;
+      }
+      case "craft_result": {
+        const maxSize = this.blockNearby(p, BlockId.CraftingTable) ? 3 : 2;
+        const recipe = matchGrid(p.craftGrid, RECIPES.values(), maxSize);
+        if (!recipe) {
+          return;
+        }
+        const result = recipe.result;
+        if (
+          p.cursor &&
+          (p.cursor.item !== result.item ||
+            p.cursor.count + result.count > (itemDef(result.item)?.maxStack ?? 64))
+        ) {
+          return;
+        }
+        p.cursor = p.cursor
+          ? { item: p.cursor.item, count: p.cursor.count + result.count }
+          : { item: result.item, count: result.count };
+        for (let i = 0; i < CRAFT_GRID_SIZE; i++) {
+          const cell = p.craftGrid[i];
+          if (!cell) continue;
+          p.craftGrid[i] = cell.count > 1 ? { item: cell.item, count: cell.count - 1 } : null;
+        }
+        return;
+      }
+      case "chest": {
+        const { x, y } = slot;
+        if (!Number.isInteger(x) || !Number.isInteger(y) || !this.withinReach(p.id, x, y)) {
+          reject("out of reach");
+          return;
+        }
+        if (this.worldOf(p.dimension).getBlockGenerating(x, y) !== BlockId.Chest) {
+          reject("no chest there");
+          return;
+        }
+        if (!Number.isInteger(slot.index) || slot.index < 0 || slot.index >= 27) {
+          reject("invalid slot");
+          return;
+        }
+        const chest = this.ensureChest(p.dimension, x, y);
+        const result = clickStack(p.cursor, chest.slots[slot.index] ?? null, button);
+        p.cursor = result.cursor;
+        chest.slots[slot.index] = result.slot;
+        broadcast({
+          type: "chest_changed",
+          dim: p.dimension,
+          x,
+          y,
+          slots: cloneInventory(chest.slots),
+        });
+        return;
+      }
+      case "backpack": {
+        const held = p.inventory[p.selected];
+        if (!held || held.item !== "backpack") {
+          reject("no backpack in hand");
+          return;
+        }
+        if (!Number.isInteger(slot.index) || slot.index < 0 || slot.index >= 9) {
+          reject("invalid slot");
+          return;
+        }
+        // No backpacks inside backpacks.
+        if (p.cursor?.item === "backpack") {
+          reject("backpack in backpack");
+          return;
+        }
+        held.data ??= { slots: new Array<ItemStack | null>(9).fill(null) };
+        const result = clickStack(p.cursor, held.data.slots[slot.index] ?? null, button);
+        p.cursor = result.cursor;
+        held.data.slots[slot.index] = result.slot;
+        return;
+      }
+      case "furnace": {
+        const { x, y } = slot;
+        if (!Number.isInteger(x) || !Number.isInteger(y) || !this.withinReach(p.id, x, y)) {
+          reject("out of reach");
+          return;
+        }
+        if (this.worldOf(p.dimension).getBlockGenerating(x, y) !== BlockId.Furnace) {
+          reject("no furnace there");
+          return;
+        }
+        let state = this.furnaces.get(furnaceKey(p.dimension, x, y));
+        if (!state) {
+          state = createFurnace(p.dimension, x, y);
+          this.furnaces.set(furnaceKey(p.dimension, x, y), state);
+        }
+        if (slot.slot === "output") {
+          if (!state.output) return;
+          if (p.cursor && p.cursor.item !== state.output.item) return;
+          const maxStack = itemDef(state.output.item)?.maxStack ?? 64;
+          const take = Math.min(state.output.count, maxStack - (p.cursor?.count ?? 0));
+          if (take <= 0) return;
+          p.cursor = { item: state.output.item, count: (p.cursor?.count ?? 0) + take };
+          const rest = state.output.count - take;
+          state.output = rest > 0 ? { item: state.output.item, count: rest } : null;
+        } else if (slot.slot === "fuel") {
+          if (p.cursor && fuelTicks(p.cursor.item) === 0) {
+            reject("not a fuel");
+            return;
+          }
+          const result = clickStack(p.cursor, state.fuel, button);
+          p.cursor = result.cursor;
+          state.fuel = result.slot;
+        } else {
+          const result = clickStack(p.cursor, state.input, button);
+          p.cursor = result.cursor;
+          state.input = result.slot;
+        }
+        broadcast(this.furnaceEvent(state));
+        return;
+      }
+    }
+  }
+
+  private ensureChest(
+    dimension: Dimension,
+    x: number,
+    y: number,
+  ): { dimension: Dimension; x: number; y: number; slots: (ItemStack | null)[] } {
+    const key = furnaceKey(dimension, x, y);
+    let chest = this.chests.get(key);
+    if (!chest) {
+      chest = { dimension, x, y, slots: new Array<ItemStack | null>(27).fill(null) };
+      // Structure chests come pre-filled with their rolled loot.
+      const loot = structureLootAt(this.worldOf(dimension).seed, dimension, x, y);
+      if (loot) {
+        loot.forEach((stack, i) => {
+          chest!.slots[i] = stack;
+        });
+      }
+      this.chests.set(key, chest);
+    }
+    return chest;
+  }
+
+  private dumpGridAndCursor(p: PlayerState): void {
+    for (let i = 0; i < CRAFT_GRID_SIZE; i++) {
+      const cell = p.craftGrid[i];
+      if (!cell) continue;
+      addToInventory(p.inventory, cell.item, cell.count);
+      p.craftGrid[i] = null;
+    }
+    if (p.cursor) {
+      addToInventory(p.inventory, p.cursor.item, p.cursor.count);
+      p.cursor = null;
+    }
+  }
+
+  private withinReach(player: PlayerId, tileX: number, tileY: number): boolean {
+    const p = this.players.get(player);
+    if (!p) return false;
+    const dx = tileX + 0.5 - p.x;
+    const dy = tileY + 0.5 - (p.y - PLAYER_HEIGHT / 2);
+    return dx * dx + dy * dy <= REACH * REACH;
+  }
+
+  private tileIntersectsAnyPlayer(dimension: Dimension, tileX: number, tileY: number): boolean {
+    for (const p of this.players.values()) {
+      if (p.dimension !== dimension) continue;
+      const overlapsX = tileX + 1 > p.x - PLAYER_WIDTH / 2 && tileX < p.x + PLAYER_WIDTH / 2;
+      const overlapsY = tileY + 1 > p.y - PLAYER_HEIGHT && tileY < p.y;
+      if (overlapsX && overlapsY) return true;
+    }
+    return false;
+  }
+
+  private blockNearby(p: PlayerState, block: BlockId): boolean {
+    const world = this.worldOf(p.dimension);
+    const centerY = p.y - PLAYER_HEIGHT / 2;
+    const minX = Math.floor(p.x - REACH);
+    const maxX = Math.floor(p.x + REACH);
+    const minY = Math.floor(centerY - REACH);
+    const maxY = Math.floor(centerY + REACH);
+    for (let ty = minY; ty <= maxY; ty++) {
+      for (let tx = minX; tx <= maxX; tx++) {
+        if (world.getBlock(tx, ty) === block) return true;
+      }
+    }
+    return false;
   }
 }

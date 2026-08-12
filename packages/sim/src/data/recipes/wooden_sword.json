@@ -1,0 +1,9 @@
+{
+  "type": "flatcraft:crafting_shaped",
+  "pattern": ["#", "#", "|"],
+  "key": {
+    "#": { "item": "flatcraft:oak_planks" },
+    "|": { "item": "flatcraft:stick" }
+  },
+  "result": { "item": "flatcraft:wooden_sword" }
+}

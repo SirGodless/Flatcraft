@@ -20,8 +20,9 @@ export class GameServer {
   private pendingCommands: PlayerCommand[] = [];
   private accumulatorMs = 0;
 
-  constructor(seed: number) {
-    this.simulation = new Simulation(seed);
+  constructor(seedOrSimulation: number | Simulation) {
+    this.simulation =
+      typeof seedOrSimulation === "number" ? new Simulation(seedOrSimulation) : seedOrSimulation;
   }
 
   addConnection(connection: ServerConnection): void {
@@ -57,10 +58,15 @@ export class GameServer {
   private runTick(): void {
     const commands = this.pendingCommands;
     this.pendingCommands = [];
-    const events = this.simulation.tick(commands);
-    if (events.length === 0) return;
+    const outbound = this.simulation.tick(commands);
+    if (outbound.length === 0) return;
     for (const connection of this.connections) {
-      connection.send(events);
+      const events = outbound
+        .filter((o) => o.to === undefined || o.to === connection.playerId)
+        .map((o) => o.event);
+      if (events.length > 0) {
+        connection.send(events);
+      }
     }
   }
 }

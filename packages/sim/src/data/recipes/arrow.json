@@ -1,0 +1,10 @@
+{
+  "type": "flatcraft:crafting_shaped",
+  "pattern": ["F", "|", "W"],
+  "key": {
+    "F": { "item": "flatcraft:flint" },
+    "|": { "item": "flatcraft:stick" },
+    "W": { "item": "flatcraft:feather" }
+  },
+  "result": { "item": "flatcraft:arrow", "count": 4 }
+}

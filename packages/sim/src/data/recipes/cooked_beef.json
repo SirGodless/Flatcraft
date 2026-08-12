@@ -1,0 +1,6 @@
+{
+  "type": "flatcraft:smelting",
+  "ingredient": { "item": "flatcraft:beef" },
+  "result": { "item": "flatcraft:cooked_beef" },
+  "cookingtime": 200
+}

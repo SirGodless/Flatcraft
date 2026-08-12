@@ -1,0 +1,26 @@
+{
+  "dimension": "overworld",
+  "placement": { "type": "underground", "chance": 0.06, "minY": 80, "maxY": 220 },
+  "anchor": [4, 3],
+  "pattern": [
+    "CCCCCCCCC",
+    "C.......C",
+    "C.......C",
+    "C...n...C",
+    "CCCCCCCCC"
+  ],
+  "key": {
+    "C": { "block": "flatcraft:cobblestone" },
+    ".": { "block": "flatcraft:air" },
+    "n": {
+      "block": "flatcraft:chest",
+      "loot": [
+        { "item": "flatcraft:iron_ingot", "count": 4, "chance": 0.8 },
+        { "item": "flatcraft:coal", "count": 8, "chance": 0.9 },
+        { "item": "flatcraft:redstone", "count": 6, "chance": 0.5 },
+        { "item": "flatcraft:diamond", "count": 2, "chance": 0.25 },
+        { "item": "flatcraft:backpack", "count": 1, "chance": 0.3 }
+      ]
+    }
+  }
+}
