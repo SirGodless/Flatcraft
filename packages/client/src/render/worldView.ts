@@ -15,12 +15,15 @@ interface ChunkView {
 /**
  * The client's mirror of the visible world. Each chunk it has received is
  * baked into a RenderTexture (one draw per chunk per frame instead of one
- * per tile) and re-baked when a block in it changes.
+ * per tile). Block changes only mark the chunk dirty; flush() re-bakes
+ * every dirty chunk at most once per frame, so a burst of changes (e.g.
+ * flowing water) costs one bake instead of one per event.
  */
 export class WorldView {
   readonly container = new Container();
 
   private readonly chunks = new Map<string, ChunkView>();
+  private readonly dirty = new Set<ChunkView>();
 
   constructor(
     private readonly renderer: PixiRenderer,
@@ -38,6 +41,7 @@ export class WorldView {
       view.target.destroy(true);
     }
     this.chunks.clear();
+    this.dirty.clear();
   }
 
   /** The client's view of a tile (Air for unloaded chunks). */
@@ -71,7 +75,7 @@ export class WorldView {
       view.tiles.set(tiles);
       if (walls) view.walls.set(walls);
     }
-    this.bake(view);
+    this.dirty.add(view);
   }
 
   setBlock(x: number, y: number, block: BlockId): void {
@@ -81,8 +85,10 @@ export class WorldView {
     if (!view) return;
     const lx = x - cx * CHUNK_WIDTH;
     const ly = y - cy * CHUNK_HEIGHT;
-    view.tiles[ly * CHUNK_WIDTH + lx] = block;
-    this.bake(view);
+    const index = ly * CHUNK_WIDTH + lx;
+    if (view.tiles[index] === block) return;
+    view.tiles[index] = block;
+    this.dirty.add(view);
   }
 
   setWall(x: number, y: number, block: BlockId): void {
@@ -92,8 +98,18 @@ export class WorldView {
     if (!view) return;
     const lx = x - cx * CHUNK_WIDTH;
     const ly = y - cy * CHUNK_HEIGHT;
-    view.walls[ly * CHUNK_WIDTH + lx] = block;
-    this.bake(view);
+    const index = ly * CHUNK_WIDTH + lx;
+    if (view.walls[index] === block) return;
+    view.walls[index] = block;
+    this.dirty.add(view);
+  }
+
+  /** Re-bake every chunk touched since the last call (once per frame). */
+  flush(): void {
+    for (const view of this.dirty) {
+      this.bake(view);
+    }
+    this.dirty.clear();
   }
 
   private bake(view: ChunkView): void {

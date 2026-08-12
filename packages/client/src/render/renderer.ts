@@ -796,6 +796,9 @@ export class Renderer {
   draw(dtMs: number): void {
     const now = performance.now();
 
+    // Bake chunks touched since the last frame (at most once each).
+    this.worldView.flush();
+
     // Advance local time between server syncs (1 tick per 50 ms) and
     // shade the world: sky color blends toward night, plus a veil.
     // The nether has no sky - fixed gloomy red instead.

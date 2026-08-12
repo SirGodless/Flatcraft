@@ -172,6 +172,36 @@ describe("liquids", () => {
     expect(sim.world.getBlockGenerating(bx, SURFACE - 2)).toBe(BlockId.Air);
   });
 
+  it("flowing water emits at most one block_changed per cell per tick", () => {
+    const sim = new Simulation(SEED);
+    const { player, state } = joinPlayer(sim);
+    sim.tick([{ player, command: { type: "set_creative", on: true } }]);
+    const bx = Math.floor(state.x) + 2;
+    // A tall sealed water column over a plug; pulling it makes the
+    // column fall and spread for many ticks.
+    for (let dy = 2; dy <= 5; dy++) {
+      setBlock(sim, bx - 1, SURFACE - dy, BlockId.Stone);
+      setBlock(sim, bx + 1, SURFACE - dy, BlockId.Stone);
+      setBlock(sim, bx, SURFACE - dy, BlockId.Water);
+    }
+    setBlock(sim, bx, SURFACE - 1, BlockId.Stone); // the plug
+
+    sim.tick([{ player, command: { type: "start_mining", x: bx, y: SURFACE - 1 } }]);
+    let sawFlow = false;
+    for (let i = 0; i < 100; i++) {
+      const out = sim.tick([]);
+      const seen = new Set<string>();
+      for (const o of out) {
+        if (o.event.type !== "block_changed") continue;
+        const key = `${o.event.dim}:${o.event.x},${o.event.y}`;
+        expect(seen.has(key)).toBe(false);
+        seen.add(key);
+      }
+      if (seen.size > 0) sawFlow = true;
+    }
+    expect(sawFlow).toBe(true);
+  });
+
   it("water meeting lava hardens to obsidian", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
