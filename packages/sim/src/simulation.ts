@@ -1082,6 +1082,25 @@ export class Simulation {
 
     switch (command.type) {
       case "join": {
+        // One live player per name (names are identity for saves/rejoins).
+        if ([...this.players.values()].some((p) => p.name === command.name)) {
+          reject("name already in use");
+          break;
+        }
+        // Tell the joiner who is already in the world.
+        const replayPlayers = (): void => {
+          for (const other of this.players.values()) {
+            if (other.id === player) continue;
+            reply({
+              type: "player_joined",
+              player: other.id,
+              name: other.name,
+              x: other.x,
+              y: other.y,
+              dim: other.dimension,
+            });
+          }
+        };
         // A returning player (same name) picks up exactly where they left.
         const saved = this.savedPlayers.get(command.name);
         if (saved) {
@@ -1104,6 +1123,7 @@ export class Simulation {
           reply({ type: "player_hunger", player, hunger: state.hunger, max: PLAYER_MAX_HUNGER });
           reply({ type: "time_changed", time: this.timeOfDay });
           reply({ type: "player_dimension", player, dim: state.dimension, x: state.x, y: state.y });
+          replayPlayers();
           for (const entity of this.entities.values()) {
             reply({
               type: "entity_spawned",
@@ -1152,6 +1172,7 @@ export class Simulation {
         reply({ type: "player_health", player, health: state.health, max: PLAYER_MAX_HEALTH });
         reply({ type: "player_hunger", player, hunger: state.hunger, max: PLAYER_MAX_HUNGER });
         reply({ type: "time_changed", time: this.timeOfDay });
+        replayPlayers();
         for (const entity of this.entities.values()) {
           reply({
             type: "entity_spawned",

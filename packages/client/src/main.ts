@@ -1,4 +1,4 @@
-import { GameServer, createLoopbackPair } from "@flatcraft/server";
+import { GameServer, createLoopbackPair, INFO_PATH, type ClientConnection, type ServerInfo } from "@flatcraft/server";
 import {
   addToInventory,
   buildPortal,
@@ -8,64 +8,68 @@ import {
   PLAYER_HEIGHT,
   Simulation,
   surfaceHeight,
+  type PlayerId,
 } from "@flatcraft/sim";
 import { attachInput } from "./input/input.js";
+import { connectWebSocket, type OnlineSession } from "./net/wsConnection.js";
 import { Renderer } from "./render/renderer.js";
 import { deleteWorld, loadExplored, loadWorld, saveExplored, saveWorld } from "./save.js";
+import { disconnectOverlay, loginOverlay } from "./ui/login.js";
 
 /** Max chunk requests sent per frame, to keep event batches small. */
 const CHUNK_REQUESTS_PER_FRAME = 12;
 
 /**
- * Singleplayer bootstrap: an embedded GameServer connected through the
- * loopback transport. The client side of this file must only ever talk to
- * `connection` - switching to a remote server later means replacing the
- * loopback pair with a WebSocket-backed ClientConnection and deleting the
- * embedded server, nothing else.
+ * Bootstrap. Two modes behind the same game code:
+ *   - online: the page is served by a FlatCraft dedicated server
+ *     (detected via INFO_PATH) - log in, connect over WebSocket.
+ *   - singleplayer: any other host (dev server, static hosting) - run an
+ *     embedded GameServer over the loopback transport, persist to
+ *     IndexedDB.
+ * Everything below `runGame` is identical for both; that is the whole
+ * point of the transport abstraction.
  */
 async function start(): Promise<void> {
+  const info = await detectServer();
+  if (info) {
+    await startOnline(info);
+  } else {
+    await startSingleplayer();
+  }
+}
+
+async function detectServer(): Promise<ServerInfo | null> {
+  try {
+    const response = await fetch(INFO_PATH, { headers: { accept: "application/json" } });
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!response.ok || !contentType.includes("application/json")) return null;
+    const body = (await response.json()) as Partial<ServerInfo>;
+    return body.flatcraft === true ? (body as ServerInfo) : null;
+  } catch {
+    return null;
+  }
+}
+
+interface GameOptions {
+  connection: ClientConnection;
+  playerId: PlayerId;
+  playerName: string;
+  /** Called every frame with the elapsed ms (embedded server ticking). */
+  onFrame?: (dtMs: number) => void;
+  /** One-time hook once the renderer exists (persistence, debug params). */
+  afterInit?: (renderer: Renderer) => void;
+}
+
+/** All game wiring shared by online and singleplayer mode. */
+async function runGame(options: GameOptions): Promise<Renderer> {
+  const { connection } = options;
   const params = new URLSearchParams(location.search);
 
-  // World persistence: one IndexedDB slot; ?fresh starts a new world.
-  if (params.has("fresh")) {
-    await deleteWorld();
-  }
-  const save = params.has("fresh") ? null : await loadWorld();
-  const server = new GameServer(save ? Simulation.deserialize(save) : /* seed */ 1337);
-  const persist = (): void => {
-    void saveWorld(server.simulation.serialize());
-    void saveExplored(renderer.exportFogMemory());
-  };
-  setInterval(persist, 10_000);
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) persist();
-  });
-
-  // Debug helpers for the embedded server (singleplayer only), e.g. ?time=18000
-  const debugTime = params.get("time");
-  if (debugTime !== null) {
-    server.simulation.timeOfDay = Number(debugTime);
-  }
-  if (params.get("portal") !== null) {
-    // Pre-build a lit portal three tiles right of spawn.
-    const sim = server.simulation;
-    const sx = findSpawnX(sim.world.seed);
-    const sy = surfaceHeight(sim.world.seed, sx) - 1;
-    buildPortal(sim.world, sx + 3, sy);
-    sim.portals.overworld.set(`${sx + 3},${sy}`, { x: sx + 3, y: sy });
-  }
-
-  const playerId = server.simulation.allocatePlayerId();
-  const { server: serverEnd, client: connection } = createLoopbackPair(playerId);
-  server.addConnection(serverEnd);
-
   const renderer = new Renderer();
-  renderer.localPlayerId = playerId;
+  renderer.localPlayerId = options.playerId;
   // Fog of war is fully built but disabled for now; ?fog turns it on.
   renderer.fogEnabled = params.has("fog");
   await renderer.init(document.getElementById("app")!);
-  const explored = params.has("fresh") ? null : await loadExplored();
-  if (explored) renderer.importFogMemory(explored);
 
   connection.onEvents((events) => {
     for (const event of events) {
@@ -81,7 +85,7 @@ async function start(): Promise<void> {
   renderer.onEnchant = () => connection.send({ type: "enchant" });
   renderer.onUiClosed = () => connection.send({ type: "return_grid" });
 
-  const input = attachInput(renderer.canvas, {
+  attachInput(renderer.canvas, {
     camera: renderer.camera,
     sendCommand: (command) => connection.send(command),
     screenSize: () => ({ width: renderer.screenWidth, height: renderer.screenHeight }),
@@ -129,24 +133,10 @@ async function start(): Promise<void> {
     onPointerMove: (x, y) => renderer.setPointer(x, y),
   });
 
-  connection.send({ type: "join", name: "Player" });
+  connection.send({ type: "join", name: options.playerName });
+  options.afterInit?.(renderer);
 
-  // Debug: ?give=item:count,item:count seeds the inventory (singleplayer).
-  const give = params.get("give");
-  if (give) {
-    setTimeout(() => {
-      const p = server.simulation.players.get(playerId);
-      if (!p) return;
-      for (const part of give.split(",")) {
-        const [item, count] = part.split(":");
-        if (item) addToInventory(p.inventory, item, Number(count ?? "1"));
-      }
-      connection.send({ type: "select_slot", index: 0 }); // force a sync
-    }, 500);
-  }
-
-  // Chunks already asked for; in multiplayer this would need re-request on
-  // timeout, in singleplayer the loopback server always answers.
+  // Chunks already asked for; re-request after dimension changes.
   const requestedChunks = new Set<string>();
   renderer.onDimensionChanged = () => requestedChunks.clear();
   const requestVisibleChunks = (): void => {
@@ -168,13 +158,117 @@ async function start(): Promise<void> {
     const dt = now - last;
     last = now;
     requestVisibleChunks();
-    // Server ticks at a fixed rate regardless of frame rate...
-    server.advance(dt);
-    // ...while rendering runs per frame, interpolating between ticks.
+    options.onFrame?.(dt);
     renderer.draw(dt);
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
+  return renderer;
+}
+
+/** Online mode: login screen, then WebSocket to the serving host. */
+async function startOnline(info: ServerInfo): Promise<void> {
+  const session = await login(info);
+  const renderer = await runGame({
+    connection: session.connection,
+    playerId: session.playerId,
+    playerName: session.name,
+  });
+  void renderer;
+  session.onDisconnect(() => disconnectOverlay());
+}
+
+const LOGIN_STORAGE_KEY = "flatcraft.login";
+
+async function login(info: ServerInfo): Promise<OnlineSession> {
+  // Auto-login with a stored session token first.
+  try {
+    const stored = JSON.parse(localStorage.getItem(LOGIN_STORAGE_KEY) ?? "null") as {
+      name?: string;
+      token?: string;
+    } | null;
+    if (stored?.name && stored.token) {
+      try {
+        return await connectWebSocket({ name: stored.name, token: stored.token });
+      } catch {
+        localStorage.removeItem(LOGIN_STORAGE_KEY);
+      }
+    }
+  } catch {
+    localStorage.removeItem(LOGIN_STORAGE_KEY);
+  }
+
+  const session = await loginOverlay(info, (name, password) =>
+    connectWebSocket({ name, password }),
+  );
+  localStorage.setItem(LOGIN_STORAGE_KEY, JSON.stringify({ name: session.name, token: session.token }));
+  return session;
+}
+
+/** Singleplayer: embedded server, loopback transport, IndexedDB saves. */
+async function startSingleplayer(): Promise<void> {
+  const params = new URLSearchParams(location.search);
+
+  // World persistence: one IndexedDB slot; ?fresh starts a new world.
+  if (params.has("fresh")) {
+    await deleteWorld();
+  }
+  const save = params.has("fresh") ? null : await loadWorld();
+  const server = new GameServer(save ? Simulation.deserialize(save) : /* seed */ 1337);
+
+  // Debug helpers for the embedded server (singleplayer only), e.g. ?time=18000
+  const debugTime = params.get("time");
+  if (debugTime !== null) {
+    server.simulation.timeOfDay = Number(debugTime);
+  }
+  if (params.get("portal") !== null) {
+    // Pre-build a lit portal three tiles right of spawn.
+    const sim = server.simulation;
+    const sx = findSpawnX(sim.world.seed);
+    const sy = surfaceHeight(sim.world.seed, sx) - 1;
+    buildPortal(sim.world, sx + 3, sy);
+    sim.portals.overworld.set(`${sx + 3},${sy}`, { x: sx + 3, y: sy });
+  }
+
+  const playerId = server.simulation.allocatePlayerId();
+  const { server: serverEnd, client: connection } = createLoopbackPair(playerId);
+  server.addConnection(serverEnd);
+
+  await runGame({
+    connection,
+    playerId,
+    playerName: "Player",
+    onFrame: (dt) => server.advance(dt),
+    afterInit: (renderer) => {
+      const persist = (): void => {
+        void saveWorld(server.simulation.serialize());
+        void saveExplored(renderer.exportFogMemory());
+      };
+      setInterval(persist, 10_000);
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) persist();
+      });
+      if (!params.has("fresh")) {
+        void loadExplored().then((explored) => {
+          if (explored) renderer.importFogMemory(explored);
+        });
+      }
+
+      // Debug: ?give=item:count,item:count seeds the inventory.
+      const give = params.get("give");
+      if (give) {
+        setTimeout(() => {
+          const p = server.simulation.players.get(playerId);
+          if (!p) return;
+          for (const part of give.split(",")) {
+            const [item, count] = part.split(":");
+            if (item) addToInventory(p.inventory, item, Number(count ?? "1"));
+          }
+          connection.send({ type: "select_slot", index: 0 }); // force a sync
+        }, 500);
+      }
+    },
+  });
 }
 
 void start();

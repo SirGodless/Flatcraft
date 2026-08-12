@@ -1,0 +1,16 @@
+services:
+  flatcraft:
+    build: .
+    ports:
+      # host:container - the reverse proxy forwards to this host port.
+      - "8080:8080"
+    volumes:
+      # World save + accounts live here; survives image updates.
+      - flatcraft-data:/data
+    environment:
+      SERVER_NAME: "FlatCraft"
+      # SEED: "1337"        # seed for freshly generated worlds
+    restart: unless-stopped
+
+volumes:
+  flatcraft-data:

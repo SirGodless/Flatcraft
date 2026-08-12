@@ -41,6 +41,8 @@ export interface ChunkRange {
 
 interface PlayerMarker {
   gfx: Graphics;
+  /** Name tag above other players (local player has none). */
+  label: Text | null;
   /** Feet-center tile coords of the last two known tick positions. */
   prevX: number;
   prevY: number;
@@ -382,8 +384,18 @@ export class Renderer {
           .fill({ color: event.player === this.localPlayerId ? 0xe04848 : 0x4868e0 });
         gfx.visible = event.dim === this.localDim;
         this.worldContainer.addChild(gfx);
+        let label: Text | null = null;
+        if (event.player !== this.localPlayerId) {
+          label = new Text({
+            text: event.name,
+            style: { fill: "#ffffff", fontSize: 11, fontFamily: "monospace" },
+          });
+          label.visible = gfx.visible;
+          this.worldContainer.addChild(label);
+        }
         this.players.set(event.player, {
           gfx,
+          label,
           prevX: event.x,
           prevY: event.y,
           x: event.x,
@@ -449,6 +461,7 @@ export class Renderer {
         }
         for (const [pid, m] of this.players) {
           m.gfx.visible = this.playerDims.get(pid) === this.localDim;
+          if (m.label) m.label.visible = m.gfx.visible;
         }
         break;
       }
@@ -497,6 +510,7 @@ export class Renderer {
         const marker = this.players.get(event.player);
         if (marker) {
           marker.gfx.destroy();
+          marker.label?.destroy();
           this.players.delete(event.player);
         }
         const overlay = this.miningOverlays.get(event.player);
@@ -746,6 +760,12 @@ export class Renderer {
       const x = marker.prevX + (marker.x - marker.prevX) * alpha;
       const y = marker.prevY + (marker.y - marker.prevY) * alpha;
       marker.gfx.position.set((x - PLAYER_WIDTH / 2) * TILE_PX, (y - PLAYER_HEIGHT) * TILE_PX);
+      if (marker.label) {
+        marker.label.position.set(
+          x * TILE_PX - marker.label.width / 2,
+          (y - PLAYER_HEIGHT - 0.5) * TILE_PX,
+        );
+      }
       if (id === this.localPlayerId) {
         localX = x;
         localY = y;
