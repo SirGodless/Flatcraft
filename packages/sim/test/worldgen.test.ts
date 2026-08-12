@@ -101,13 +101,16 @@ describe("world generation", () => {
       }
     }
     expect(tree).not.toBeNull();
+    // Forests mix oak and birch; the trunk/canopy match the tree's wood.
+    const log = tree!.wood === "birch" ? BlockId.BirchLog : BlockId.OakLog;
+    const leaves = tree!.wood === "birch" ? BlockId.BirchLeaves : BlockId.OakLeaves;
     // Trunk occupies the column above the surface...
-    expect(world.getBlockGenerating(tree!.x, tree!.surface - 1)).toBe(BlockId.OakLog);
+    expect(world.getBlockGenerating(tree!.x, tree!.surface - 1)).toBe(log);
     // ...and the canopy reaches into neighboring columns (and possibly the
     // neighboring chunk - getBlockGenerating loads whatever chunk is needed).
     const topY = tree!.surface - tree!.height;
-    expect(world.getBlockGenerating(tree!.x + 1, topY)).toBe(BlockId.OakLeaves);
-    expect(world.getBlockGenerating(tree!.x - 1, topY)).toBe(BlockId.OakLeaves);
+    expect(world.getBlockGenerating(tree!.x + 1, topY)).toBe(leaves);
+    expect(world.getBlockGenerating(tree!.x - 1, topY)).toBe(leaves);
   });
 
   it("keeps deserts sandy and snowy peaks snowy", () => {

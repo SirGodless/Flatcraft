@@ -6,6 +6,7 @@ import {
   countInInventory,
   createInventory,
   findSpawnX,
+  ingredientOptions,
   INVENTORY_SIZE,
   itemDef,
   RECIPES,
@@ -41,8 +42,13 @@ describe("recipe data", () => {
     expect(RECIPES.size).toBeGreaterThanOrEqual(12);
     for (const recipe of RECIPES.values()) {
       expect(itemDef(recipe.result.item)).toBeDefined();
-      for (const item of recipe.ingredients.keys()) {
-        expect(itemDef(item)).toBeDefined();
+      for (const key of recipe.ingredients.keys()) {
+        // Tag keys ("#planks") resolve to at least one real item.
+        const options = ingredientOptions(key);
+        expect(options.length).toBeGreaterThan(0);
+        for (const item of options) {
+          expect(itemDef(item)).toBeDefined();
+        }
       }
     }
   });
@@ -57,8 +63,12 @@ describe("recipe data", () => {
 
   it("counts pattern symbols as ingredient totals", () => {
     const pickaxe = RECIPES.get("wooden_pickaxe")!;
-    expect(pickaxe.ingredients.get("oak_planks")).toBe(3);
+    // Plank ingredients are the "#planks" tag: any wood type works.
+    expect(pickaxe.ingredients.get("#planks")).toBe(3);
     expect(pickaxe.ingredients.get("stick")).toBe(2);
+    expect(ingredientOptions("#planks")).toContain("oak_planks");
+    expect(ingredientOptions("#planks")).toContain("birch_planks");
+    expect(ingredientOptions("#planks")).toContain("spruce_planks");
   });
 });
 

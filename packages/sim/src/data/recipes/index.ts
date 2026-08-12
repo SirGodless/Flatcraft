@@ -2,6 +2,12 @@ import { parseRecipe, type Recipe, type RecipeJson } from "../../crafting/recipe
 
 import arrow from "./arrow.json";
 import backpack from "./backpack.json";
+import birchPlanks from "./birch_planks.json";
+import copperIngot from "./copper_ingot.json";
+import netheriteIngot from "./netherite_ingot.json";
+import netheriteScrap from "./netherite_scrap.json";
+import sprucePlanks from "./spruce_planks.json";
+import { GENERATED_RECIPES } from "./generated.js";
 import bow from "./bow.json";
 import brewingStand from "./brewing_stand.json";
 import chest from "./chest.json";
@@ -99,6 +105,12 @@ const sources: Record<string, RecipeJson> = {
   cooked_porkchop: cookedPorkchop,
   cooked_beef: cookedBeef,
   cooked_chicken: cookedChicken,
+  birch_planks: birchPlanks,
+  spruce_planks: sprucePlanks,
+  copper_ingot: copperIngot,
+  netherite_scrap: netheriteScrap,
+  netherite_ingot: netheriteIngot,
+  ...GENERATED_RECIPES,
 };
 
 export const RECIPES: ReadonlyMap<string, Recipe> = new Map(

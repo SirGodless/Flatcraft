@@ -39,7 +39,15 @@ export interface Body {
   onGround: boolean;
 }
 
-function isSolid(world: World, tx: number, ty: number): boolean {
+/** Blocks horizontal movement: solid, unless passable from the side
+ * (portal frames). Slabs never block sideways (they're half-height). */
+function blocksHorizontal(world: World, tx: number, ty: number): boolean {
+  const def = blockDef(world.getBlockGenerating(tx, ty));
+  return def.solid && !def.sidePermeable;
+}
+
+/** Blocks vertical movement (portal frames still carry you on top). */
+function blocksVertical(world: World, tx: number, ty: number): boolean {
   return blockDef(world.getBlockGenerating(tx, ty)).solid;
 }
 
@@ -59,7 +67,7 @@ export function stepBody(world: World, body: Body, width: number, height: number
     if (body.vx > 0) {
       const tx = Math.floor(body.x + width / 2 - EPS);
       for (let ty = top; ty <= bottom; ty++) {
-        if (isSolid(world, tx, ty)) {
+        if (blocksHorizontal(world, tx, ty)) {
           body.x = tx - width / 2;
           body.vx = 0;
           break;
@@ -68,7 +76,7 @@ export function stepBody(world: World, body: Body, width: number, height: number
     } else {
       const tx = Math.floor(body.x - width / 2);
       for (let ty = top; ty <= bottom; ty++) {
-        if (isSolid(world, tx, ty)) {
+        if (blocksHorizontal(world, tx, ty)) {
           body.x = tx + 1 + width / 2;
           body.vx = 0;
           break;
@@ -78,23 +86,35 @@ export function stepBody(world: World, body: Body, width: number, height: number
   }
 
   if (body.vy !== 0) {
+    const yBefore = body.y;
     body.y += body.vy;
     const left = Math.floor(body.x - width / 2);
     const right = Math.floor(body.x + width / 2 - EPS);
     if (body.vy > 0) {
       const ty = Math.floor(body.y - EPS);
       for (let tx = left; tx <= right; tx++) {
-        if (isSolid(world, tx, ty)) {
+        if (blocksVertical(world, tx, ty)) {
           body.y = ty;
           body.vy = 0;
           body.onGround = true;
           break;
         }
+        // Slabs are half-height: catch bodies falling onto their top.
+        const def = blockDef(world.getBlockGenerating(tx, ty));
+        if (def.slab) {
+          const top = ty + 0.5;
+          if (body.y > top && yBefore <= top + EPS) {
+            body.y = top;
+            body.vy = 0;
+            body.onGround = true;
+            break;
+          }
+        }
       }
     } else {
       const ty = Math.floor(body.y - height);
       for (let tx = left; tx <= right; tx++) {
-        if (isSolid(world, tx, ty)) {
+        if (blocksVertical(world, tx, ty)) {
           body.y = ty + 1 + height;
           body.vy = 0;
           break;

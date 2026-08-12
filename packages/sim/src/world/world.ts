@@ -67,6 +67,28 @@ export class World {
     return true;
   }
 
+  getWall(x: number, y: number): BlockId {
+    const cx = Math.floor(x / CHUNK_WIDTH);
+    const cy = Math.floor(y / CHUNK_HEIGHT);
+    const chunk = this.getChunk(cx, cy);
+    if (!chunk) return BlockId.Air;
+    return chunk.getWall(x - cx * CHUNK_WIDTH, y - cy * CHUNK_HEIGHT);
+  }
+
+  getWallGenerating(x: number, y: number): BlockId {
+    this.ensureChunk(Math.floor(x / CHUNK_WIDTH), Math.floor(y / CHUNK_HEIGHT));
+    return this.getWall(x, y);
+  }
+
+  setWall(x: number, y: number, id: BlockId): boolean {
+    const cx = Math.floor(x / CHUNK_WIDTH);
+    const cy = Math.floor(y / CHUNK_HEIGHT);
+    const chunk = this.getChunk(cx, cy);
+    if (!chunk) return false;
+    chunk.setWall(x - cx * CHUNK_WIDTH, y - cy * CHUNK_HEIGHT, id);
+    return true;
+  }
+
   loadedChunks(): Iterable<Chunk> {
     return this.chunks.values();
   }

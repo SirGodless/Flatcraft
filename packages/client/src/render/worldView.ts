@@ -85,6 +85,17 @@ export class WorldView {
     this.bake(view);
   }
 
+  setWall(x: number, y: number, block: BlockId): void {
+    const cx = Math.floor(x / CHUNK_WIDTH);
+    const cy = Math.floor(y / CHUNK_HEIGHT);
+    const view = this.chunks.get(chunkKey(cx, cy));
+    if (!view) return;
+    const lx = x - cx * CHUNK_WIDTH;
+    const ly = y - cy * CHUNK_HEIGHT;
+    view.walls[ly * CHUNK_WIDTH + lx] = block;
+    this.bake(view);
+  }
+
   private bake(view: ChunkView): void {
     const scratch = new Container();
     // Background walls first, darkened, so caves show earth instead of sky.

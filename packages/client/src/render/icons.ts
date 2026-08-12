@@ -274,6 +274,89 @@ const ARTS: Record<string, Art> = {
   },
 };
 
+// Tier gear (hammers, armor, shields, grappling hooks) share silhouettes
+// with per-tier head colors.
+const TIER_COLORS: Record<string, string> = {
+  wooden: WOOD,
+  stone: COBBLE,
+  copper: "#d87a4e",
+  iron: "#d8d8dc",
+  golden: "#f5d442",
+  diamond: "#5fd8d2",
+  emerald: "#30c85e",
+  netherite: "#4a4048",
+  leather: "#8a5a30",
+};
+
+const hammer = (head: string): Art => ({
+  rows: [
+    ".HHHHH..",
+    ".HHHHH..",
+    ".HHHHH..",
+    "....S...",
+    "....S...",
+    "....S...",
+    "....S...",
+    "........",
+  ],
+  palette: { H: head, S: STICK },
+});
+
+const armorArt = (color: string): Art => ({
+  rows: [
+    "XX....XX",
+    "XXXXXXXX",
+    "XXXXXXXX",
+    ".XXXXXX.",
+    ".XXXXXX.",
+    ".XXXXXX.",
+    "........",
+    "........",
+  ],
+  palette: { X: color },
+});
+
+const shieldArt = (color: string): Art => ({
+  rows: [
+    ".XXXXXX.",
+    ".XXXXXX.",
+    ".XXXXXX.",
+    ".XXXXXX.",
+    "..XXXX..",
+    "...XX...",
+    "........",
+    "........",
+  ],
+  palette: { X: color },
+});
+
+const hookArt = (color: string): Art => ({
+  rows: [
+    "......S.",
+    "......S.",
+    "......S.",
+    "..HHH.S.",
+    ".H...HS.",
+    ".H....H.",
+    "..HH.H..",
+    "........",
+  ],
+  palette: { H: color, S: "#e8e8e0" },
+});
+
+for (const [tier, color] of Object.entries(TIER_COLORS)) {
+  if (tier !== "leather") {
+    ARTS[`${tier}_hammer`] = hammer(color);
+    ARTS[`${tier}_shield`] = shieldArt(color);
+    ARTS[`${tier}_grappling_hook`] = hookArt(color);
+  }
+  ARTS[`${tier}_armor`] = armorArt(color);
+}
+ARTS["copper_ingot"] = ingot("#d87a4e");
+ARTS["netherite_ingot"] = ingot("#4a4048");
+ARTS["netherite_scrap"] = blob("#5a4a44");
+ARTS["copper_ore"] = blob("#d87a4e");
+
 const cache = new Map<string, Texture>();
 
 function artTexture(id: string, art: Art): Texture {

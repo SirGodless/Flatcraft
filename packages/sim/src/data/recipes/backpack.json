@@ -1,10 +1,10 @@
 {
   "type": "flatcraft:crafting_shapeless",
   "ingredients": [
-    { "item": "flatcraft:oak_planks" },
-    { "item": "flatcraft:oak_planks" },
-    { "item": "flatcraft:oak_planks" },
-    { "item": "flatcraft:oak_planks" },
+    { "tag": "flatcraft:planks" },
+    { "tag": "flatcraft:planks" },
+    { "tag": "flatcraft:planks" },
+    { "tag": "flatcraft:planks" },
     { "item": "flatcraft:stick" },
     { "item": "flatcraft:stick" },
     { "item": "flatcraft:stick" },

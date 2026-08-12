@@ -31,6 +31,12 @@ export type SimEvent =
   | { type: "entity_hurt"; id: EntityId; health: number }
   | { type: "entity_removed"; id: EntityId }
   | { type: "block_changed"; dim: Dimension; x: number; y: number; block: BlockId }
+  /** Background wall layer changed (hammer mining / wall placement). */
+  | { type: "wall_changed"; dim: Dimension; x: number; y: number; block: BlockId }
+  /** Creative mode toggled (sent to the owner). */
+  | { type: "player_creative"; player: PlayerId; on: boolean }
+  /** Remaining air ticks while diving (sent to the owner). */
+  | { type: "player_air"; player: PlayerId; air: number; max: number }
   /** Mining progress for crack overlays; total 0 clears the overlay. */
   | { type: "mining_progress"; player: PlayerId; x: number; y: number; progress: number; total: number }
   | { type: "chunk_data"; dim: Dimension; cx: number; cy: number; tiles: number[]; walls: number[] }
@@ -43,6 +49,8 @@ export type SimEvent =
       selected: number;
       cursor: ItemStack | null;
       craftGrid: (ItemStack | null)[];
+      armor: ItemStack | null;
+      offhand: ItemStack | null;
     }
   /** Chest contents sync. */
   | { type: "chest_changed"; dim: Dimension; x: number; y: number; slots: (ItemStack | null)[] }

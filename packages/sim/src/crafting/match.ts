@@ -1,5 +1,5 @@
 import type { ItemStack } from "../inventory.js";
-import type { Recipe } from "./recipe.js";
+import { ingredientMatches, type Recipe } from "./recipe.js";
 
 /**
  * Grid crafting: match the contents of a crafting grid against shaped and
@@ -48,7 +48,7 @@ function matchesShaped(grid: readonly (ItemStack | null)[], recipe: Recipe, b: B
       const want = pattern[row]![col] ?? null;
       const have = grid[(b.minRow + row) * CRAFT_GRID_WIDTH + (b.minCol + col)] ?? null;
       if ((want === null) !== (have === null)) return false;
-      if (want !== null && have !== null && have.item !== want) return false;
+      if (want !== null && have !== null && !ingredientMatches(want, have.item)) return false;
     }
   }
   return true;
@@ -60,7 +60,7 @@ function matchesShapeless(grid: readonly (ItemStack | null)[], recipe: Recipe): 
   for (const stack of grid) {
     if (!stack) continue;
     filled++;
-    const idx = remaining.indexOf(stack.item);
+    const idx = remaining.findIndex((key) => ingredientMatches(key, stack.item));
     if (idx === -1) return false;
     remaining.splice(idx, 1);
   }

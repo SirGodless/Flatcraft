@@ -1,8 +1,11 @@
 import { Container, Graphics, Sprite, Text, type FederatedPointerEvent, type Texture } from "pixi.js";
 import {
+  allItems,
   BlockId,
   countInInventory,
   HOTBAR_SIZE,
+  ingredientLabel,
+  ingredientOptions,
   matchGrid,
   RECIPES,
   SMALL_GRID_INDICES,
@@ -233,6 +236,110 @@ export class HungerUI {
   }
 }
 
+/** Air bubbles while diving, above the hunger bar. */
+export class AirUI {
+  readonly container = new Container();
+
+  update(air: number, max: number): void {
+    this.container.removeChildren().forEach((c) => c.destroy({ children: true }));
+    if (air >= max) return; // fully surfaced: no bubbles shown
+    const bubbles = 10;
+    const filled = Math.ceil((Math.max(0, air) / max) * bubbles);
+    const gfx = new Graphics();
+    for (let i = 0; i < bubbles; i++) {
+      const x = (bubbles - 1 - i) * 18;
+      if (i < filled) {
+        gfx.circle(x + 7, 6, 5).fill({ color: 0x9adcf0 });
+      } else {
+        gfx.circle(x + 7, 6, 5).stroke({ color: 0x9adcf0, width: 1, alpha: 0.5 });
+      }
+    }
+    this.container.addChild(gfx);
+  }
+
+  get width(): number {
+    return 10 * 18 - 4;
+  }
+}
+
+/**
+ * Creative item picker: every registered item in a scrollable grid.
+ * Left click gives 1, right click a full stack.
+ */
+export class CreativePanelUI {
+  readonly container = new Container();
+  onGive: ((item: string, count: number) => void) | null = null;
+
+  private offset = 0;
+  private readonly items: string[];
+
+  constructor(private readonly blockTextures: Map<BlockId, Texture>) {
+    this.container.visible = false;
+    this.items = [...allItems()].map((def) => def.id);
+  }
+
+  get visible(): boolean {
+    return this.container.visible;
+  }
+
+  open(): void {
+    this.container.visible = true;
+    this.rebuild();
+  }
+
+  close(): void {
+    this.container.visible = false;
+  }
+
+  scrollBy(delta: number): void {
+    const cols = 9;
+    const rows = Math.ceil(this.items.length / cols);
+    const maxOffset = Math.max(0, rows * (SLOT + PAD) - 6 * (SLOT + PAD));
+    this.offset = Math.max(0, Math.min(maxOffset, this.offset + delta * 0.5));
+    if (this.container.visible) this.rebuild();
+  }
+
+  private rebuild(): void {
+    this.container.removeChildren().forEach((c) => c.destroy({ children: true }));
+    const cols = 9;
+    const viewRows = 6;
+    const width = cols * (SLOT + PAD) + 3 * PAD;
+    const height = viewRows * (SLOT + PAD) + 40;
+
+    const background = new Graphics()
+      .rect(0, 0, width, height)
+      .fill({ color: 0x1a1a22, alpha: 0.92 })
+      .stroke({ color: 0x555566, width: 2 });
+    background.eventMode = "static";
+    this.container.addChild(background);
+
+    const title = new Text({
+      text: "Creative (click: 1, right: stack, wheel: scroll)",
+      style: { fill: "#cccccc", fontSize: 12, fontFamily: "monospace" },
+    });
+    title.position.set(PAD * 2, 8);
+    this.container.addChild(title);
+
+    const list = new Container();
+    this.items.forEach((item, index) => {
+      const col = index % cols;
+      const row = Math.floor(index / cols);
+      const cellY = row * (SLOT + PAD) - this.offset;
+      if (cellY < -SLOT || cellY > viewRows * (SLOT + PAD)) return;
+      const cell = slotWidget({ item, count: 1 }, this.blockTextures, {
+        onClick: (button) => this.onGive?.(item, button === "left" ? 1 : 64),
+      });
+      cell.position.set(PAD * 2 + col * (SLOT + PAD), cellY);
+      list.addChild(cell);
+    });
+    list.position.set(0, 30);
+    const mask = new Graphics().rect(0, 30, width, viewRows * (SLOT + PAD)).fill(0xffffff);
+    list.mask = mask;
+    this.container.addChild(mask);
+    this.container.addChild(list);
+  }
+}
+
 /** The always-visible 9-slot hotbar, bottom center of the screen. */
 export class HotbarUI {
   readonly container = new Container();
@@ -274,6 +381,8 @@ export class CraftingPanelUI {
   private slots: InventorySlots = [];
   private selected = 0;
   private craftGrid: (ItemStack | null)[] = new Array(9).fill(null);
+  private armor: ItemStack | null = null;
+  private offhand: ItemStack | null = null;
   private listOffset = 0;
   private listViewport = 200;
   private listContent = 0;
@@ -297,10 +406,18 @@ export class CraftingPanelUI {
     return this.container.visible;
   }
 
-  update(slots: InventorySlots, selected: number, craftGrid: (ItemStack | null)[]): void {
+  update(
+    slots: InventorySlots,
+    selected: number,
+    craftGrid: (ItemStack | null)[],
+    armor: ItemStack | null = null,
+    offhand: ItemStack | null = null,
+  ): void {
     this.slots = slots;
     this.selected = selected;
     this.craftGrid = craftGrid;
+    this.armor = armor;
+    this.offhand = offhand;
     if (this.container.visible) this.rebuild();
   }
 
@@ -357,6 +474,25 @@ export class CraftingPanelUI {
     });
     resultCell.position.set(PAD * 2 + gridPx + 48, y + gridPx / 2 - SLOT / 2);
     this.container.addChild(resultCell);
+
+    // Armor + offhand slots to the right of the crafting area.
+    const gearX = PAD * 2 + gridPx + 130;
+    const armorLabel = new Text({
+      text: "Armor      Offhand",
+      style: { fill: "#9a9aac", fontSize: 11, fontFamily: "monospace" },
+    });
+    armorLabel.position.set(gearX, y - 14);
+    this.container.addChild(armorLabel);
+    const armorCell = slotWidget(this.armor, this.blockTextures, {
+      onClick: click({ container: "armor" }),
+    });
+    armorCell.position.set(gearX, y);
+    this.container.addChild(armorCell);
+    const offhandCell = slotWidget(this.offhand, this.blockTextures, {
+      onClick: click({ container: "offhand" }),
+    });
+    offhandCell.position.set(gearX + 76, y);
+    this.container.addChild(offhandCell);
 
     y += gridPx + 12;
 
@@ -428,7 +564,11 @@ export class CraftingPanelUI {
     const smelting = recipe.kind === "smelting";
     const craftable =
       !smelting &&
-      [...recipe.ingredients].every(([item, count]) => countInInventory(this.slots, item) >= count);
+      [...recipe.ingredients].every(
+        ([key, count]) =>
+          ingredientOptions(key).reduce((sum, item) => sum + countInInventory(this.slots, item), 0) >=
+          count,
+      );
 
     const bg = new Graphics().rect(0, 0, width, height - 3).fill({
       color: craftable ? 0x2e4e2e : 0x2a2a33,
@@ -445,7 +585,9 @@ export class CraftingPanelUI {
       row.addChild(icon);
     }
 
-    const needs = [...recipe.ingredients].map(([item, count]) => `${count}x ${item}`).join(", ");
+    const needs = [...recipe.ingredients]
+      .map(([key, count]) => `${count}x ${ingredientLabel(key)}`)
+      .join(", ");
     const suffix = smelting ? " [furnace]" : recipe.gridSize === 3 ? " [table]" : "";
     const label = new Text({
       text: `${recipe.result.count}x ${recipe.result.item}  <-  ${needs}${suffix}`,

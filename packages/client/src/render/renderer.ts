@@ -1,5 +1,6 @@
 import { Application, Container, Graphics, Sprite, Text, type Texture } from "pixi.js";
 import {
+  blockDef,
   BlockId,
   daylightFactor,
   ENTITY_SIZES,
@@ -19,8 +20,10 @@ import { FogOfWar } from "./fog.js";
 import { itemTexture } from "./icons.js";
 import { createBlockTextures, TILE_PX } from "./textures.js";
 import {
+  AirUI,
   ContainerPanelUI,
   CraftingPanelUI,
+  CreativePanelUI,
   currentTooltip,
   cursorWidget,
   EnchantPanelUI,
@@ -89,6 +92,16 @@ export class Renderer {
   private readonly miningOverlays = new Map<PlayerId, Graphics>();
   private hearts!: HeartsUI;
   private hungerBar!: HungerUI;
+  private airBar!: AirUI;
+  private creativePanel!: CreativePanelUI;
+  /** Creative mode as reported by the server. */
+  creativeMode = false;
+  /** Background-wall placement mode (B key), shown in the HUD. */
+  backgroundMode = false;
+  /** Wired by the bootstrap code: right-clicked a door/trapdoor. */
+  onUseBlock: ((x: number, y: number) => void) | null = null;
+  /** Wired by the bootstrap code: creative picker item click. */
+  onCreativeGive: ((item: string, count: number) => void) | null = null;
   private hud!: Text;
   private hotbar!: HotbarUI;
   private craftingPanel!: CraftingPanelUI;
@@ -171,6 +184,14 @@ export class Renderer {
     this.hungerBar.update(20, 20);
     this.app.stage.addChild(this.hungerBar.container);
 
+    this.airBar = new AirUI();
+    this.airBar.update(200, 200);
+    this.app.stage.addChild(this.airBar.container);
+
+    this.creativePanel = new CreativePanelUI(blockTextures);
+    this.creativePanel.onGive = (item, count) => this.onCreativeGive?.(item, count);
+    this.app.stage.addChild(this.creativePanel.container);
+
     this.craftingPanel = new CraftingPanelUI(blockTextures);
     this.craftingPanel.onQuickCraft = (id) => this.onCraft?.(id);
     this.craftingPanel.onSlotClick = (slot, button) => this.onSlotClick?.(slot, button);
@@ -218,10 +239,12 @@ export class Renderer {
     this.app.stage.addChild(this.tooltipBox);
   }
 
-  /** Toggle the inventory screen (2x2 crafting). */
+  /** Toggle the inventory screen (2x2 crafting; creative: item picker). */
   toggleInventory(): void {
-    if (this.craftingPanel.visible || this.furnacePanel.visible) {
+    if (this.uiOpen) {
       this.closeUI();
+    } else if (this.creativeMode) {
+      this.creativePanel.open();
     } else {
       this.craftingPanel.maxHeight = this.screenHeight - 60;
       this.craftingPanel.open(2);
@@ -236,6 +259,7 @@ export class Renderer {
     this.backpackPanel.close();
     this.tradePanel.close();
     this.enchantPanel.close();
+    this.creativePanel.close();
     this.openChestPos = null;
     if (wasOpen) this.onUiClosed?.();
   }
@@ -247,7 +271,8 @@ export class Renderer {
       this.chestPanel.visible ||
       this.backpackPanel.visible ||
       this.tradePanel.visible ||
-      this.enchantPanel.visible
+      this.enchantPanel.visible ||
+      this.creativePanel.visible
     );
   }
 
@@ -294,6 +319,11 @@ export class Renderer {
    */
   tryOpenBlockUI(tileX: number, tileY: number): boolean {
     const block = this.worldView.getBlock(tileX, tileY);
+    // Doors and trapdoors toggle server-side.
+    if (blockDef(block).toggleTo !== undefined) {
+      this.onUseBlock?.(tileX, tileY);
+      return true;
+    }
     if (block === BlockId.CraftingTable) {
       this.craftingPanel.maxHeight = this.screenHeight - 60;
       this.furnacePanel.close();
@@ -337,6 +367,7 @@ export class Renderer {
       this.backpackPanel.container,
       this.tradePanel.container,
       this.enchantPanel.container,
+      this.creativePanel.container,
       this.hotbar.container,
     ];
     for (const panel of panels) {
@@ -354,10 +385,14 @@ export class Renderer {
     this.pointerY = y;
   }
 
-  /** Scroll an open crafting panel; returns true if consumed. */
+  /** Scroll an open crafting/creative panel; returns true if consumed. */
   handleWheel(deltaY: number): boolean {
     if (this.craftingPanel.visible) {
       this.craftingPanel.scrollBy(deltaY);
+      return true;
+    }
+    if (this.creativePanel.visible) {
+      this.creativePanel.scrollBy(deltaY);
       return true;
     }
     return false;
@@ -443,6 +478,24 @@ export class Renderer {
         }
         break;
       }
+      case "player_air": {
+        if (event.player === this.localPlayerId) {
+          this.airBar.update(event.air, event.max);
+        }
+        break;
+      }
+      case "player_creative": {
+        if (event.player === this.localPlayerId) {
+          this.creativeMode = event.on;
+          if (!event.on) this.creativePanel.close();
+        }
+        break;
+      }
+      case "wall_changed":
+        if (event.dim === this.localDim) {
+          this.worldView.setWall(event.x, event.y, event.block);
+        }
+        break;
       case "player_dimension": {
         this.playerDims.set(event.player, event.dim);
         const marker = this.players.get(event.player);
@@ -537,7 +590,7 @@ export class Renderer {
           this.selectedSlot = event.selected;
           this.cursorStack = event.cursor;
           this.hotbar.update(this.inventory, this.selectedSlot);
-          this.craftingPanel.update(this.inventory, this.selectedSlot, event.craftGrid);
+          this.craftingPanel.update(this.inventory, this.selectedSlot, event.craftGrid, event.armor, event.offhand);
           this.refreshBackpack();
           this.tradePanel.update(this.inventory);
           this.enchantPanel.update(this.inventory, this.selectedSlot);
@@ -828,6 +881,11 @@ export class Renderer {
       (this.screenWidth + this.hotbar.width) / 2 - this.hungerBar.width,
       this.screenHeight - this.hotbar.height - 26,
     );
+    this.airBar.container.position.set(
+      (this.screenWidth + this.hotbar.width) / 2 - this.airBar.width,
+      this.screenHeight - this.hotbar.height - 46,
+    );
+    this.creativePanel.container.position.set((this.screenWidth - 420) / 2, 60);
     this.craftingPanel.container.position.set(12, 40);
     this.furnacePanel.container.position.set(
       (this.screenWidth - this.furnacePanel.panelWidth) / 2,
@@ -875,6 +933,7 @@ export class Renderer {
 
     const px = localX !== null ? Math.floor(localX) : Math.floor(this.camera.x / TILE_PX);
     const py = localY !== null ? Math.floor(localY) : Math.floor(this.camera.y / TILE_PX);
-    this.hud.text = `FlatCraft | ${this.localDim} ${px},${py} | zoom ${this.camera.zoom.toFixed(1)} | A/D walk, Space jump, hold LMB mine, RMB place, 1-9/wheel slot, E craft, C color, +/- zoom`;
+    const modes = `${this.backgroundMode ? " [BG-BAU]" : ""}${this.creativeMode ? " [CREATIVE]" : ""}`;
+    this.hud.text = `FlatCraft | ${this.localDim} ${px},${py} | zoom ${this.camera.zoom.toFixed(1)}${modes} | A/D walk, Space jump, hold LMB mine, RMB place/use, 1-9/wheel slot, E craft, B walls, C color, +/- zoom`;
   }
 }

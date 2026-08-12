@@ -136,6 +136,7 @@ const VEINS: readonly VeinSpec[] = [
   { block: BlockId.Obsidian, attempts: 2, sizeMin: 3, sizeMax: 6, minY: 236, maxY: 255 },
   { block: BlockId.Gravel, attempts: 3, sizeMin: 6, sizeMax: 12, minY: 12, maxY: 255 },
   { block: BlockId.CoalOre, attempts: 5, sizeMin: 4, sizeMax: 10, minY: 2, maxY: 255 },
+  { block: BlockId.CopperOre, attempts: 3, sizeMin: 3, sizeMax: 7, minY: 8, maxY: 140 },
   { block: BlockId.IronOre, attempts: 4, sizeMin: 3, sizeMax: 6, minY: 24, maxY: 255 },
   { block: BlockId.LapisOre, attempts: 1, sizeMin: 2, sizeMax: 5, minY: 48, maxY: 160 },
   { block: BlockId.GoldOre, attempts: 2, sizeMin: 2, sizeMax: 5, minY: 80, maxY: 255 },
@@ -196,8 +197,25 @@ const TREE_CANOPY_RADIUS = 2;
 function treeChance(biome: Biome): number {
   if (biome === Biome.Forest) return 0.16;
   if (biome === Biome.Plains) return 0.04;
+  if (biome === Biome.Mountains) return 0.05;
   return 0;
 }
+
+export type TreeWood = "oak" | "birch" | "spruce";
+
+/** Which wood grows at this column: spruce on mountains, forests mix
+ * oak and birch, plains grow oak. */
+function treeWood(seed: number, x: number, biome: Biome): TreeWood {
+  if (biome === Biome.Mountains) return "spruce";
+  if (biome === Biome.Forest && hash01(seed, x, 0x7ee3) < 0.4) return "birch";
+  return "oak";
+}
+
+const TREE_BLOCKS: Record<TreeWood, { log: BlockId; leaves: BlockId }> = {
+  oak: { log: BlockId.OakLog, leaves: BlockId.OakLeaves },
+  birch: { log: BlockId.BirchLog, leaves: BlockId.BirchLeaves },
+  spruce: { log: BlockId.SpruceLog, leaves: BlockId.SpruceLeaves },
+};
 
 function hasTreeSeed(seed: number, x: number): boolean {
   const p = treeChance(biomeAt(seed, x));
@@ -211,6 +229,7 @@ export interface Tree {
   surface: number;
   /** Total height above the surface, trunk plus canopy. */
   height: number;
+  wood: TreeWood;
 }
 
 /** The tree rooted at column x, if any. Column-deterministic. */
@@ -218,8 +237,12 @@ export function treeAt(seed: number, x: number): Tree | null {
   if (!hasTreeSeed(seed, x)) return null;
   // Keep at least two columns between trunks (left neighbor wins).
   if (hasTreeSeed(seed, x - 1) || hasTreeSeed(seed, x - 2)) return null;
-  const height = 4 + Math.floor(hash01(seed, x, 0x7ee2) * 3);
-  return { x, surface: surfaceHeight(seed, x), height };
+  const biome = biomeAt(seed, x);
+  const wood = treeWood(seed, x, biome);
+  // Spruces grow a bit taller.
+  const extra = wood === "spruce" ? 2 : 0;
+  const height = 4 + extra + Math.floor(hash01(seed, x, 0x7ee2) * 3);
+  return { x, surface: surfaceHeight(seed, x), height, wood };
 }
 
 function stampIfAir(chunk: Chunk, x: number, y: number, block: BlockId): void {
@@ -236,14 +259,23 @@ function stampTrees(seed: number, chunk: Chunk): void {
   for (let x = x0 - TREE_CANOPY_RADIUS; x < x0 + CHUNK_WIDTH + TREE_CANOPY_RADIUS; x++) {
     const tree = treeAt(seed, x);
     if (!tree) continue;
+    const { log, leaves } = TREE_BLOCKS[tree.wood];
     const topY = tree.surface - tree.height;
     for (let y = tree.surface - 1; y > topY; y--) {
-      stampIfAir(chunk, x, y, BlockId.OakLog);
+      stampIfAir(chunk, x, y, log);
     }
     for (let dy = -2; dy <= 1; dy++) {
-      const rowRadius = dy === -2 || dy === 1 ? 1 : TREE_CANOPY_RADIUS;
+      // Spruces get a narrow, pointy canopy.
+      const rowRadius =
+        tree.wood === "spruce"
+          ? dy <= -1
+            ? 1
+            : TREE_CANOPY_RADIUS
+          : dy === -2 || dy === 1
+            ? 1
+            : TREE_CANOPY_RADIUS;
       for (let dx = -rowRadius; dx <= rowRadius; dx++) {
-        stampIfAir(chunk, x + dx, topY + dy, BlockId.OakLeaves);
+        stampIfAir(chunk, x + dx, topY + dy, leaves);
       }
     }
   }

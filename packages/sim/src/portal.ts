@@ -14,8 +14,8 @@ export const PORTAL_MAX_H = 5;
 /** Ticks a player must stand at a portal before teleporting. */
 export const PORTAL_TICKS = 60;
 /**
- * In 2D you cannot walk "through" the frame plane, so standing next to
- * the portal (within this range of any portal block) counts as being in it.
+ * Lit frames become side-permeable (PortalFrame), so players walk into
+ * the interior; standing within this range of a portal block counts.
  */
 export const PORTAL_RANGE = 2.0;
 /** Ticks after arrival before the return trip can start. */
@@ -56,18 +56,48 @@ export function findPortalInterior(world: World, x: number, y: number): PortalIn
   if (width < PORTAL_MIN_W || width > PORTAL_MAX_W) return null;
   if (height < PORTAL_MIN_H || height > PORTAL_MAX_H) return null;
 
+  // Frames are built from obsidian; once lit they turn into the
+  // side-permeable PortalFrame - both count as frame material.
+  const isFrame = (bx: number, by: number): boolean => {
+    const b = world.getBlockGenerating(bx, by);
+    return b === BlockId.Obsidian || b === BlockId.PortalFrame;
+  };
   for (let ty = top; ty <= bottom; ty++) {
     for (let tx = left; tx <= right; tx++) {
       if (!isInner(tx, ty)) return null;
     }
-    if (world.getBlockGenerating(left - 1, ty) !== BlockId.Obsidian) return null;
-    if (world.getBlockGenerating(right + 1, ty) !== BlockId.Obsidian) return null;
+    if (!isFrame(left - 1, ty) || !isFrame(right + 1, ty)) return null;
   }
   for (let tx = left; tx <= right; tx++) {
-    if (world.getBlockGenerating(tx, top - 1) !== BlockId.Obsidian) return null;
-    if (world.getBlockGenerating(tx, bottom + 1) !== BlockId.Obsidian) return null;
+    if (!isFrame(tx, top - 1) || !isFrame(tx, bottom + 1)) return null;
   }
   return { left, right, top, bottom };
+}
+
+/**
+ * Convert the frame of a lit interior to side-permeable PortalFrame
+ * blocks, so players can walk in. Returns the changed tiles.
+ */
+export function convertFrame(
+  world: World,
+  interior: PortalInterior,
+): Array<{ x: number; y: number; block: BlockId }> {
+  const changes: Array<{ x: number; y: number; block: BlockId }> = [];
+  const convert = (x: number, y: number): void => {
+    if (world.getBlockGenerating(x, y) === BlockId.Obsidian) {
+      world.setBlock(x, y, BlockId.PortalFrame);
+      changes.push({ x, y, block: BlockId.PortalFrame });
+    }
+  };
+  for (let ty = interior.top; ty <= interior.bottom; ty++) {
+    convert(interior.left - 1, ty);
+    convert(interior.right + 1, ty);
+  }
+  for (let tx = interior.left; tx <= interior.right; tx++) {
+    convert(tx, interior.top - 1);
+    convert(tx, interior.bottom + 1);
+  }
+  return changes;
 }
 
 /**
@@ -87,17 +117,18 @@ export function buildPortal(world: World, bx: number, by: number): Array<{ x: nu
       set(x, y, BlockId.Air);
     }
   }
-  // Frame: interior is x in [bx, bx+1], y in [by-2, by]. The floor row
-  // extends one tile to each side so arriving players have footing.
+  // Frame: interior is x in [bx, bx+1], y in [by-2, by]. Lit frames are
+  // PortalFrame (side-permeable), so players walk straight in. The floor
+  // row extends one tile to each side so arriving players have footing.
   for (let y = by - 3; y <= by + 1; y++) {
-    set(bx - 1, y, BlockId.Obsidian);
-    set(bx + 2, y, BlockId.Obsidian);
+    set(bx - 1, y, BlockId.PortalFrame);
+    set(bx + 2, y, BlockId.PortalFrame);
   }
   for (let x = bx - 1; x <= bx + 2; x++) {
-    set(x, by - 3, BlockId.Obsidian);
+    set(x, by - 3, BlockId.PortalFrame);
   }
   for (let x = bx - 3; x <= bx + 4; x++) {
-    set(x, by + 1, BlockId.Obsidian);
+    set(x, by + 1, x >= bx - 1 && x <= bx + 2 ? BlockId.PortalFrame : BlockId.Obsidian);
   }
   for (let y = by - 2; y <= by; y++) {
     set(bx, y, BlockId.NetherPortal);

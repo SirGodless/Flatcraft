@@ -29,6 +29,10 @@ export interface InputOptions {
   onHotbarScroll(direction: 1 | -1): void;
   /** C key: cycle the player's body color. */
   onCycleColor(): void;
+  /** B key: toggle background-wall placement mode. */
+  onToggleBackground(): void;
+  /** Hidden keybind (F8): toggle creative mode. */
+  onToggleCreative(): void;
   /** Raw pointer position for the cursor-stack overlay. */
   onPointerMove(x: number, y: number): void;
 }
@@ -43,7 +47,9 @@ const ZOOM_MAX = 6;
 const LEFT_KEYS = ["KeyA", "ArrowLeft"];
 const RIGHT_KEYS = ["KeyD", "ArrowRight"];
 const JUMP_KEYS = ["Space", "KeyW", "ArrowUp"];
-const GAME_KEYS = new Set([...LEFT_KEYS, ...RIGHT_KEYS, ...JUMP_KEYS]);
+/** Creative flight: descend. */
+const DOWN_KEYS = ["ShiftLeft", "ShiftRight", "KeyS", "ArrowDown"];
+const GAME_KEYS = new Set([...LEFT_KEYS, ...RIGHT_KEYS, ...JUMP_KEYS, ...DOWN_KEYS]);
 
 /**
  * Input layer. Translates raw browser events into either camera/UI changes
@@ -56,6 +62,7 @@ export function attachInput(target: HTMLElement, opts: InputOptions): InputHandl
   const held = new Set<string>();
   let lastDx: -1 | 0 | 1 = 0;
   let lastJump = false;
+  let lastDown = false;
   let miningTile: { x: number; y: number } | null = null;
 
   const currentDx = (): -1 | 0 | 1 => {
@@ -68,10 +75,12 @@ export function attachInput(target: HTMLElement, opts: InputOptions): InputHandl
   const syncMoveIntent = (): void => {
     const dx = currentDx();
     const jump = JUMP_KEYS.some((k) => held.has(k));
-    if (dx !== lastDx || jump !== lastJump) {
+    const down = DOWN_KEYS.some((k) => held.has(k));
+    if (dx !== lastDx || jump !== lastJump || down !== lastDown) {
       lastDx = dx;
       lastJump = jump;
-      opts.sendCommand({ type: "move", dx, jump });
+      lastDown = down;
+      opts.sendCommand({ type: "move", dx, jump, down });
     }
   };
 
@@ -91,6 +100,15 @@ export function attachInput(target: HTMLElement, opts: InputOptions): InputHandl
     }
     if (e.code === "KeyC") {
       opts.onCycleColor();
+      return;
+    }
+    if (e.code === "KeyB") {
+      opts.onToggleBackground();
+      return;
+    }
+    if (e.code === "F8") {
+      // Hidden keybind: creative mode.
+      opts.onToggleCreative();
       return;
     }
     if (e.code === "Equal" || e.code === "NumpadAdd") {

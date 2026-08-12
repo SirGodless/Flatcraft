@@ -84,7 +84,19 @@ async function runGame(options: GameOptions): Promise<Renderer> {
     }
   });
 
+  // B toggles background-wall placement; place_block commands get the layer.
+  let placeBackground = false;
+  const sendCommand = (command: Parameters<typeof connection.send>[0]): void => {
+    if (command.type === "place_block") {
+      connection.send({ ...command, layer: placeBackground ? "bg" : "fg" });
+    } else {
+      connection.send(command);
+    }
+  };
+
   renderer.onCraft = (recipeId) => connection.send({ type: "craft", recipe: recipeId });
+  renderer.onUseBlock = (x, y) => connection.send({ type: "use_block", x, y });
+  renderer.onCreativeGive = (item, count) => connection.send({ type: "creative_give", item, count });
   renderer.onSlotClick = (slot, button) => connection.send({ type: "slot_click", slot, button });
   renderer.onOpenFurnace = (x, y) => connection.send({ type: "open_furnace", x, y });
   renderer.onOpenChest = (x, y) => connection.send({ type: "open_chest", x, y });
@@ -94,7 +106,7 @@ async function runGame(options: GameOptions): Promise<Renderer> {
 
   attachInput(renderer.canvas, {
     camera: renderer.camera,
-    sendCommand: (command) => connection.send(command),
+    sendCommand,
     screenSize: () => ({ width: renderer.screenWidth, height: renderer.screenHeight }),
     onToggleInventory: () => renderer.toggleInventory(),
     onEscape: () => renderer.closeUI(),
@@ -122,6 +134,14 @@ async function runGame(options: GameOptions): Promise<Renderer> {
         }
         return true;
       }
+      if (item !== null && itemDef(item)?.grapple !== undefined) {
+        // Fire the grappling hook toward the cursor.
+        const pos = renderer.localPlayerPos();
+        if (pos) {
+          connection.send({ type: "grapple", dx: x - pos.x, dy: y - (pos.y - PLAYER_HEIGHT / 2) });
+        }
+        return true;
+      }
       if (item !== null && (item.startsWith("potion_") || itemDef(item)?.food !== undefined)) {
         connection.send({ type: "use_item" });
         return true;
@@ -143,6 +163,11 @@ async function runGame(options: GameOptions): Promise<Renderer> {
       storePlayerColor(currentColor);
       connection.send({ type: "set_color", color: currentColor });
     },
+    onToggleBackground: () => {
+      placeBackground = !placeBackground;
+      renderer.backgroundMode = placeBackground;
+    },
+    onToggleCreative: () => connection.send({ type: "set_creative", on: !renderer.creativeMode }),
     onPointerMove: (x, y) => renderer.setPointer(x, y),
   });
 
