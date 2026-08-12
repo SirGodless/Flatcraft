@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  blockDef,
   BlockId,
   countInInventory,
   findSpawnX,
@@ -170,6 +171,52 @@ describe("liquids", () => {
     for (let i = 0; i < 30; i++) sim.tick([]);
     expect(sim.world.getBlockGenerating(bx, SURFACE - 1)).toBe(BlockId.Water);
     expect(sim.world.getBlockGenerating(bx, SURFACE - 2)).toBe(BlockId.Air);
+  });
+
+  it("water runs down stairs instead of stranding on the steps", () => {
+    const sim = new Simulation(SEED);
+    const { player, state } = joinPlayer(sim);
+    sim.tick([{ player, command: { type: "set_creative", on: true } }]);
+    const bx = Math.floor(state.x) + 2;
+    const top = SURFACE - 8;
+    // A sealed box: staircase descending to the right into a basin.
+    for (let x = bx - 1; x <= bx + 7; x++) {
+      for (let y = top; y <= SURFACE + 1; y++) setBlock(sim, x, y, BlockId.Air);
+      setBlock(sim, x, SURFACE + 1, BlockId.Stone); // basin floor
+    }
+    for (let y = top; y <= SURFACE + 1; y++) {
+      setBlock(sim, bx - 1, y, BlockId.Stone);
+      setBlock(sim, bx + 7, y, BlockId.Stone);
+    }
+    for (let i = 0; i <= 3; i++) {
+      for (let y = SURFACE - 4 + i; y <= SURFACE; y++) setBlock(sim, bx + i, y, BlockId.Stone);
+    }
+    // Full water on the top step, held back by a plug.
+    setBlock(sim, bx, SURFACE - 5, BlockId.Water);
+    setBlock(sim, bx + 1, SURFACE - 5, BlockId.Stone);
+
+    // Stand on the second step and pull the plug (creative: instant).
+    state.x = bx + 1.5;
+    state.y = SURFACE - 3;
+    state.vy = 0;
+    sim.tick([{ player, command: { type: "start_mining", x: bx + 1, y: SURFACE - 5 } }]);
+    for (let i = 0; i < 600; i++) sim.tick([]);
+
+    // Every step surface drained; nothing stranded at level 1.
+    for (let i = 0; i <= 3; i++) {
+      expect(sim.world.getBlockGenerating(bx + i, SURFACE - 5 + i)).toBe(BlockId.Air);
+    }
+    // All 8 units arrived in the basin: volume is conserved.
+    let volume = 0;
+    for (let x = bx - 1; x <= bx + 7; x++) {
+      for (let y = top; y <= SURFACE + 1; y++) {
+        volume += blockDef(sim.world.getBlockGenerating(x, y)).liquid?.level ?? 0;
+      }
+    }
+    expect(volume).toBe(8);
+    for (let x = bx + 4; x <= bx + 6; x++) {
+      expect(blockDef(sim.world.getBlockGenerating(x, SURFACE)).liquid?.kind).toBe("water");
+    }
   });
 
   it("flowing water emits at most one block_changed per cell per tick", () => {

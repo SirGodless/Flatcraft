@@ -548,8 +548,8 @@ export class Simulation {
 
         // 2) Spread: give one unit to a lower neighbor, alternating the
         // preferred side per row so ponds settle symmetrically.
+        const order = (x + y) % 2 === 0 ? [-1, 1] : [1, -1];
         if (level > 1) {
-          const order = (x + y) % 2 === 0 ? [-1, 1] : [1, -1];
           for (const dir of order) {
             const nx = x + dir;
             const neighborDef = blockDef(world.getBlockGenerating(nx, y));
@@ -562,6 +562,25 @@ export class Simulation {
               setLiquid(nx, y, liquid.kind, neighborLevel + 1);
               level -= 1;
               setLiquid(x, y, liquid.kind, level);
+              break;
+            }
+          }
+        } else {
+          // 2b) Run-off: the last unit can't split, but it keeps moving
+          // when the neighbor cell hangs over a drop - so water runs
+          // down slopes and stairs instead of stranding a thin film on
+          // every step. It only ever moves toward a fall, which keeps
+          // puddles on flat ground stable (no back-and-forth).
+          for (const dir of order) {
+            const nx = x + dir;
+            if (!isOpen(nx, y)) continue;
+            const belowNeighbor = blockDef(world.getBlockGenerating(nx, y + 1));
+            const drop =
+              isOpen(nx, y + 1) ||
+              (belowNeighbor.liquid?.kind === liquid.kind && belowNeighbor.liquid.level < 8);
+            if (drop) {
+              setLiquid(nx, y, liquid.kind, 1);
+              setLiquid(x, y, liquid.kind, 0);
               break;
             }
           }
