@@ -380,14 +380,14 @@ export class Renderer {
       case "player_joined": {
         this.playerDims.set(event.player, event.dim);
         const gfx = new Graphics();
-        this.drawPlayerBody(gfx, event.color, event.player === this.localPlayerId);
+        this.drawPlayerBody(gfx, event.color);
         gfx.visible = event.dim === this.localDim;
         this.worldContainer.addChild(gfx);
         let label: Text | null = null;
         if (event.player !== this.localPlayerId) {
           label = new Text({
             text: event.name,
-            style: { fill: "#ffffff", fontSize: 11, fontFamily: "monospace" },
+            style: { fill: "#ffffff", fontSize: 8, fontFamily: "monospace" },
           });
           label.visible = gfx.visible;
           this.worldContainer.addChild(label);
@@ -409,7 +409,7 @@ export class Renderer {
       case "player_color": {
         const marker = this.players.get(event.player);
         if (marker) {
-          this.drawPlayerBody(marker.gfx, event.color, event.player === this.localPlayerId);
+          this.drawPlayerBody(marker.gfx, event.color);
         }
         break;
       }
@@ -624,14 +624,9 @@ export class Renderer {
     }
   }
 
-  /** Player body in their chosen color; the local player gets an outline. */
-  private drawPlayerBody(gfx: Graphics, color: number, isLocal: boolean): void {
-    const w = PLAYER_WIDTH * TILE_PX;
-    const h = PLAYER_HEIGHT * TILE_PX;
-    gfx.clear().rect(0, 0, w, h).fill({ color });
-    if (isLocal) {
-      gfx.rect(0, 0, w, h).stroke({ color: 0xffffff, width: 2, alpha: 0.9 });
-    }
+  /** Player body in their chosen color. */
+  private drawPlayerBody(gfx: Graphics, color: number): void {
+    gfx.clear().rect(0, 0, PLAYER_WIDTH * TILE_PX, PLAYER_HEIGHT * TILE_PX).fill({ color });
   }
 
   private buildEntityGfx(kind: string, stack?: ItemStack): Container {
