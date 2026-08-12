@@ -13,8 +13,9 @@ export type Command =
   /** Change the player's body color in-game. */
   | { type: "set_color"; color: number }
   /** Sets the player's movement intent; it persists until the next move
-   * command, so clients only send changes, not one command per tick. */
-  | { type: "move"; dx: -1 | 0 | 1; jump: boolean }
+   * command, so clients only send changes, not one command per tick.
+   * `down` only matters for creative flight (descend). */
+  | { type: "move"; dx: -1 | 0 | 1; jump: boolean; down?: boolean }
   /** Start mining a block; progress accumulates every tick until the
    * block breaks or a stop_mining/new start_mining arrives. */
   | { type: "start_mining"; x: number; y: number }
@@ -30,8 +31,17 @@ export type Command =
   | { type: "shoot"; dx: number; dy: number }
   /** Enchant the selected tool at a nearby enchanting table (lapis cost). */
   | { type: "enchant" }
-  /** Places whatever block item is in the selected hotbar slot. */
-  | { type: "place_block"; x: number; y: number }
+  /** Places whatever block item is in the selected hotbar slot.
+   * layer "bg" places into the background wall layer. */
+  | { type: "place_block"; x: number; y: number; layer?: "fg" | "bg" }
+  /** Right-click interaction with a block (doors, trapdoors). */
+  | { type: "use_block"; x: number; y: number }
+  /** Fire the held grappling hook toward the given direction. */
+  | { type: "grapple"; dx: number; dy: number }
+  /** Toggle creative mode (no damage, flight, instant break). */
+  | { type: "set_creative"; on: boolean }
+  /** Creative only: put any item into the inventory. */
+  | { type: "creative_give"; item: string; count: number }
   | { type: "select_slot"; index: number }
   /** Quick-craft a recipe by id (like Minecraft's recipe book); the
    * simulation checks ingredients and, for 3x3 recipes, a nearby table. */
@@ -54,7 +64,11 @@ export type SlotRef =
   | { container: "furnace"; x: number; y: number; slot: "input" | "fuel" | "output" }
   | { container: "chest"; x: number; y: number; index: number }
   /** A slot inside the backpack in the player's selected hotbar slot. */
-  | { container: "backpack"; index: number };
+  | { container: "backpack"; index: number }
+  /** The worn armor slot (armor items only). */
+  | { container: "armor" }
+  /** The offhand slot (shields block passively from here). */
+  | { container: "offhand" };
 
 /** A command attributed to the player who issued it. */
 export interface PlayerCommand {

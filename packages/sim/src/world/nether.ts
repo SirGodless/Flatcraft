@@ -1,5 +1,5 @@
 import { CHUNK_HEIGHT, CHUNK_WIDTH } from "../constants.js";
-import { fbm2 } from "../math/noise.js";
+import { fbm2, hash01 } from "../math/noise.js";
 import { hashSeed } from "../math/rng.js";
 import { BlockId } from "./block.js";
 import { Chunk } from "./chunk.js";
@@ -21,6 +21,7 @@ export function generateNetherChunk(seed: number, cx: number, cy: number): Chunk
   const sGlow = hashSeed(seed, 0x0e712);
   const sSoul = hashSeed(seed, 0x0e713);
   const sBasalt = hashSeed(seed, 0x0e714);
+  const sDebris = hashSeed(seed, 0x0e715);
 
   for (let lx = 0; lx < CHUNK_WIDTH; lx++) {
     const x = cx * CHUNK_WIDTH + lx;
@@ -40,6 +41,9 @@ export function generateNetherChunk(seed: number, cx: number, cy: number): Chunk
           block = BlockId.SoulSand;
         } else if (y > LAVA_LEVEL - 24 && fbm2(sBasalt, x, y, 20, 2) > 0.74) {
           block = BlockId.Basalt;
+        } else if (y > LAVA_LEVEL - 20 && hash01(sDebris, x, y) < 0.005) {
+          // Ancient debris: rare single blocks near the lava sea.
+          block = BlockId.AncientDebris;
         } else {
           block = BlockId.Netherrack;
         }

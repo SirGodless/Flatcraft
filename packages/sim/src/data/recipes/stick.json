@@ -1,6 +1,6 @@
 {
   "type": "flatcraft:crafting_shaped",
   "pattern": ["#", "#"],
-  "key": { "#": { "item": "flatcraft:oak_planks" } },
+  "key": { "#": { "tag": "flatcraft:planks" } },
   "result": { "item": "flatcraft:stick", "count": 4 }
 }

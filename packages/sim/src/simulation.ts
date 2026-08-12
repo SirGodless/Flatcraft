@@ -2,7 +2,7 @@ import type { PlayerCommand, PlayerId, SlotRef } from "./commands.js";
 import type { OutboundEvent, SimEvent } from "./events.js";
 import { CHUNK_HEIGHT, CHUNK_WIDTH } from "./constants.js";
 import { CRAFT_GRID_SIZE, matchGrid, SMALL_GRID_INDICES } from "./crafting/match.js";
-import { DEFAULT_COOK_TICKS, fuelTicks } from "./crafting/recipe.js";
+import { DEFAULT_COOK_TICKS, fuelTicks, ingredientOptions } from "./crafting/recipe.js";
 import { RECIPES } from "./data/recipes/index.js";
 import { createFurnace, furnaceIdle, furnaceKey, stepFurnace, type FurnaceState } from "./furnace.js";
 import {
@@ -98,6 +98,7 @@ import {
 } from "./physics.js";
 import {
   buildPortal,
+  convertFrame,
   findPortalInterior,
   nearPortal,
   NETHER_SCALE,
@@ -109,7 +110,7 @@ import { clickStack } from "./slots.js";
 import { placementsNear, structureLootAt } from "./structures/place.js";
 import { TRADES } from "./data/trades/index.js";
 import { DAY_LENGTH, daylightFactor, isNight } from "./time.js";
-import { blockDef, blockDrops, BlockId } from "./world/block.js";
+import { blockDef, blockDrops, BlockId, liquidBlock } from "./world/block.js";
 import { Biome, biomeAt, findSpawnX, surfaceHeight } from "./world/gen.js";
 import { LAVA_LEVEL } from "./world/nether.js";
 import { World, type Dimension } from "./world/world.js";
@@ -118,6 +119,8 @@ import { World, type Dimension } from "./world/world.js";
 export interface PlayerInput {
   dx: -1 | 0 | 1;
   jump: boolean;
+  /** Creative flight: descend. */
+  down?: boolean;
 }
 
 /** Default body color for players who never picked one. */
@@ -150,8 +153,9 @@ export interface PlayerState {
   cursor: ItemStack | null;
   /** Personal 3x3 crafting grid (only the 2x2 corner without a table). */
   craftGrid: (ItemStack | null)[];
-  /** Block currently being mined, with accumulated progress ticks. */
-  mining: { x: number; y: number; progress: number } | null;
+  /** Block currently being mined, with accumulated progress ticks.
+   * `wall` targets the background layer (hammer mining). */
+  mining: { x: number; y: number; progress: number; wall?: boolean } | null;
   health: number;
   /** Hunger bar, 0..PLAYER_MAX_HUNGER. */
   hunger: number;
@@ -171,7 +175,23 @@ export interface PlayerState {
   portalTicks: number;
   /** Ticks left before a portal can trigger again after arriving. */
   portalCooldown: number;
+  /** Worn armor piece (damage absorption). */
+  armor: ItemStack | null;
+  /** Offhand item (shields block passively from here). */
+  offhand: ItemStack | null;
+  /** Active grappling-hook pull toward an anchor point. */
+  grapple: { x: number; y: number; ticks: number } | null;
+  /** Creative mode: no damage, flight, instant break, free placement. */
+  creative: boolean;
+  /** Remaining diving air in ticks (MAX_AIR_TICKS when surfaced). */
+  air: number;
 }
+
+/** Diving: air supply in ticks, and drowning damage cadence. */
+export const MAX_AIR_TICKS = 200;
+export const DROWN_DAMAGE_INTERVAL = 40;
+/** Grappling hook pull speed, tiles/tick. */
+export const GRAPPLE_SPEED = 0.7;
 
 /** Reject chunk requests absurdly far out (bad client / future cheat guard). */
 const MAX_CHUNK_COORD = 1_000_000;
@@ -197,6 +217,11 @@ export class Simulation {
   tickCount = 0;
   /** Time of day in ticks, 0..DAY_LENGTH (writable, e.g. for tests). */
   timeOfDay = 0;
+  /** Liquid tiles that may need to flow, per dimension ("x,y"). */
+  private readonly liquidActive: Record<Dimension, Set<string>> = {
+    overworld: new Set(),
+    nether: new Set(),
+  };
 
   private readonly rng: Rng;
   private readonly rngState: RngState;
@@ -295,6 +320,7 @@ export class Simulation {
     }
     this.stepMining(out);
     this.stepFurnaces(out);
+    this.stepLiquids(out);
     this.stepEntities(out);
     this.stepPlayers(out);
     this.stepSpawning(out);
@@ -383,6 +409,118 @@ export class Simulation {
     };
   }
 
+  /** Mark liquids around a changed tile as needing a flow update. */
+  private wakeLiquids(dimension: Dimension, x: number, y: number): void {
+    const world = this.worldOf(dimension);
+    for (const [nx, ny] of [
+      [x, y],
+      [x - 1, y],
+      [x + 1, y],
+      [x, y - 1],
+      [x, y + 1],
+    ] as const) {
+      if (blockDef(world.getBlock(nx, ny)).liquid) {
+        this.liquidActive[dimension].add(`${nx},${ny}`);
+      }
+    }
+  }
+
+  /**
+   * Terraria-style finite liquids: water and lava carry a fill level
+   * (1..8); active cells fall into open space below, top up liquid
+   * below, and equalize sideways one unit at a time. Lava updates on a
+   * slower cadence than water. Water touching lava turns it to obsidian.
+   */
+  private stepLiquids(out: OutboundEvent[]): void {
+    const BUDGET = 200;
+    for (const dimension of ["overworld", "nether"] as const) {
+      const active = this.liquidActive[dimension];
+      if (active.size === 0) continue;
+      const world = this.worldOf(dimension);
+
+      const setLiquid = (x: number, y: number, kind: "water" | "lava", level: number): void => {
+        const block = level <= 0 ? BlockId.Air : liquidBlock(kind, level);
+        world.setBlock(x, y, block);
+        out.push({ event: { type: "block_changed", dim: dimension, x, y, block } });
+        active.add(`${x},${y}`);
+        this.wakeLiquids(dimension, x, y);
+      };
+      /** Open for liquid: not solid, not a liquid, not a slab. */
+      const isOpen = (x: number, y: number): boolean => {
+        const def = blockDef(world.getBlockGenerating(x, y));
+        return !def.solid && def.liquid === undefined && !def.slab;
+      };
+
+      const cells = [...active];
+      active.clear();
+      let processed = 0;
+      for (const key of cells) {
+        if (processed >= BUDGET) {
+          active.add(key); // keep the rest for the next tick
+          continue;
+        }
+        const [xs, ys] = key.split(",");
+        const x = Number(xs);
+        const y = Number(ys);
+        const def = blockDef(world.getBlockGenerating(x, y));
+        const liquid = def.liquid;
+        if (!liquid) continue;
+        // Lava flows slower than water.
+        const cadence = liquid.kind === "lava" ? 10 : 3;
+        if (this.tickCount % cadence !== 0) {
+          active.add(key);
+          continue;
+        }
+        processed++;
+        let level = liquid.level;
+
+        // 1) Fall: everything drops into open space below...
+        const belowDef = blockDef(world.getBlockGenerating(x, y + 1));
+        if (isOpen(x, y + 1)) {
+          setLiquid(x, y + 1, liquid.kind, level);
+          setLiquid(x, y, liquid.kind, 0);
+          continue;
+        }
+        // ...or tops up same-kind liquid below.
+        if (belowDef.liquid?.kind === liquid.kind && belowDef.liquid.level < 8) {
+          const transfer = Math.min(level, 8 - belowDef.liquid.level);
+          setLiquid(x, y + 1, liquid.kind, belowDef.liquid.level + transfer);
+          level -= transfer;
+          setLiquid(x, y, liquid.kind, level);
+          if (level === 0) continue;
+        }
+        // Water over lava (or vice versa): the contact hardens.
+        if (belowDef.liquid && belowDef.liquid.kind !== liquid.kind) {
+          setLiquid(x, y + 1, "water", 0);
+          world.setBlock(x, y + 1, BlockId.Obsidian);
+          out.push({ event: { type: "block_changed", dim: dimension, x, y: y + 1, block: BlockId.Obsidian } });
+        }
+
+        // 2) Spread: give one unit to a lower neighbor, alternating the
+        // preferred side per row so ponds settle symmetrically.
+        if (level > 1) {
+          const order = (x + y) % 2 === 0 ? [-1, 1] : [1, -1];
+          for (const dir of order) {
+            const nx = x + dir;
+            const neighborDef = blockDef(world.getBlockGenerating(nx, y));
+            if (neighborDef.liquid && neighborDef.liquid.kind !== liquid.kind) {
+              world.setBlock(nx, y, BlockId.Obsidian);
+              out.push({ event: { type: "block_changed", dim: dimension, x: nx, y, block: BlockId.Obsidian } });
+              continue;
+            }
+            const neighborLevel = neighborDef.liquid?.kind === liquid.kind ? neighborDef.liquid.level : isOpen(nx, y) ? 0 : null;
+            if (neighborLevel !== null && neighborLevel < level - 1) {
+              setLiquid(nx, y, liquid.kind, neighborLevel + 1);
+              level -= 1;
+              setLiquid(x, y, liquid.kind, level);
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
   private stepMining(out: OutboundEvent[]): void {
     for (const p of this.players.values()) {
       const mining = p.mining;
@@ -400,6 +538,40 @@ export class Simulation {
         clear();
         continue;
       }
+
+      // Background wall mining (hammer): only where the foreground is open.
+      if (mining.wall) {
+        const wall = world.getWallGenerating(mining.x, mining.y);
+        const held = p.inventory[p.selected] ?? null;
+        const tool = held ? itemDef(held.item)?.tool : undefined;
+        if (
+          wall === BlockId.Air ||
+          blockDef(world.getBlockGenerating(mining.x, mining.y)).solid ||
+          (!p.creative && tool?.kind !== "hammer")
+        ) {
+          clear();
+          continue;
+        }
+        const total = p.creative
+          ? 1
+          : Math.max(1, Math.ceil(Math.max(1, blockDef(wall).hardness) / (tool?.speed ?? 1)));
+        mining.progress++;
+        if (mining.progress < total) {
+          out.push({
+            event: { type: "mining_progress", player: p.id, x: mining.x, y: mining.y, progress: mining.progress, total },
+          });
+          continue;
+        }
+        clear();
+        world.setWall(mining.x, mining.y, BlockId.Air);
+        out.push({ event: { type: "wall_changed", dim: p.dimension, x: mining.x, y: mining.y, block: BlockId.Air } });
+        if (!p.creative) {
+          const drops = blockDrops(wall);
+          if (drops) this.spawnItem(p.dimension, mining.x + 0.5, mining.y + 0.75, drops, out);
+        }
+        continue;
+      }
+
       const block = world.getBlockGenerating(mining.x, mining.y);
       if (block === BlockId.Air || blockDef(block).hardness < 0) {
         clear();
@@ -407,7 +579,7 @@ export class Simulation {
       }
 
       const held = p.inventory[p.selected] ?? null;
-      const total = miningTicks(block, held);
+      const total = p.creative ? 1 : miningTicks(block, held);
       mining.progress++;
 
       if (mining.progress < total) {
@@ -429,6 +601,18 @@ export class Simulation {
         out.push({
           event: { type: "block_changed", dim: p.dimension, x: mining.x, y: mining.y, block: BlockId.Air },
         });
+        this.wakeLiquids(p.dimension, mining.x, mining.y);
+        // Doors span two tiles: breaking one half removes the other.
+        if (blockDef(block).tall) {
+          for (const dy of [-1, 1]) {
+            if (world.getBlockGenerating(mining.x, mining.y + dy) === block) {
+              world.setBlock(mining.x, mining.y + dy, BlockId.Air);
+              out.push({
+                event: { type: "block_changed", dim: p.dimension, x: mining.x, y: mining.y + dy, block: BlockId.Air },
+              });
+            }
+          }
+        }
         if (block === BlockId.Furnace) {
           const state = this.furnaces.get(furnaceKey(p.dimension, mining.x, mining.y));
           if (state) {
@@ -449,7 +633,7 @@ export class Simulation {
             this.chests.delete(furnaceKey(p.dimension, mining.x, mining.y));
           }
         }
-        if (canHarvest(block, held)) {
+        if (!p.creative && canHarvest(block, held)) {
           // Gravel sometimes yields flint instead, like Minecraft.
           const drops =
             block === BlockId.Gravel && this.rng() < 0.25
@@ -740,32 +924,79 @@ export class Simulation {
         out.push({ event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
       }
 
-      const speedFactor = p.effects["speed"] !== undefined ? SPEED_MULTIPLIER : 1;
-      p.vx = p.input.dx * WALK_SPEED * speedFactor + p.kbX;
-      p.kbX *= 0.6;
-      if (Math.abs(p.kbX) < 0.01) p.kbX = 0;
-      if (world.getBlockGenerating(Math.floor(p.x), Math.floor(p.y)) === BlockId.SoulSand) {
-        p.vx *= 0.4;
-      }
-      if (p.input.jump && p.onGround) {
-        p.vy = JUMP_VELOCITY;
-        p.exhaustion += EXHAUST_JUMP;
-      }
-      p.vy = Math.min(p.vy + GRAVITY, TERMINAL_VELOCITY);
+      const feetBlock = blockDef(world.getBlockGenerating(Math.floor(p.x), Math.floor(p.y - 0.1)));
+      const headBlock = blockDef(
+        world.getBlockGenerating(Math.floor(p.x), Math.floor(p.y - PLAYER_HEIGHT + 0.2)),
+      );
+      const swimming = feetBlock.liquid !== undefined && feetBlock.liquid.level >= 2;
 
-      // Elytra gliding: hold jump while falling with wings in the
-      // inventory - slow descent, fast horizontal travel, no fall damage.
-      if (
-        !p.onGround &&
-        p.input.jump &&
-        p.vy > 0 &&
-        p.inventory.some((s) => s?.item === "elytra")
-      ) {
-        p.vy = Math.min(p.vy, ELYTRA_SINK);
-        p.vx = p.input.dx * WALK_SPEED * ELYTRA_GLIDE_BOOST * speedFactor + p.kbX;
+      const speedFactor = p.effects["speed"] !== undefined ? SPEED_MULTIPLIER : 1;
+      if (p.creative) {
+        // Creative flight: no gravity; jump rises, down (shift) sinks.
+        p.vx = p.input.dx * WALK_SPEED * 1.8 * speedFactor;
+        p.vy = p.input.jump ? -0.35 : p.input.down === true ? 0.35 : 0;
+        p.kbX = 0;
         p.fallDistance = 0;
+        p.grapple = null;
+      } else if (p.grapple) {
+        // Grappling: pulled straight toward the anchor, gravity off.
+        const g = p.grapple;
+        const dx = g.x - p.x;
+        const dy = g.y - (p.y - PLAYER_HEIGHT / 2);
+        const dist = Math.hypot(dx, dy);
+        g.ticks++;
+        if (dist < 1 || g.ticks > 120) {
+          p.grapple = null;
+          p.vx = 0;
+          p.vy = Math.min(p.vy, 0);
+        } else {
+          p.vx = (dx / dist) * GRAPPLE_SPEED;
+          p.vy = (dy / dist) * GRAPPLE_SPEED;
+          p.fallDistance = 0;
+        }
       }
+      if (!p.creative && !p.grapple) {
+        p.vx = p.input.dx * WALK_SPEED * speedFactor + p.kbX;
+        p.kbX *= 0.6;
+        if (Math.abs(p.kbX) < 0.01) p.kbX = 0;
+        if (world.getBlockGenerating(Math.floor(p.x), Math.floor(p.y)) === BlockId.SoulSand) {
+          p.vx *= 0.4;
+        }
+        if (swimming) {
+          // Liquids slow and carry: gentle sinking, holding jump swims up.
+          const lava = feetBlock.liquid!.kind === "lava";
+          p.vx *= lava ? 0.35 : 0.6;
+          p.vy = Math.min(p.vy + (lava ? 0.02 : 0.03), lava ? 0.08 : 0.15);
+          if (p.input.jump) p.vy = lava ? -0.1 : -0.22;
+          p.fallDistance = 0;
+        } else {
+          if (p.input.jump && p.onGround) {
+            p.vy = JUMP_VELOCITY;
+            p.exhaustion += EXHAUST_JUMP;
+          }
+          p.vy = Math.min(p.vy + GRAVITY, TERMINAL_VELOCITY);
+
+          // Elytra gliding: hold jump while falling with wings in the
+          // inventory - slow descent, fast horizontal travel, no fall damage.
+          if (
+            !p.onGround &&
+            p.input.jump &&
+            p.vy > 0 &&
+            p.inventory.some((s) => s?.item === "elytra")
+          ) {
+            p.vy = Math.min(p.vy, ELYTRA_SINK);
+            p.vx = p.input.dx * WALK_SPEED * ELYTRA_GLIDE_BOOST * speedFactor + p.kbX;
+            p.fallDistance = 0;
+          }
+        }
+      }
+      const beforeStepX = p.x;
+      const beforeStepY = p.y;
       stepBody(world, p, PLAYER_WIDTH, PLAYER_HEIGHT);
+      // A grapple that can't move you any further lets go.
+      if (p.grapple && p.x === beforeStepX && p.y === beforeStepY) {
+        p.grapple = null;
+      }
 
       // Fall damage: accumulate while falling, apply on landing.
       if (p.y > prevY) {
@@ -801,9 +1032,29 @@ export class Simulation {
         if (p.portalCooldown > 0) p.portalCooldown--;
       }
 
-      // Hunger: activity accumulates exhaustion, which drains the bar.
-      if (p.input.dx !== 0) p.exhaustion += EXHAUST_WALK;
-      if (p.mining) p.exhaustion += EXHAUST_MINE;
+      // Diving: a fully submerged head drains the air supply; at zero,
+      // drowning damage sets in (ignores i-frames on its own cadence).
+      const headSubmerged = headBlock.liquid !== undefined && headBlock.liquid.level >= 6;
+      if (!p.creative && headSubmerged) {
+        p.air--;
+        if (p.air >= 0 && p.air % 20 === 0) {
+          out.push({ to: p.id, event: { type: "player_air", player: p.id, air: Math.max(0, p.air), max: MAX_AIR_TICKS } });
+        }
+        if (p.air <= 0 && this.tickCount % DROWN_DAMAGE_INTERVAL === 0) {
+          p.hurtCooldown = 0;
+          this.hurtPlayer(p, 2, out);
+        }
+      } else if (p.air < MAX_AIR_TICKS) {
+        p.air = MAX_AIR_TICKS;
+        out.push({ to: p.id, event: { type: "player_air", player: p.id, air: p.air, max: MAX_AIR_TICKS } });
+      }
+
+      // Hunger: activity accumulates exhaustion, which drains the bar
+      // (paused entirely in creative mode).
+      if (!p.creative) {
+        if (p.input.dx !== 0) p.exhaustion += EXHAUST_WALK;
+        if (p.mining) p.exhaustion += EXHAUST_MINE;
+      }
       if (p.exhaustion >= EXHAUSTION_PER_POINT) {
         p.exhaustion -= EXHAUSTION_PER_POINT;
         if (p.hunger > 0) {
@@ -827,6 +1078,7 @@ export class Simulation {
 
       // Starving: an empty bar wears you down to 1 HP (never kills).
       if (
+        !p.creative &&
         p.hunger === 0 &&
         this.tickCount % STARVE_INTERVAL_TICKS === 0 &&
         p.health > STARVE_MIN_HEALTH
@@ -1020,7 +1272,12 @@ export class Simulation {
   }
 
   private hurtPlayer(p: PlayerState, amount: number, out: OutboundEvent[], fromX?: number): void {
+    if (p.creative) return;
     if (amount <= 0 || p.hurtCooldown > 0) return;
+    // Armor absorbs a fraction; an offhand shield blocks another share.
+    const armorAbsorb = p.armor ? (itemDef(p.armor.item)?.armor ?? 0) : 0;
+    const shieldBlock = p.offhand ? (itemDef(p.offhand.item)?.shieldBlock ?? 0) : 0;
+    amount = Math.max(1, Math.round(amount * (1 - armorAbsorb) * (1 - shieldBlock)));
     p.hurtCooldown = HURT_COOLDOWN_TICKS;
     p.health -= amount;
     if (fromX !== undefined) {
@@ -1028,8 +1285,8 @@ export class Simulation {
       p.vy = Math.min(p.vy, -0.2);
     }
     if (p.health <= 0) {
-      // Death: drop the inventory (and grid/cursor) as item entities,
-      // respawn at the overworld spawn.
+      // Death: drop the inventory (and grid/cursor/armor/offhand) as
+      // item entities, respawn at the overworld spawn.
       this.dumpGridAndCursor(p);
       for (let i = 0; i < p.inventory.length; i++) {
         const stack = p.inventory[i];
@@ -1038,6 +1295,15 @@ export class Simulation {
           p.inventory[i] = null;
         }
       }
+      if (p.armor) {
+        this.spawnItem(p.dimension, p.x, p.y - 1, p.armor, out);
+        p.armor = null;
+      }
+      if (p.offhand) {
+        this.spawnItem(p.dimension, p.x, p.y - 1, p.offhand, out);
+        p.offhand = null;
+      }
+      p.grapple = null;
       const fromDim = p.dimension;
       const spawnX = findSpawnX(this.world.seed);
       p.dimension = "overworld";
@@ -1074,6 +1340,8 @@ export class Simulation {
         selected: p.selected,
         cursor: p.cursor ? { ...p.cursor } : null,
         craftGrid: cloneInventory(p.craftGrid),
+        armor: p.armor ? structuredClone(p.armor) : null,
+        offhand: p.offhand ? structuredClone(p.offhand) : null,
       },
     });
   }
@@ -1120,10 +1388,15 @@ export class Simulation {
         if (saved) {
           this.savedPlayers.delete(command.name);
           const state: PlayerState = { ...structuredClone(saved), id: player };
-          // Pre-hunger/pre-color saves lack these fields; default on adoption.
+          // Older saves lack newer fields; default them on adoption.
           state.hunger = Number.isFinite(state.hunger) ? state.hunger : PLAYER_MAX_HUNGER;
           state.exhaustion = Number.isFinite(state.exhaustion) ? state.exhaustion : 0;
           state.color = chosenColor ?? sanitizeColor(state.color) ?? DEFAULT_PLAYER_COLOR;
+          state.armor = state.armor ?? null;
+          state.offhand = state.offhand ?? null;
+          state.grapple = null;
+          state.creative = state.creative === true;
+          state.air = Number.isFinite(state.air) ? state.air : MAX_AIR_TICKS;
           this.players.set(player, state);
           broadcast({
             type: "player_joined",
@@ -1182,6 +1455,11 @@ export class Simulation {
           effects: {},
           portalTicks: 0,
           portalCooldown: 0,
+          armor: null,
+          offhand: null,
+          grapple: null,
+          creative: false,
+          air: MAX_AIR_TICKS,
         };
         this.players.set(player, state);
         broadcast({ type: "player_joined", player, name: state.name, x, y, dim: "overworld", color: state.color });
@@ -1222,7 +1500,7 @@ export class Simulation {
           reject("invalid input");
           break;
         }
-        p.input = { dx: command.dx, jump: command.jump };
+        p.input = { dx: command.dx, jump: command.jump, down: command.down === true };
         break;
       }
       case "set_color": {
@@ -1273,14 +1551,24 @@ export class Simulation {
           reject("requires crafting table");
           break;
         }
-        for (const [item, count] of recipe.ingredients) {
-          if (countInInventory(p.inventory, item) < count) {
+        // Ingredient keys may be tags ("#planks"): any member counts.
+        for (const [key, count] of recipe.ingredients) {
+          const available = ingredientOptions(key).reduce(
+            (sum, item) => sum + countInInventory(p.inventory, item),
+            0,
+          );
+          if (available < count) {
             reject("missing ingredients");
             return;
           }
         }
-        for (const [item, count] of recipe.ingredients) {
-          removeFromInventory(p.inventory, item, count);
+        for (const [key, count] of recipe.ingredients) {
+          let remaining = count;
+          for (const item of ingredientOptions(key)) {
+            while (remaining > 0 && removeFromInventory(p.inventory, item, 1)) {
+              remaining--;
+            }
+          }
         }
         addToInventory(p.inventory, recipe.result.item, recipe.result.count);
         syncInventory(p);
@@ -1394,7 +1682,19 @@ export class Simulation {
           reject("out of reach");
           break;
         }
-        const current = this.worldOf(p.dimension).getBlockGenerating(x, y);
+        const world = this.worldOf(p.dimension);
+        const current = world.getBlockGenerating(x, y);
+        const held = p.inventory[p.selected];
+        const holdsHammer = held ? itemDef(held.item)?.tool?.kind === "hammer" : false;
+        // A hammer aimed at open foreground mines the wall behind it.
+        if (
+          holdsHammer &&
+          !blockDef(current).solid &&
+          world.getWallGenerating(x, y) !== BlockId.Air
+        ) {
+          p.mining = { x, y, progress: 0, wall: true };
+          break;
+        }
         if (current === BlockId.Air || blockDef(current).hardness < 0) {
           reject("cannot mine");
           break;
@@ -1627,6 +1927,10 @@ export class Simulation {
               broadcast({ type: "block_changed", dim: p.dimension, x: tx, y: ty, block: BlockId.NetherPortal });
             }
           }
+          // Lit frames turn side-permeable so players can walk in.
+          for (const change of convertFrame(world, interior)) {
+            broadcast({ type: "block_changed", dim: p.dimension, x: change.x, y: change.y, block: change.block });
+          }
           this.portals[p.dimension].set(`${interior.left},${interior.bottom}`, {
             x: interior.left,
             y: interior.bottom,
@@ -1638,22 +1942,188 @@ export class Simulation {
           reject("item not placeable");
           break;
         }
+        const consume = (): void => {
+          if (!p.creative) {
+            stack.count -= 1;
+            if (stack.count === 0) p.inventory[p.selected] = null;
+          }
+          syncInventory(p);
+        };
+        const hasCardinal = (test: (nx: number, ny: number) => boolean): boolean =>
+          test(x - 1, y) || test(x + 1, y) || test(x, y - 1) || test(x, y + 1);
+
+        if (command.layer === "bg") {
+          // Background walls: the wall slot must be free and at least one
+          // cardinal neighbor must already have a wall.
+          if (world.getWallGenerating(x, y) !== BlockId.Air) {
+            reject("space occupied");
+            break;
+          }
+          if (
+            !p.creative &&
+            !hasCardinal((nx, ny) => world.getWallGenerating(nx, ny) !== BlockId.Air)
+          ) {
+            reject("needs an adjacent wall");
+            break;
+          }
+          if (world.setWall(x, y, def.block)) {
+            broadcast({ type: "wall_changed", dim: p.dimension, x, y, block: def.block });
+            consume();
+          }
+          break;
+        }
+
         if (world.getBlockGenerating(x, y) !== BlockId.Air) {
           reject("space occupied");
+          break;
+        }
+        // Foreground rule: a cardinal foreground block, or a wall behind
+        // the target position.
+        if (
+          !p.creative &&
+          world.getWallGenerating(x, y) === BlockId.Air &&
+          !hasCardinal((nx, ny) => world.getBlockGenerating(nx, ny) !== BlockId.Air)
+        ) {
+          reject("needs support");
           break;
         }
         if (blockDef(def.block).solid && this.tileIntersectsAnyPlayer(p.dimension, x, y)) {
           reject("blocked by player");
           break;
         }
-        if (world.setBlock(x, y, def.block)) {
-          stack.count -= 1;
-          if (stack.count === 0) {
-            p.inventory[p.selected] = null;
+        // Doors occupy two tiles (placed tile + the one above).
+        if (blockDef(def.block).tall) {
+          if (world.getBlockGenerating(x, y - 1) !== BlockId.Air) {
+            reject("needs headroom");
+            break;
           }
+          if (blockDef(def.block).solid && this.tileIntersectsAnyPlayer(p.dimension, x, y - 1)) {
+            reject("blocked by player");
+            break;
+          }
+          world.setBlock(x, y, def.block);
+          world.setBlock(x, y - 1, def.block);
           broadcast({ type: "block_changed", dim: p.dimension, x, y, block: def.block });
-          syncInventory(p);
+          broadcast({ type: "block_changed", dim: p.dimension, x, y: y - 1, block: def.block });
+          consume();
+          break;
         }
+        if (world.setBlock(x, y, def.block)) {
+          broadcast({ type: "block_changed", dim: p.dimension, x, y, block: def.block });
+          this.wakeLiquids(p.dimension, x, y);
+          consume();
+        }
+        break;
+      }
+      case "use_block": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        const { x, y } = command;
+        if (!Number.isInteger(x) || !Number.isInteger(y) || !this.withinReach(player, x, y)) {
+          reject("out of reach");
+          break;
+        }
+        const world = this.worldOf(p.dimension);
+        const block = world.getBlockGenerating(x, y);
+        const def = blockDef(block);
+        if (def.toggleTo === undefined) {
+          reject("nothing to use");
+          break;
+        }
+        // Can't close a door/trapdoor onto somebody.
+        const target = blockDef(def.toggleTo);
+        const tiles: Array<[number, number]> = [[x, y]];
+        if (def.tall) {
+          for (const dy of [-1, 1]) {
+            if (world.getBlockGenerating(x, y + dy) === block) tiles.push([x, y + dy]);
+          }
+        }
+        if (target.solid && tiles.some(([tx, ty]) => this.tileIntersectsAnyPlayer(p.dimension, tx, ty))) {
+          reject("blocked by player");
+          break;
+        }
+        for (const [tx, ty] of tiles) {
+          world.setBlock(tx, ty, def.toggleTo);
+          broadcast({ type: "block_changed", dim: p.dimension, x: tx, y: ty, block: def.toggleTo });
+        }
+        break;
+      }
+      case "grapple": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        const held = p.inventory[p.selected];
+        const range = held ? itemDef(held.item)?.grapple : undefined;
+        if (range === undefined) {
+          reject("no grappling hook");
+          break;
+        }
+        const { dx, dy } = command;
+        if (typeof dx !== "number" || typeof dy !== "number" || !Number.isFinite(dx) || !Number.isFinite(dy)) {
+          reject("invalid direction");
+          break;
+        }
+        const len = Math.hypot(dx, dy);
+        if (len < 1e-6) {
+          reject("invalid direction");
+          break;
+        }
+        // March the ray; anchor just before the first solid tile.
+        const world = this.worldOf(p.dimension);
+        const ox = p.x;
+        const oy = p.y - PLAYER_HEIGHT / 2;
+        let anchor: { x: number; y: number } | null = null;
+        const step = 0.25;
+        for (let d = step; d <= range; d += step) {
+          const sx = ox + (dx / len) * d;
+          const sy = oy + (dy / len) * d;
+          if (blockDef(world.getBlockGenerating(Math.floor(sx), Math.floor(sy))).solid) {
+            const back = d - step;
+            anchor = { x: ox + (dx / len) * back, y: oy + (dy / len) * back };
+            break;
+          }
+        }
+        if (!anchor) {
+          reject("no anchor in range");
+          break;
+        }
+        p.grapple = { x: anchor.x, y: anchor.y, ticks: 0 };
+        break;
+      }
+      case "set_creative": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        p.creative = command.on === true;
+        if (!p.creative) p.vy = Math.min(p.vy, 0);
+        reply({ type: "player_creative", player, on: p.creative });
+        break;
+      }
+      case "creative_give": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        if (!p.creative) {
+          reject("not in creative mode");
+          break;
+        }
+        const def = itemDef(command.item);
+        const count = Number(command.count);
+        if (!def || !Number.isInteger(count) || count < 1 || count > 64) {
+          reject("invalid item");
+          break;
+        }
+        addToInventory(p.inventory, def.id, Math.min(count, def.maxStack));
+        syncInventory(p);
         break;
       }
     }
@@ -1741,6 +2211,23 @@ export class Simulation {
           y,
           slots: cloneInventory(chest.slots),
         });
+        return;
+      }
+      case "armor": {
+        // Only armor items may be worn.
+        if (p.cursor && itemDef(p.cursor.item)?.armor === undefined) {
+          reject("not armor");
+          return;
+        }
+        const result = clickStack(p.cursor, p.armor, button);
+        p.cursor = result.cursor;
+        p.armor = result.slot;
+        return;
+      }
+      case "offhand": {
+        const result = clickStack(p.cursor, p.offhand, button);
+        p.cursor = result.cursor;
+        p.offhand = result.slot;
         return;
       }
       case "backpack": {

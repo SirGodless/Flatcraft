@@ -223,9 +223,10 @@ describe("two players", () => {
     addToInventory(aliceState.inventory, "chest", 1);
     addToInventory(aliceState.inventory, "cobblestone", 3);
 
-    // Place the chest into free air beside the spawn.
+    // Place the chest beside the spawn, resting on the ground (the
+    // placement rules require support).
     const chestX = SPAWN_X + 2;
-    const chestY = SURFACE - 2;
+    const chestY = SURFACE - 1;
     alice.send({ type: "place_block", x: chestX, y: chestY });
     const change = await bob.waitFor(
       (e) => e.type === "block_changed" && e.x === chestX && e.y === chestY,

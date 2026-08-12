@@ -37,6 +37,52 @@ export enum BlockId {
   Chest = 31,
   BrewingStand = 32,
   EnchantingTable = 33,
+  CopperOre = 34,
+  AncientDebris = 35,
+  /** Portal frame obsidian: passable from the side, solid from above. */
+  PortalFrame = 36,
+  BirchLog = 37,
+  BirchLeaves = 38,
+  BirchPlanks = 39,
+  SpruceLog = 40,
+  SpruceLeaves = 41,
+  SprucePlanks = 42,
+  OakStairs = 43,
+  OakSlab = 44,
+  OakFence = 45,
+  OakDoor = 46,
+  OakDoorOpen = 47,
+  OakTrapdoor = 48,
+  OakTrapdoorOpen = 49,
+  BirchStairs = 50,
+  BirchSlab = 51,
+  BirchFence = 52,
+  BirchDoor = 53,
+  BirchDoorOpen = 54,
+  BirchTrapdoor = 55,
+  BirchTrapdoorOpen = 56,
+  SpruceStairs = 57,
+  SpruceSlab = 58,
+  SpruceFence = 59,
+  SpruceDoor = 60,
+  SpruceDoorOpen = 61,
+  SpruceTrapdoor = 62,
+  SpruceTrapdoorOpen = 63,
+  /** Partial water/lava: levels 1..7 (8 = the full Water/Lava blocks). */
+  Water1 = 64,
+  Water2 = 65,
+  Water3 = 66,
+  Water4 = 67,
+  Water5 = 68,
+  Water6 = 69,
+  Water7 = 70,
+  Lava1 = 71,
+  Lava2 = 72,
+  Lava3 = 73,
+  Lava4 = 74,
+  Lava5 = 75,
+  Lava6 = 76,
+  Lava7 = 77,
 }
 
 export interface BlockDef {
@@ -58,6 +104,16 @@ export interface BlockDef {
    * Omitted/0 = always drops.
    */
   readonly requiredTier?: number;
+  /** Passable horizontally, solid vertically (portal frame obsidian). */
+  readonly sidePermeable?: boolean;
+  /** Half-height block: only catches bodies landing onto its top. */
+  readonly slab?: boolean;
+  /** Doors/trapdoors: right-clicking swaps to this block id. */
+  readonly toggleTo?: BlockId;
+  /** Doors occupy this tile and the one above. */
+  readonly tall?: boolean;
+  /** Flowing liquid: kind and fill level 1..8. */
+  readonly liquid?: { kind: "water" | "lava"; level: number };
 }
 
 const defs = new Map<BlockId, BlockDef>();
@@ -76,9 +132,9 @@ export const Blocks = {
   sand: register({ id: BlockId.Sand, name: "sand", solid: true, hardness: 8, tool: "shovel" }),
   sandstone: register({ id: BlockId.Sandstone, name: "sandstone", solid: true, hardness: 24, tool: "pickaxe", requiredTier: 1 }),
   gravel: register({ id: BlockId.Gravel, name: "gravel", solid: true, hardness: 9, tool: "shovel" }),
-  // Static for now; fluid flow (and buckets) come later, so water can be
-  // neither broken nor placed (hardness -1).
-  water: register({ id: BlockId.Water, name: "water", solid: false, hardness: -1, drops: null }),
+  // Full water (level 8); partial levels are separate ids below. Not
+  // minable or placeable by hand (buckets may come later).
+  water: register({ id: BlockId.Water, name: "water", solid: false, hardness: -1, drops: null, liquid: { kind: "water", level: 8 } }),
   // Trees are background scenery in a 2D world: they never block movement.
   oakLog: register({ id: BlockId.OakLog, name: "oak_log", solid: false, hardness: 25, tool: "axe" }),
   oakLeaves: register({ id: BlockId.OakLeaves, name: "oak_leaves", solid: false, hardness: 3, drops: null }),
@@ -102,13 +158,88 @@ export const Blocks = {
   obsidian: register({ id: BlockId.Obsidian, name: "obsidian", solid: true, hardness: 250, tool: "pickaxe", requiredTier: 4 }),
   // Portal blocks are placed/removed by portal logic, never mined.
   netherPortal: register({ id: BlockId.NetherPortal, name: "nether_portal", solid: false, hardness: -1, drops: null }),
-  // Static lava; damages anything inside it. Not minable or placeable.
-  lava: register({ id: BlockId.Lava, name: "lava", solid: false, hardness: -1, drops: null }),
+  // Full lava (level 8); damages anything inside it.
+  lava: register({ id: BlockId.Lava, name: "lava", solid: false, hardness: -1, drops: null, liquid: { kind: "lava", level: 8 } }),
   basalt: register({ id: BlockId.Basalt, name: "basalt", solid: true, hardness: 25, tool: "pickaxe", requiredTier: 1 }),
   chest: register({ id: BlockId.Chest, name: "chest", solid: true, hardness: 25, tool: "axe" }),
   brewingStand: register({ id: BlockId.BrewingStand, name: "brewing_stand", solid: true, hardness: 20, tool: "pickaxe" }),
   enchantingTable: register({ id: BlockId.EnchantingTable, name: "enchanting_table", solid: true, hardness: 40, tool: "pickaxe", requiredTier: 1 }),
+  copperOre: register({ id: BlockId.CopperOre, name: "copper_ore", solid: true, hardness: 38, tool: "pickaxe", requiredTier: 2 }),
+  ancientDebris: register({ id: BlockId.AncientDebris, name: "ancient_debris", solid: true, hardness: 90, tool: "pickaxe", requiredTier: 4 }),
+  // Frame of a lit nether portal: walk through it sideways to enter the
+  // portal, but it still carries you when standing on top (2D adaptation).
+  portalFrame: register({ id: BlockId.PortalFrame, name: "portal_frame", solid: true, sidePermeable: true, hardness: 250, drops: { item: "obsidian", count: 1 }, tool: "pickaxe", requiredTier: 4 }),
+  birchLog: register({ id: BlockId.BirchLog, name: "birch_log", solid: false, hardness: 25, tool: "axe" }),
+  birchLeaves: register({ id: BlockId.BirchLeaves, name: "birch_leaves", solid: false, hardness: 3, drops: null }),
+  birchPlanks: register({ id: BlockId.BirchPlanks, name: "birch_planks", solid: true, hardness: 30, tool: "axe" }),
+  spruceLog: register({ id: BlockId.SpruceLog, name: "spruce_log", solid: false, hardness: 25, tool: "axe" }),
+  spruceLeaves: register({ id: BlockId.SpruceLeaves, name: "spruce_leaves", solid: false, hardness: 3, drops: null }),
+  sprucePlanks: register({ id: BlockId.SprucePlanks, name: "spruce_planks", solid: true, hardness: 30, tool: "axe" }),
 } as const;
+
+/** Stairs, slab, fence, door (2-tall, toggles open) and trapdoor
+ * (toggles open) for one wood type. Slabs catch only bodies landing on
+ * them (half-height, 2D adaptation); stairs and fences collide fully. */
+function registerWoodSet(
+  wood: string,
+  ids: {
+    stairs: BlockId;
+    slab: BlockId;
+    fence: BlockId;
+    door: BlockId;
+    doorOpen: BlockId;
+    trapdoor: BlockId;
+    trapdoorOpen: BlockId;
+  },
+): void {
+  register({ id: ids.stairs, name: `${wood}_stairs`, solid: true, hardness: 30, tool: "axe" });
+  register({ id: ids.slab, name: `${wood}_slab`, solid: false, slab: true, hardness: 25, tool: "axe" });
+  register({ id: ids.fence, name: `${wood}_fence`, solid: true, hardness: 30, tool: "axe" });
+  register({ id: ids.door, name: `${wood}_door`, solid: true, tall: true, toggleTo: ids.doorOpen, hardness: 28, tool: "axe" });
+  register({ id: ids.doorOpen, name: `${wood}_door_open`, solid: false, tall: true, toggleTo: ids.door, drops: { item: `${wood}_door`, count: 1 }, hardness: 28, tool: "axe" });
+  register({ id: ids.trapdoor, name: `${wood}_trapdoor`, solid: true, toggleTo: ids.trapdoorOpen, hardness: 26, tool: "axe" });
+  register({ id: ids.trapdoorOpen, name: `${wood}_trapdoor_open`, solid: false, toggleTo: ids.trapdoor, drops: { item: `${wood}_trapdoor`, count: 1 }, hardness: 26, tool: "axe" });
+}
+
+registerWoodSet("oak", {
+  stairs: BlockId.OakStairs, slab: BlockId.OakSlab, fence: BlockId.OakFence,
+  door: BlockId.OakDoor, doorOpen: BlockId.OakDoorOpen,
+  trapdoor: BlockId.OakTrapdoor, trapdoorOpen: BlockId.OakTrapdoorOpen,
+});
+registerWoodSet("birch", {
+  stairs: BlockId.BirchStairs, slab: BlockId.BirchSlab, fence: BlockId.BirchFence,
+  door: BlockId.BirchDoor, doorOpen: BlockId.BirchDoorOpen,
+  trapdoor: BlockId.BirchTrapdoor, trapdoorOpen: BlockId.BirchTrapdoorOpen,
+});
+registerWoodSet("spruce", {
+  stairs: BlockId.SpruceStairs, slab: BlockId.SpruceSlab, fence: BlockId.SpruceFence,
+  door: BlockId.SpruceDoor, doorOpen: BlockId.SpruceDoorOpen,
+  trapdoor: BlockId.SpruceTrapdoor, trapdoorOpen: BlockId.SpruceTrapdoorOpen,
+});
+
+// Partial liquids (levels 1..7). Purely simulation-managed.
+for (const [base, kind] of [
+  [BlockId.Water1, "water"],
+  [BlockId.Lava1, "lava"],
+] as const) {
+  for (let level = 1; level <= 7; level++) {
+    register({
+      id: (base + level - 1) as BlockId,
+      name: `${kind}_${level}`,
+      solid: false,
+      hardness: -1,
+      drops: null,
+      liquid: { kind, level },
+    });
+  }
+}
+
+/** The block id representing this liquid kind at the given level 1..8. */
+export function liquidBlock(kind: "water" | "lava", level: number): BlockId {
+  if (level >= 8) return kind === "water" ? BlockId.Water : BlockId.Lava;
+  const base = kind === "water" ? BlockId.Water1 : BlockId.Lava1;
+  return (base + level - 1) as BlockId;
+}
 
 export function blockDef(id: BlockId): BlockDef {
   return defs.get(id) ?? Blocks.air;

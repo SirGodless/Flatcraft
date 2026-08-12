@@ -2,7 +2,7 @@
   "type": "flatcraft:crafting_shaped",
   "pattern": ["#", "|", "|"],
   "key": {
-    "#": { "item": "flatcraft:oak_planks" },
+    "#": { "tag": "flatcraft:planks" },
     "|": { "item": "flatcraft:stick" }
   },
   "result": { "item": "flatcraft:wooden_shovel" }
