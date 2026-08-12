@@ -379,16 +379,15 @@ export class Renderer {
     switch (event.type) {
       case "player_joined": {
         this.playerDims.set(event.player, event.dim);
-        const gfx = new Graphics()
-          .rect(0, 0, PLAYER_WIDTH * TILE_PX, PLAYER_HEIGHT * TILE_PX)
-          .fill({ color: event.player === this.localPlayerId ? 0xe04848 : 0x4868e0 });
+        const gfx = new Graphics();
+        this.drawPlayerBody(gfx, event.color);
         gfx.visible = event.dim === this.localDim;
         this.worldContainer.addChild(gfx);
         let label: Text | null = null;
         if (event.player !== this.localPlayerId) {
           label = new Text({
             text: event.name,
-            style: { fill: "#ffffff", fontSize: 11, fontFamily: "monospace" },
+            style: { fill: "#ffffff", fontSize: 8, fontFamily: "monospace" },
           });
           label.visible = gfx.visible;
           this.worldContainer.addChild(label);
@@ -404,6 +403,13 @@ export class Renderer {
         });
         if (event.player === this.localPlayerId) {
           this.camera.centerOnTile(event.x, event.y);
+        }
+        break;
+      }
+      case "player_color": {
+        const marker = this.players.get(event.player);
+        if (marker) {
+          this.drawPlayerBody(marker.gfx, event.color);
         }
         break;
       }
@@ -616,6 +622,11 @@ export class Renderer {
         // Surfacing rejections in the UI comes with the HUD work later.
         break;
     }
+  }
+
+  /** Player body in their chosen color. */
+  private drawPlayerBody(gfx: Graphics, color: number): void {
+    gfx.clear().rect(0, 0, PLAYER_WIDTH * TILE_PX, PLAYER_HEIGHT * TILE_PX).fill({ color });
   }
 
   private buildEntityGfx(kind: string, stack?: ItemStack): Container {
@@ -864,6 +875,6 @@ export class Renderer {
 
     const px = localX !== null ? Math.floor(localX) : Math.floor(this.camera.x / TILE_PX);
     const py = localY !== null ? Math.floor(localY) : Math.floor(this.camera.y / TILE_PX);
-    this.hud.text = `FlatCraft | ${this.localDim} ${px},${py} | zoom ${this.camera.zoom.toFixed(1)} | A/D walk, Space jump, hold LMB mine, RMB place, 1-9/wheel slot, E craft, +/- zoom`;
+    this.hud.text = `FlatCraft | ${this.localDim} ${px},${py} | zoom ${this.camera.zoom.toFixed(1)} | A/D walk, Space jump, hold LMB mine, RMB place, 1-9/wheel slot, E craft, C color, +/- zoom`;
   }
 }

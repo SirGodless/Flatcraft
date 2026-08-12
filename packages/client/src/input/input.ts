@@ -27,6 +27,8 @@ export interface InputOptions {
   onUiWheel(deltaY: number): boolean;
   /** Wheel over the world: cycle the hotbar selection (+1 = next slot). */
   onHotbarScroll(direction: 1 | -1): void;
+  /** C key: cycle the player's body color. */
+  onCycleColor(): void;
   /** Raw pointer position for the cursor-stack overlay. */
   onPointerMove(x: number, y: number): void;
 }
@@ -85,6 +87,10 @@ export function attachInput(target: HTMLElement, opts: InputOptions): InputHandl
     }
     if (e.code === "KeyE") {
       opts.onToggleInventory();
+      return;
+    }
+    if (e.code === "KeyC") {
+      opts.onCycleColor();
       return;
     }
     if (e.code === "Equal" || e.code === "NumpadAdd") {

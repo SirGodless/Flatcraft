@@ -120,9 +120,21 @@ export interface PlayerInput {
   jump: boolean;
 }
 
+/** Default body color for players who never picked one. */
+export const DEFAULT_PLAYER_COLOR = 0x4868e0;
+
+/** A valid 0xRRGGBB color, or null. */
+function sanitizeColor(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 0xffffff
+    ? value
+    : null;
+}
+
 export interface PlayerState {
   id: PlayerId;
   name: string;
+  /** Body color (0xRRGGBB), chosen at login / via set_color. */
+  color: number;
   dimension: Dimension;
   /** Feet-center position in tiles (see physics.ts for the AABB layout). */
   x: number;
@@ -1098,17 +1110,20 @@ export class Simulation {
               x: other.x,
               y: other.y,
               dim: other.dimension,
+              color: other.color,
             });
           }
         };
+        const chosenColor = sanitizeColor(command.color);
         // A returning player (same name) picks up exactly where they left.
         const saved = this.savedPlayers.get(command.name);
         if (saved) {
           this.savedPlayers.delete(command.name);
           const state: PlayerState = { ...structuredClone(saved), id: player };
-          // Pre-hunger saves lack these fields; default them on adoption.
+          // Pre-hunger/pre-color saves lack these fields; default on adoption.
           state.hunger = Number.isFinite(state.hunger) ? state.hunger : PLAYER_MAX_HUNGER;
           state.exhaustion = Number.isFinite(state.exhaustion) ? state.exhaustion : 0;
+          state.color = chosenColor ?? sanitizeColor(state.color) ?? DEFAULT_PLAYER_COLOR;
           this.players.set(player, state);
           broadcast({
             type: "player_joined",
@@ -1117,6 +1132,7 @@ export class Simulation {
             x: state.x,
             y: state.y,
             dim: state.dimension,
+            color: state.color,
           });
           this.syncInventory(state, out);
           reply({ type: "player_health", player, health: state.health, max: PLAYER_MAX_HEALTH });
@@ -1143,6 +1159,7 @@ export class Simulation {
         const state: PlayerState = {
           id: player,
           name: command.name,
+          color: chosenColor ?? DEFAULT_PLAYER_COLOR,
           dimension: "overworld",
           x,
           y,
@@ -1167,7 +1184,7 @@ export class Simulation {
           portalCooldown: 0,
         };
         this.players.set(player, state);
-        broadcast({ type: "player_joined", player, name: state.name, x, y, dim: "overworld" });
+        broadcast({ type: "player_joined", player, name: state.name, x, y, dim: "overworld", color: state.color });
         syncInventory(state);
         reply({ type: "player_health", player, health: state.health, max: PLAYER_MAX_HEALTH });
         reply({ type: "player_hunger", player, hunger: state.hunger, max: PLAYER_MAX_HUNGER });
@@ -1206,6 +1223,21 @@ export class Simulation {
           break;
         }
         p.input = { dx: command.dx, jump: command.jump };
+        break;
+      }
+      case "set_color": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        const color = sanitizeColor(command.color);
+        if (color === null) {
+          reject("invalid color");
+          break;
+        }
+        p.color = color;
+        broadcast({ type: "player_color", player, color });
         break;
       }
       case "select_slot": {

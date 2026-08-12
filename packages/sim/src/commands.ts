@@ -7,8 +7,11 @@
 export type PlayerId = number;
 
 export type Command =
-  | { type: "join"; name: string }
+  /** color is an optional 0xRRGGBB body color (kept on the player). */
+  | { type: "join"; name: string; color?: number }
   | { type: "leave" }
+  /** Change the player's body color in-game. */
+  | { type: "set_color"; color: number }
   /** Sets the player's movement intent; it persists until the next move
    * command, so clients only send changes, not one command per tick. */
   | { type: "move"; dx: -1 | 0 | 1; jump: boolean }
