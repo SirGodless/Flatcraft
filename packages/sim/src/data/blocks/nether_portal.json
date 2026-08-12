@@ -1,0 +1,7 @@
+{
+  "id": "nether_portal",
+  "name": "Nether Portal",
+  "solid": false,
+  "hardness": -1,
+  "drops": "none"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "water_3",
+  "name": "Water 3",
+  "solid": false,
+  "hardness": -1,
+  "drops": "none",
+  "liquid": {
+    "kind": "water",
+    "level": 3
+  }
+}

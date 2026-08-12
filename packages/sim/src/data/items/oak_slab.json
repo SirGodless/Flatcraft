@@ -1,0 +1,18 @@
+{
+  "id": "oak_slab",
+  "name": "Oak Slab",
+  "places_block": "oak_slab",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aaa"
+      ],
+      "key": {
+        "a": "item:oak_planks"
+      },
+      "amount": 6
+    }
+  ]
+}

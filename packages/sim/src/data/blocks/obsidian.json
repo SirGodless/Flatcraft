@@ -1,0 +1,8 @@
+{
+  "id": "obsidian",
+  "name": "Obsidian",
+  "solid": true,
+  "hardness": 250,
+  "tool": "pickaxe",
+  "required_tier": 4
+}

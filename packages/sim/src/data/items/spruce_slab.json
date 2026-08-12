@@ -1,0 +1,18 @@
+{
+  "id": "spruce_slab",
+  "name": "Spruce Slab",
+  "places_block": "spruce_slab",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aaa"
+      ],
+      "key": {
+        "a": "item:spruce_planks"
+      },
+      "amount": 6
+    }
+  ]
+}

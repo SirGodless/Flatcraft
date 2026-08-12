@@ -1,0 +1,19 @@
+{
+  "id": "chest",
+  "name": "Chest",
+  "places_block": "chest",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aaa",
+        "a a",
+        "aaa"
+      ],
+      "key": {
+        "a": "tag:planks"
+      }
+    }
+  ]
+}

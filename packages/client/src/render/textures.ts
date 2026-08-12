@@ -1,5 +1,6 @@
 import { Texture } from "pixi.js";
-import { BlockId } from "@flatcraft/sim";
+import { allBlocks, BlockId } from "@flatcraft/sim";
+import { SPRITE_OVERRIDES } from "./sprites.js";
 
 /** On-screen size of one tile at zoom 1, and texture resolution per block. */
 export const TILE_PX = 16;
@@ -234,6 +235,24 @@ export function createBlockTextures(): Map<BlockId, Texture> {
   const textures = new Map<BlockId, Texture>();
   for (const [id, style] of Object.entries(STYLES)) {
     textures.set(Number(id) as BlockId, makeBlockTexture(Number(id) as BlockId, style));
+  }
+  // Sprite files beat procedural styles; blocks without either (e.g.
+  // datapack blocks from a server mod) get a generic texture colored
+  // from their name, so nothing ever renders invisible.
+  for (const def of allBlocks()) {
+    if (def.id === BlockId.Air) continue;
+    const key = def.sprite
+      ? def.sprite.replace(/^sprites\//, "").replace(/\.[a-z0-9]+$/i, "")
+      : `block/${def.name}`;
+    const sprite = SPRITE_OVERRIDES.get(key);
+    if (sprite) {
+      textures.set(def.id, sprite);
+    } else if (!textures.has(def.id)) {
+      let hash = 0;
+      for (const ch of def.name) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+      const base: [number, number, number] = [80 + (hash % 120), 80 + ((hash >> 7) % 120), 80 + ((hash >> 14) % 120)];
+      textures.set(def.id, makeBlockTexture(def.id, { base, noise: 0.12 }));
+    }
   }
   return textures;
 }

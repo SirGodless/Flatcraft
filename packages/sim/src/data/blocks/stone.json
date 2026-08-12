@@ -1,0 +1,12 @@
+{
+  "id": "stone",
+  "name": "Stone",
+  "solid": true,
+  "hardness": 30,
+  "tool": "pickaxe",
+  "required_tier": 1,
+  "drops": {
+    "item": "cobblestone",
+    "amount": 1
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "diamond_ore",
+  "name": "Diamond Ore",
+  "solid": true,
+  "hardness": 45,
+  "tool": "pickaxe",
+  "required_tier": 3,
+  "drops": {
+    "item": "diamond",
+    "amount": 1
+  }
+}

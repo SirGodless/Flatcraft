@@ -1,0 +1,9 @@
+{
+  "id": "chicken",
+  "name": "Chicken",
+  "food": {
+    "hunger": 2,
+    "saturation": 1,
+    "eat_ticks": 32
+  }
+}

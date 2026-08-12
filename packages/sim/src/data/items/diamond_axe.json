@@ -1,0 +1,32 @@
+{
+  "id": "diamond_axe",
+  "name": "Diamond Axe",
+  "max_stack": 1,
+  "tool": {
+    "kind": "axe",
+    "tier": 4,
+    "mining_speed": 8
+  },
+  "weapon": {
+    "damage": 2,
+    "knockback": 0.35
+  },
+  "enchants": [
+    "efficiency"
+  ],
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aa",
+        "ab",
+        " b"
+      ],
+      "key": {
+        "a": "item:diamond",
+        "b": "item:stick"
+      }
+    }
+  ]
+}

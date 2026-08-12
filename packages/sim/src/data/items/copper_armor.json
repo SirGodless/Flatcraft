@@ -1,0 +1,22 @@
+{
+  "id": "copper_armor",
+  "name": "Copper Armor",
+  "max_stack": 1,
+  "armor": {
+    "absorb": 0.2
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a a",
+        "aaa",
+        "aaa"
+      ],
+      "key": {
+        "a": "item:copper_ingot"
+      }
+    }
+  ]
+}

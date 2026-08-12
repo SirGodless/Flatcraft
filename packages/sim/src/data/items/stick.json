@@ -1,0 +1,19 @@
+{
+  "id": "stick",
+  "name": "Stick",
+  "fuel_ticks": 100,
+  "recipes": [
+    {
+      "station": "inventory",
+      "style": "shaped",
+      "recipe": [
+        "a",
+        "a"
+      ],
+      "key": {
+        "a": "tag:planks"
+      },
+      "amount": 4
+    }
+  ]
+}

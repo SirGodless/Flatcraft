@@ -1,0 +1,20 @@
+{
+  "id": "potion_strength",
+  "name": "Potion Strength",
+  "max_stack": 1,
+  "effect": {
+    "id": "strength",
+    "ticks": 1800,
+    "returns": "glass_bottle"
+  },
+  "recipes": [
+    {
+      "station": "brewing_stand",
+      "ingredients": [
+        "item:glass_bottle",
+        "item:bone",
+        "item:glowstone_dust"
+      ]
+    }
+  ]
+}

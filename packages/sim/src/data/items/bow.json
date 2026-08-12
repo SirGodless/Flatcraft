@@ -1,0 +1,20 @@
+{
+  "id": "bow",
+  "name": "Bow",
+  "max_stack": 1,
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        " ab",
+        "a b",
+        " ab"
+      ],
+      "key": {
+        "a": "item:stick",
+        "b": "item:string"
+      }
+    }
+  ]
+}

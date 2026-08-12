@@ -1,0 +1,19 @@
+{
+  "id": "brewing_stand",
+  "name": "Brewing Stand",
+  "places_block": "brewing_stand",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        " a ",
+        "bbb"
+      ],
+      "key": {
+        "a": "item:basalt",
+        "b": "item:cobblestone"
+      }
+    }
+  ]
+}

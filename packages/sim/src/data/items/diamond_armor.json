@@ -1,0 +1,23 @@
+{
+  "id": "diamond_armor",
+  "name": "Diamond Armor",
+  "max_stack": 1,
+  "armor": {
+    "absorb": 0.45
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a a",
+        "aba",
+        "aaa"
+      ],
+      "key": {
+        "a": "item:diamond",
+        "b": "item:iron_armor"
+      }
+    }
+  ]
+}

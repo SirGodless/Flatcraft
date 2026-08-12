@@ -1,0 +1,11 @@
+{
+  "id": "netherite_scrap",
+  "name": "Netherite Scrap",
+  "recipes": [
+    {
+      "station": "furnace",
+      "input": "item:ancient_debris",
+      "cooking_ticks": 400
+    }
+  ]
+}

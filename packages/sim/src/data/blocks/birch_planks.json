@@ -1,0 +1,7 @@
+{
+  "id": "birch_planks",
+  "name": "Birch Planks",
+  "solid": true,
+  "hardness": 30,
+  "tool": "axe"
+}

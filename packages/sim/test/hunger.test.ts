@@ -21,22 +21,29 @@ function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerState } {
 
 describe("hunger", () => {
   it("food items and cooking recipes are defined", () => {
-    expect(itemDef("beef")?.food).toBe(3);
-    expect(itemDef("cooked_beef")?.food).toBe(8);
-    expect(itemDef("cooked_porkchop")?.food).toBe(8);
-    expect(itemDef("cooked_chicken")?.food).toBe(6);
+    expect(itemDef("beef")?.food?.hunger).toBe(3);
+    expect(itemDef("cooked_beef")?.food?.hunger).toBe(8);
+    expect(itemDef("cooked_porkchop")?.food?.hunger).toBe(8);
+    expect(itemDef("cooked_chicken")?.food?.hunger).toBe(6);
+    // Cooked food also carries saturation (buffers hunger drain).
+    expect(itemDef("cooked_beef")?.food?.saturation).toBe(8);
     expect(RECIPES.get("cooked_beef")?.kind).toBe("smelting");
     expect(RECIPES.get("cooked_porkchop")?.kind).toBe("smelting");
     expect(RECIPES.get("cooked_chicken")?.kind).toBe("smelting");
   });
 
-  it("eating restores hunger and consumes the food", () => {
+  it("eating takes eat_ticks, then restores hunger and consumes the food", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
     state.hunger = 5;
+    state.saturation = 0;
     state.inventory[0] = { item: "cooked_beef", count: 2 };
     sim.tick([{ player, command: { type: "use_item" } }]);
+    // Still chewing: nothing consumed yet.
+    expect(countInInventory(state.inventory, "cooked_beef")).toBe(2);
+    for (let i = 0; i < itemDef("cooked_beef")!.food!.eatTicks + 2; i++) sim.tick([]);
     expect(state.hunger).toBe(13);
+    expect(state.saturation).toBeGreaterThan(0);
     expect(countInInventory(state.inventory, "cooked_beef")).toBe(1);
   });
 
@@ -52,9 +59,10 @@ describe("hunger", () => {
     expect(countInInventory(state.inventory, "beef")).toBe(1);
   });
 
-  it("walking and jumping drain the bar over time", () => {
+  it("walking and jumping drain the bar over time (saturation first)", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
+    state.saturation = 0; // spend the starting saturation buffer
     sim.tick([{ player, command: { type: "move", dx: 1, jump: true } }]);
     for (let i = 0; i < 900; i++) sim.tick([]);
     expect(state.hunger).toBeLessThan(PLAYER_MAX_HUNGER);

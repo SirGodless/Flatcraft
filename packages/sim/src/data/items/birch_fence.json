@@ -1,0 +1,20 @@
+{
+  "id": "birch_fence",
+  "name": "Birch Fence",
+  "places_block": "birch_fence",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aba",
+        "aba"
+      ],
+      "key": {
+        "a": "item:birch_planks",
+        "b": "item:stick"
+      },
+      "amount": 3
+    }
+  ]
+}

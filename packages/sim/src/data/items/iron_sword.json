@@ -1,0 +1,32 @@
+{
+  "id": "iron_sword",
+  "name": "Iron Sword",
+  "max_stack": 1,
+  "tool": {
+    "kind": "sword",
+    "tier": 3,
+    "mining_speed": 1
+  },
+  "weapon": {
+    "damage": 6,
+    "knockback": 0.35
+  },
+  "enchants": [
+    "sharpness"
+  ],
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a",
+        "a",
+        "b"
+      ],
+      "key": {
+        "a": "item:iron_ingot",
+        "b": "item:stick"
+      }
+    }
+  ]
+}

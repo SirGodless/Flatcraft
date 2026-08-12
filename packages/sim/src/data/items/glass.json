@@ -1,0 +1,12 @@
+{
+  "id": "glass",
+  "name": "Glass",
+  "places_block": "glass",
+  "recipes": [
+    {
+      "station": "furnace",
+      "input": "item:sand",
+      "cooking_ticks": 200
+    }
+  ]
+}

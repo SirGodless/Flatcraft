@@ -1,0 +1,16 @@
+{
+  "id": "cooked_beef",
+  "name": "Cooked Beef",
+  "food": {
+    "hunger": 8,
+    "saturation": 8,
+    "eat_ticks": 32
+  },
+  "recipes": [
+    {
+      "station": "furnace",
+      "input": "item:beef",
+      "cooking_ticks": 200
+    }
+  ]
+}

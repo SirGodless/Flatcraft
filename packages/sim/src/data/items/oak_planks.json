@@ -1,0 +1,16 @@
+{
+  "id": "oak_planks",
+  "name": "Oak Planks",
+  "places_block": "oak_planks",
+  "fuel_ticks": 300,
+  "recipes": [
+    {
+      "station": "inventory",
+      "style": "shapeless",
+      "ingredients": [
+        "item:oak_log"
+      ],
+      "amount": 4
+    }
+  ]
+}

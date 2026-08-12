@@ -1,9 +1,0 @@
-{
-  "type": "flatcraft:crafting_shaped",
-  "pattern": ["#", "#", "|"],
-  "key": {
-    "#": { "item": "flatcraft:iron_ingot" },
-    "|": { "item": "flatcraft:stick" }
-  },
-  "result": { "item": "flatcraft:iron_sword" }
-}

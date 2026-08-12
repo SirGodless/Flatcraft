@@ -1,5 +1,0 @@
-{
-  "type": "flatcraft:crafting_shapeless",
-  "ingredients": [{ "item": "flatcraft:wool" }],
-  "result": { "item": "flatcraft:string", "count": 4 }
-}

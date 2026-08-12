@@ -1,0 +1,32 @@
+{
+  "id": "diamond_sword",
+  "name": "Diamond Sword",
+  "max_stack": 1,
+  "tool": {
+    "kind": "sword",
+    "tier": 4,
+    "mining_speed": 1
+  },
+  "weapon": {
+    "damage": 7,
+    "knockback": 0.35
+  },
+  "enchants": [
+    "sharpness"
+  ],
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a",
+        "a",
+        "b"
+      ],
+      "key": {
+        "a": "item:diamond",
+        "b": "item:stick"
+      }
+    }
+  ]
+}

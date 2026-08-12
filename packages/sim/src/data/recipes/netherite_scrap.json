@@ -1,6 +1,0 @@
-{
-  "type": "flatcraft:smelting",
-  "ingredient": { "item": "flatcraft:ancient_debris" },
-  "result": { "item": "flatcraft:netherite_scrap" },
-  "cookingtime": 400
-}

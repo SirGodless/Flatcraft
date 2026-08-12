@@ -5,6 +5,8 @@ import { itemDef } from "./items.js";
  * Potion effects: tracked per player as remaining ticks. Speed multiplies
  * walking, regeneration heals over time, strength adds melee damage, and
  * the miner effect reveals ores through the fog of war (client-side).
+ * Which item grants which effect comes from the item's datapack
+ * "effect" component.
  */
 export type EffectId = "speed" | "regeneration" | "strength" | "miner";
 
@@ -13,24 +15,24 @@ export const SPEED_MULTIPLIER = 1.5;
 export const REGEN_EFFECT_INTERVAL = 40; // 1 HP per 2s
 export const STRENGTH_BONUS = 3;
 
-/** The effect a potion item grants, if it is one. */
-export function potionEffect(item: string): EffectId | null {
-  if (!item.startsWith("potion_")) return null;
-  const effect = item.slice("potion_".length);
-  return effect === "speed" || effect === "regeneration" || effect === "strength" || effect === "miner"
-    ? effect
-    : null;
+/** The effect id an item grants when used, if any. */
+export function potionEffect(item: string): string | null {
+  return itemDef(item)?.effect?.id ?? null;
 }
 
-/** Simplified enchanting: one enchantment per tool kind, three levels. */
+/** Simplified enchanting: one enchantment per item, three levels. */
 export const ENCHANT_MAX_LEVEL = 3;
 export const ENCHANT_LAPIS_COST = 8;
 
-/** The enchantment id a given item can receive, or null. */
+/** The enchantment id a given item can receive (its datapack `enchants`
+ * list; the first not-yet-maxed entry), or null. */
 export function enchantFor(stack: ItemStack): string | null {
-  const tool = itemDef(stack.item)?.tool;
-  if (!tool) return null;
-  return tool.kind === "sword" ? "sharpness" : "efficiency";
+  const enchants = itemDef(stack.item)?.enchants;
+  if (!enchants || enchants.length === 0) return null;
+  for (const id of enchants) {
+    if (enchantLevel(stack, id) < ENCHANT_MAX_LEVEL) return id;
+  }
+  return enchants[0] ?? null;
 }
 
 export function enchantLevel(stack: ItemStack | null, id: string): number {

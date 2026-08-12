@@ -1,0 +1,32 @@
+{
+  "id": "iron_hammer",
+  "name": "Iron Hammer",
+  "max_stack": 1,
+  "tool": {
+    "kind": "hammer",
+    "tier": 3,
+    "mining_speed": 6
+  },
+  "weapon": {
+    "damage": 2,
+    "knockback": 0.35
+  },
+  "enchants": [
+    "efficiency"
+  ],
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aaa",
+        "aba",
+        " b "
+      ],
+      "key": {
+        "a": "item:iron_ingot",
+        "b": "item:stick"
+      }
+    }
+  ]
+}

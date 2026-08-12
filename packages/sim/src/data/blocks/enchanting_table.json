@@ -1,0 +1,8 @@
+{
+  "id": "enchanting_table",
+  "name": "Enchanting Table",
+  "solid": true,
+  "hardness": 40,
+  "tool": "pickaxe",
+  "required_tier": 1
+}

@@ -1,0 +1,7 @@
+{
+  "id": "gravel",
+  "name": "Gravel",
+  "solid": true,
+  "hardness": 9,
+  "tool": "shovel"
+}

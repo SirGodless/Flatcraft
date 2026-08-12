@@ -1,0 +1,15 @@
+{
+  "id": "flint_and_steel",
+  "name": "Flint And Steel",
+  "max_stack": 1,
+  "recipes": [
+    {
+      "station": "inventory",
+      "style": "shapeless",
+      "ingredients": [
+        "item:iron_ingot",
+        "item:flint"
+      ]
+    }
+  ]
+}

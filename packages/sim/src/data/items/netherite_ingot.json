@@ -1,0 +1,20 @@
+{
+  "id": "netherite_ingot",
+  "name": "Netherite Ingot",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shapeless",
+      "ingredients": [
+        "item:netherite_scrap",
+        "item:netherite_scrap",
+        "item:netherite_scrap",
+        "item:netherite_scrap",
+        "item:gold_ingot",
+        "item:gold_ingot",
+        "item:gold_ingot",
+        "item:gold_ingot"
+      ]
+    }
+  ]
+}

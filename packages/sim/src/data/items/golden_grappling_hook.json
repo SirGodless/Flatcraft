@@ -1,0 +1,22 @@
+{
+  "id": "golden_grappling_hook",
+  "name": "Golden Grappling Hook",
+  "max_stack": 1,
+  "grapple": {
+    "range": 18
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shapeless",
+      "ingredients": [
+        "item:gold_ingot",
+        "item:gold_ingot",
+        "item:gold_ingot",
+        "item:string",
+        "item:string",
+        "item:iron_grappling_hook"
+      ]
+    }
+  ]
+}

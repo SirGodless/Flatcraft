@@ -1,0 +1,22 @@
+{
+  "id": "diamond_grappling_hook",
+  "name": "Diamond Grappling Hook",
+  "max_stack": 1,
+  "grapple": {
+    "range": 20
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shapeless",
+      "ingredients": [
+        "item:diamond",
+        "item:diamond",
+        "item:diamond",
+        "item:string",
+        "item:string",
+        "item:golden_grappling_hook"
+      ]
+    }
+  ]
+}

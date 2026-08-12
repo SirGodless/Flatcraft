@@ -1,0 +1,20 @@
+{
+  "id": "spruce_door",
+  "name": "Spruce Door",
+  "places_block": "spruce_door",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aa",
+        "aa",
+        "aa"
+      ],
+      "key": {
+        "a": "item:spruce_planks"
+      },
+      "amount": 3
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "id": "brewing_stand",
+  "name": "Brewing Stand",
+  "solid": true,
+  "hardness": 20,
+  "tool": "pickaxe"
+}

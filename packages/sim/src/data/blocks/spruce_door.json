@@ -1,0 +1,9 @@
+{
+  "id": "spruce_door",
+  "name": "Spruce Door",
+  "solid": true,
+  "hardness": 28,
+  "tool": "axe",
+  "tall": true,
+  "toggle_to": "spruce_door_open"
+}

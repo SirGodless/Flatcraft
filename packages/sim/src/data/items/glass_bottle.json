@@ -1,0 +1,18 @@
+{
+  "id": "glass_bottle",
+  "name": "Glass Bottle",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a a",
+        " a "
+      ],
+      "key": {
+        "a": "item:glass"
+      },
+      "amount": 3
+    }
+  ]
+}

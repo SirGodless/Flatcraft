@@ -1,0 +1,10 @@
+{
+  "id": "glowstone",
+  "name": "Glowstone",
+  "solid": true,
+  "hardness": 6,
+  "drops": {
+    "item": "glowstone_dust",
+    "amount": 3
+  }
+}

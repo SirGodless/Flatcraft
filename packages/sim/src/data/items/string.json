@@ -1,0 +1,14 @@
+{
+  "id": "string",
+  "name": "String",
+  "recipes": [
+    {
+      "station": "inventory",
+      "style": "shapeless",
+      "ingredients": [
+        "item:wool"
+      ],
+      "amount": 4
+    }
+  ]
+}

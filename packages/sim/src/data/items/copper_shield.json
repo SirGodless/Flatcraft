@@ -1,0 +1,22 @@
+{
+  "id": "copper_shield",
+  "name": "Copper Shield",
+  "max_stack": 1,
+  "shield": {
+    "block": 0.35
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aaa",
+        "aaa",
+        " a "
+      ],
+      "key": {
+        "a": "item:copper_ingot"
+      }
+    }
+  ]
+}

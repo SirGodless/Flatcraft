@@ -1,0 +1,11 @@
+{
+  "id": "lava_5",
+  "name": "Lava 5",
+  "solid": false,
+  "hardness": -1,
+  "drops": "none",
+  "liquid": {
+    "kind": "lava",
+    "level": 5
+  }
+}

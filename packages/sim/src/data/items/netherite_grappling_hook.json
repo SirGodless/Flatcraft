@@ -1,0 +1,22 @@
+{
+  "id": "netherite_grappling_hook",
+  "name": "Netherite Grappling Hook",
+  "max_stack": 1,
+  "grapple": {
+    "range": 24
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shapeless",
+      "ingredients": [
+        "item:netherite_ingot",
+        "item:netherite_ingot",
+        "item:netherite_ingot",
+        "item:string",
+        "item:string",
+        "item:emerald_grappling_hook"
+      ]
+    }
+  ]
+}

@@ -1,48 +1,25 @@
 import { TAGS } from "../data/tags.js";
-import { itemDef } from "../items.js";
+import { fuelTicksOf, itemDef } from "../items.js";
 import type { ItemStack } from "../inventory.js";
+import type { RecipeJson } from "../registry/schema.js";
 
 /**
- * Crafting recipes, defined in JSON files using Minecraft's datapack
- * format (src/data/recipes/*.json):
+ * Recipes come from the datapack: usually embedded in the result item's
+ * JSON file under "recipes" (see registry/schema.ts), e.g.:
  *
- *   {
- *     "type": "flatcraft:crafting_shaped",
- *     "pattern": ["###", " | ", " | "],
- *     "key": {
- *       "#": { "item": "flatcraft:oak_planks" },
- *       "|": { "item": "flatcraft:stick" }
- *     },
- *     "result": { "item": "flatcraft:wooden_pickaxe" }
- *   }
+ *   "recipes": [{
+ *     "station": "crafting_table",
+ *     "style": "shaped",
+ *     "recipe": ["a", "b", "b"],
+ *     "key": { "a": "item:gold_ingot", "b": "item:stick" },
+ *     "amount": 1
+ *   }]
  *
- *   {
- *     "type": "flatcraft:crafting_shapeless",
- *     "ingredients": [{ "item": "flatcraft:oak_log" }],
- *     "result": { "item": "flatcraft:oak_planks", "count": 4 }
- *   }
- *
- * Recipes whose pattern fits a 2x2 grid can be crafted in the inventory;
- * anything bigger needs a crafting table nearby - like Minecraft.
+ * Ingredient refs are "item:<id>" or "tag:<name>" (any member of the
+ * tag matches - e.g. tag:planks accepts every wood type). Shaped
+ * recipes match position-independently, like Minecraft; shapeless
+ * additionally ignores the arrangement entirely.
  */
-
-/** An ingredient reference: a concrete item or a tag (any member). */
-export interface IngredientJson {
-  item?: string;
-  tag?: string;
-}
-
-export interface RecipeJson {
-  type: string;
-  pattern?: string[];
-  key?: Record<string, IngredientJson>;
-  ingredients?: IngredientJson[];
-  /** Smelting recipes: the single input. */
-  ingredient?: IngredientJson;
-  /** Smelting recipes: accepted for Minecraft-likeness (ticks). */
-  cookingtime?: number;
-  result: { item: string; count?: number };
-}
 
 export interface Recipe {
   id: string;
@@ -64,48 +41,26 @@ export interface Recipe {
   result: ItemStack;
 }
 
-/** Burn duration in ticks per fuel item (Minecraft values at 20 TPS). */
-export const FUEL_TICKS: Readonly<Record<string, number>> = {
-  coal: 1600,
-  oak_log: 300,
-  oak_planks: 300,
-  birch_log: 300,
-  birch_planks: 300,
-  spruce_log: 300,
-  spruce_planks: 300,
-  stick: 100,
-  crafting_table: 300,
-};
-
-export function fuelTicks(item: string): number {
-  return FUEL_TICKS[item] ?? 0;
-}
-
 export const DEFAULT_COOK_TICKS = 200;
 
-const NAMESPACE = "flatcraft:";
-
-function parseItemId(raw: string, recipeId: string): string {
-  const id = raw.startsWith(NAMESPACE) ? raw.slice(NAMESPACE.length) : raw;
-  if (!itemDef(id)) {
-    throw new Error(`recipe ${recipeId}: unknown item "${raw}"`);
-  }
-  return id;
+/** Furnace burn duration in ticks (from the item's fuel_ticks). */
+export function fuelTicks(item: string): number {
+  return fuelTicksOf(item);
 }
 
-/** Parse an ingredient reference to its key ("item_id" or "#tag"). */
-function parseIngredient(entry: IngredientJson, recipeId: string): string {
-  if (entry.tag !== undefined) {
-    const tag = entry.tag.startsWith(NAMESPACE) ? entry.tag.slice(NAMESPACE.length) : entry.tag;
-    if (!TAGS[tag]) {
-      throw new Error(`recipe ${recipeId}: unknown tag "${entry.tag}"`);
+/** Convert a validated ingredient ref to a registry key and check it. */
+function refToKey(ref: string, recipeId: string): string {
+  const [type, name] = ref.split(":") as [string, string];
+  if (type === "tag") {
+    if (!TAGS[name]) {
+      throw new Error(`recipe ${recipeId}: unknown tag "${name}"`);
     }
-    return `#${tag}`;
+    return `#${name}`;
   }
-  if (entry.item !== undefined) {
-    return parseItemId(entry.item, recipeId);
+  if (!itemDef(name)) {
+    throw new Error(`recipe ${recipeId}: unknown item "${name}"`);
   }
-  throw new Error(`recipe ${recipeId}: ingredient needs "item" or "tag"`);
+  return name;
 }
 
 /** The concrete item ids an ingredient key accepts. */
@@ -123,94 +78,77 @@ export function ingredientLabel(key: string): string {
   return key.startsWith("#") ? `any ${key.slice(1)}` : key;
 }
 
-export function parseRecipe(id: string, json: RecipeJson): Recipe {
-  const result: ItemStack = {
-    item: parseItemId(json.result.item, id),
-    count: json.result.count ?? 1,
-  };
-
-  if (json.type === `${NAMESPACE}crafting_shaped`) {
-    const pattern = json.pattern;
-    const key = json.key;
-    if (!pattern || pattern.length === 0 || pattern.length > 3 || !key) {
-      throw new Error(`recipe ${id}: shaped recipe needs a 1-3 row pattern and a key`);
-    }
-    const width = Math.max(...pattern.map((row) => row.length));
-    if (width === 0 || width > 3) {
-      throw new Error(`recipe ${id}: pattern rows must be 1-3 characters`);
-    }
-    const ingredients = new Map<string, number>();
-    const itemPattern: (string | null)[][] = [];
-    for (const row of pattern) {
-      const itemRow: (string | null)[] = [];
-      for (let i = 0; i < width; i++) {
-        const char = row[i] ?? " ";
-        if (char === " ") {
-          itemRow.push(null);
-          continue;
-        }
-        const entry = key[char];
-        if (!entry) {
-          throw new Error(`recipe ${id}: pattern symbol "${char}" missing from key`);
-        }
-        const ingredientKey = parseIngredient(entry, id);
-        ingredients.set(ingredientKey, (ingredients.get(ingredientKey) ?? 0) + 1);
-        itemRow.push(ingredientKey);
-      }
-      itemPattern.push(itemRow);
-    }
-    if (ingredients.size === 0) {
-      throw new Error(`recipe ${id}: pattern is empty`);
-    }
-    const gridSize = width <= 2 && pattern.length <= 2 ? 2 : 3;
-    return { id, kind: "crafting", shaped: true, gridSize, ingredients, pattern: itemPattern, result };
+/** Parse a (schema-validated) station recipe into the runtime Recipe. */
+export function parseStationRecipe(id: string, resultItem: string, json: RecipeJson): Recipe {
+  if (!itemDef(resultItem)) {
+    throw new Error(`recipe ${id}: unknown result item "${resultItem}"`);
   }
+  const result: ItemStack = { item: resultItem, count: json.amount ?? 1 };
 
-  if (json.type === `${NAMESPACE}brewing`) {
-    const list = json.ingredients;
-    if (!list || list.length === 0) {
-      throw new Error(`recipe ${id}: brewing recipe needs ingredients`);
-    }
-    const ingredients = new Map<string, number>();
-    for (const entry of list) {
-      const key = parseIngredient(entry, id);
-      ingredients.set(key, (ingredients.get(key) ?? 0) + 1);
-    }
-    return { id, kind: "brewing", shaped: false, gridSize: 3, ingredients, result };
-  }
-
-  if (json.type === `${NAMESPACE}smelting`) {
-    const ingredient = json.ingredient;
-    if (!ingredient) {
-      throw new Error(`recipe ${id}: smelting recipe needs an ingredient`);
-    }
-    const item = parseIngredient(ingredient, id);
+  if (json.station === "furnace") {
+    const key = refToKey(json.input!, id);
     return {
       id,
       kind: "smelting",
       shaped: false,
       gridSize: 3,
-      ingredients: new Map([[item, 1]]),
-      cookingTime: json.cookingtime ?? DEFAULT_COOK_TICKS,
+      ingredients: new Map([[key, 1]]),
+      cookingTime: json.cooking_ticks ?? DEFAULT_COOK_TICKS,
       result,
     };
   }
 
-  if (json.type === `${NAMESPACE}crafting_shapeless`) {
-    const list = json.ingredients;
-    if (!list || list.length === 0 || list.length > 9) {
-      throw new Error(`recipe ${id}: shapeless recipe needs 1-9 ingredients`);
+  if (json.station === "brewing_stand") {
+    const ingredients = new Map<string, number>();
+    for (const ref of json.ingredients!) {
+      const key = refToKey(ref, id);
+      ingredients.set(key, (ingredients.get(key) ?? 0) + 1);
     }
+    return { id, kind: "brewing", shaped: false, gridSize: 3, ingredients, result };
+  }
+
+  const stationSize = json.station === "inventory" ? 2 : 3;
+  if (json.style === "shapeless") {
     const ingredients = new Map<string, number>();
     const shapeless: string[] = [];
-    for (const entry of list) {
-      const key = parseIngredient(entry, id);
+    for (const ref of json.ingredients!) {
+      const key = refToKey(ref, id);
       ingredients.set(key, (ingredients.get(key) ?? 0) + 1);
       shapeless.push(key);
     }
-    const gridSize = list.length <= 4 ? 2 : 3;
-    return { id, kind: "crafting", shaped: false, gridSize, ingredients, shapeless, result };
+    if (stationSize === 2 && shapeless.length > 4) {
+      throw new Error(`recipe ${id}: station "inventory" fits at most 4 ingredients`);
+    }
+    return { id, kind: "crafting", shaped: false, gridSize: stationSize, ingredients, shapeless, result };
   }
 
-  throw new Error(`recipe ${id}: unknown type "${json.type}"`);
+  const rows = json.recipe!;
+  const width = Math.max(...rows.map((row) => row.length));
+  if (stationSize === 2 && (width > 2 || rows.length > 2)) {
+    throw new Error(`recipe ${id}: station "inventory" fits at most a 2x2 pattern`);
+  }
+  const ingredients = new Map<string, number>();
+  const pattern: (string | null)[][] = [];
+  for (const row of rows) {
+    const patternRow: (string | null)[] = [];
+    for (let i = 0; i < width; i++) {
+      const letter = row[i] ?? " ";
+      if (letter === " ") {
+        patternRow.push(null);
+        continue;
+      }
+      const ref = json.key?.[letter];
+      if (ref === undefined) {
+        throw new Error(`recipe ${id}: pattern symbol "${letter}" missing from key`);
+      }
+      const key = refToKey(ref, id);
+      ingredients.set(key, (ingredients.get(key) ?? 0) + 1);
+      patternRow.push(key);
+    }
+    pattern.push(patternRow);
+  }
+  if (ingredients.size === 0) {
+    throw new Error(`recipe ${id}: pattern is empty`);
+  }
+  return { id, kind: "crafting", shaped: true, gridSize: stationSize, ingredients, pattern, result };
 }

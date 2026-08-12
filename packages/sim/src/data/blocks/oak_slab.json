@@ -1,0 +1,8 @@
+{
+  "id": "oak_slab",
+  "name": "Oak Slab",
+  "solid": false,
+  "hardness": 25,
+  "tool": "axe",
+  "slab": true
+}

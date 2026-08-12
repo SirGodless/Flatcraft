@@ -89,6 +89,34 @@ docker build -t flatcraft .
 docker run -d -p 8080:8080 -v flatcraft-data:/data --name flatcraft flatcraft
 ```
 
+## Datapack & modding
+
+All items, blocks and recipes are data, not code: one JSON file per
+item/block under `packages/sim/src/data/{items,blocks}/` (see
+`packages/sim/src/registry/schema.ts` for every field). Capabilities are
+optional components - `tool`, `weapon`, `food` (hunger/saturation/
+eat_ticks), `armor`, `shield`, `grapple`, `effect`, `fuel_ticks`,
+`places_block`, `enchants` - and recipes live in their result item's
+file under `recipes` (`station` + shaped/shapeless, `tag:planks`
+ingredients accept any wood). Identity is the string id everywhere;
+saves carry an id->name palette, so numeric block ids are never
+load-bearing.
+
+A dedicated server loads mods from `DATA_DIR/datapack/`:
+
+```
+data/datapack/
+  blocks/my_block.json
+  items/my_item.json
+  sprites/block/my_block.png     # optional, else procedural fallback
+  sprites/item/my_item.png
+```
+
+Mod content gets dynamic block ids, is served to every client via
+`/api/datapack` on join, and its sprites via `/sprites/`. Sprite rules:
+PNG, 8 bit per channel, dimensions a multiple of 2, at most 128x128.
+Sprites can also override built-in art (e.g. `sprites/block/stone.png`).
+
 ## Behind an Apache reverse proxy
 
 To serve the game at your own domain, copy
@@ -114,3 +142,4 @@ when the page is served over HTTPS - no game configuration needed.
 12. ~~Hunger & bow~~ (activity-driven hunger bar gating regeneration, food incl. furnace-cooked meats, bow + craftable arrows)
 13. ~~Netcode~~ (WebSocket transport behind the existing connection abstraction, dedicated server serving client + game on one port, accounts with register-on-first-login + session tokens, world persistence on disk, Docker image, Apache vhost template)
 14. ~~Content expansion~~ (copper + netherite material tiers; recipe ingredient tags - any wood works in wood recipes; birch/spruce trees with stairs/slabs/fences/doors/trapdoors per wood; Terraria-style placement rules + background-wall building (B) and hammers to mine walls; armor + offhand + shields with tiered recipes; grappling hooks with 10+2/tier range; walk-in portal frames; creative mode on a hidden keybind; finite flowing water/lava with swimming and diving air)
+15. ~~Datapack engine~~ (every item/block/recipe is a component-based JSON file with strict validation; string ids everywhere with a save palette instead of load-bearing numbers; saturation/eat-time/weapon-knockback/enchant lists as data; sprite files with procedural fallback; server-side mod datapacks synced to clients on join)

@@ -1,0 +1,22 @@
+{
+  "id": "wooden_shield",
+  "name": "Wooden Shield",
+  "max_stack": 1,
+  "shield": {
+    "block": 0.25
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aaa",
+        "aaa",
+        " a "
+      ],
+      "key": {
+        "a": "tag:planks"
+      }
+    }
+  ]
+}

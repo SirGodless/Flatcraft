@@ -1,0 +1,16 @@
+{
+  "id": "spruce_planks",
+  "name": "Spruce Planks",
+  "places_block": "spruce_planks",
+  "fuel_ticks": 300,
+  "recipes": [
+    {
+      "station": "inventory",
+      "style": "shapeless",
+      "ingredients": [
+        "item:spruce_log"
+      ],
+      "amount": 4
+    }
+  ]
+}

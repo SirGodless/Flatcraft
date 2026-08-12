@@ -1,0 +1,8 @@
+{
+  "id": "furnace",
+  "name": "Furnace",
+  "solid": true,
+  "hardness": 35,
+  "tool": "pickaxe",
+  "required_tier": 1
+}

@@ -1,0 +1,20 @@
+{
+  "id": "oak_stairs",
+  "name": "Oak Stairs",
+  "places_block": "oak_stairs",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a  ",
+        "aa ",
+        "aaa"
+      ],
+      "key": {
+        "a": "item:oak_planks"
+      },
+      "amount": 4
+    }
+  ]
+}

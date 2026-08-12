@@ -1,0 +1,32 @@
+{
+  "id": "copper_hammer",
+  "name": "Copper Hammer",
+  "max_stack": 1,
+  "tool": {
+    "kind": "hammer",
+    "tier": 2,
+    "mining_speed": 5
+  },
+  "weapon": {
+    "damage": 2,
+    "knockback": 0.35
+  },
+  "enchants": [
+    "efficiency"
+  ],
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aaa",
+        "aba",
+        " b "
+      ],
+      "key": {
+        "a": "item:copper_ingot",
+        "b": "item:stick"
+      }
+    }
+  ]
+}

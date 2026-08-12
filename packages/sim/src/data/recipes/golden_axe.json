@@ -1,9 +1,0 @@
-{
-  "type": "flatcraft:crafting_shaped",
-  "pattern": ["##", "#|", " |"],
-  "key": {
-    "#": { "item": "flatcraft:gold_ingot" },
-    "|": { "item": "flatcraft:stick" }
-  },
-  "result": { "item": "flatcraft:golden_axe" }
-}

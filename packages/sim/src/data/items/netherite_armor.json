@@ -1,0 +1,22 @@
+{
+  "id": "netherite_armor",
+  "name": "Netherite Armor",
+  "max_stack": 1,
+  "armor": {
+    "absorb": 0.6
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a a",
+        "aaa",
+        "aaa"
+      ],
+      "key": {
+        "a": "item:netherite_ingot"
+      }
+    }
+  ]
+}

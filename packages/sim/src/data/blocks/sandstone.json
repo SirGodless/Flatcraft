@@ -1,0 +1,8 @@
+{
+  "id": "sandstone",
+  "name": "Sandstone",
+  "solid": true,
+  "hardness": 24,
+  "tool": "pickaxe",
+  "required_tier": 1
+}

@@ -1,6 +1,0 @@
-{
-  "type": "flatcraft:crafting_shaped",
-  "pattern": ["###", "# #", "###"],
-  "key": { "#": { "item": "flatcraft:cobblestone" } },
-  "result": { "item": "flatcraft:furnace" }
-}

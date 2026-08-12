@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   BlockId,
   countInInventory,
+  findSpawnX,
   Simulation,
+  surfaceHeight,
   type OutboundEvent,
   type PlayerId,
   type PlayerState,
@@ -93,5 +95,30 @@ describe("save/load", () => {
     const pb = b.players.get(bPlayer)!;
     expect(pb.x).toBeCloseTo(pa.x, 5);
     expect(pb.y).toBeCloseTo(pa.y, 5);
+  });
+
+  it("remaps renumbered block ids through the save palette", () => {
+    const sim = new Simulation(SEED);
+    joinPlayer(sim);
+    const spawnX = findSpawnX(SEED);
+    const surface = surfaceHeight(SEED, spawnX);
+    sim.world.setBlock(spawnX + 3, surface - 2, BlockId.Glowstone);
+    const save = sim.serialize();
+    expect(save.version).toBe(2);
+    expect(save.blockPalette![BlockId.Glowstone]).toBe("glowstone");
+
+    // Simulate a registry that renumbered glowstone: the save's chunks
+    // carry a fake number whose palette entry still says "glowstone".
+    const fakeId = 999;
+    for (const chunk of save.worlds.overworld) {
+      for (let i = 0; i < chunk.tiles.length; i++) {
+        if (chunk.tiles[i] === BlockId.Glowstone) chunk.tiles[i] = fakeId;
+      }
+    }
+    save.blockPalette![fakeId] = "glowstone";
+    delete save.blockPalette![BlockId.Glowstone];
+
+    const restored = Simulation.deserialize(save);
+    expect(restored.world.getBlockGenerating(spawnX + 3, surface - 2)).toBe(BlockId.Glowstone);
   });
 });

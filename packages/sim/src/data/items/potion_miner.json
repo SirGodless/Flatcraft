@@ -1,0 +1,20 @@
+{
+  "id": "potion_miner",
+  "name": "Potion Miner",
+  "max_stack": 1,
+  "effect": {
+    "id": "miner",
+    "ticks": 1800,
+    "returns": "glass_bottle"
+  },
+  "recipes": [
+    {
+      "station": "brewing_stand",
+      "ingredients": [
+        "item:glass_bottle",
+        "item:coal",
+        "item:glowstone_dust"
+      ]
+    }
+  ]
+}

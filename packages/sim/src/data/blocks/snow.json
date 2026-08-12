@@ -1,0 +1,7 @@
+{
+  "id": "snow",
+  "name": "Snow",
+  "solid": true,
+  "hardness": 6,
+  "tool": "shovel"
+}

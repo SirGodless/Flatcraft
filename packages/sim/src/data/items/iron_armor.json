@@ -1,0 +1,22 @@
+{
+  "id": "iron_armor",
+  "name": "Iron Armor",
+  "max_stack": 1,
+  "armor": {
+    "absorb": 0.3
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a a",
+        "aaa",
+        "aaa"
+      ],
+      "key": {
+        "a": "item:iron_ingot"
+      }
+    }
+  ]
+}

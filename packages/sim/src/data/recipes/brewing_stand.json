@@ -1,9 +1,0 @@
-{
-  "type": "flatcraft:crafting_shaped",
-  "pattern": [" B ", "CCC"],
-  "key": {
-    "B": { "item": "flatcraft:basalt" },
-    "C": { "item": "flatcraft:cobblestone" }
-  },
-  "result": { "item": "flatcraft:brewing_stand" }
-}

@@ -1,0 +1,18 @@
+{
+  "id": "birch_slab",
+  "name": "Birch Slab",
+  "places_block": "birch_slab",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aaa"
+      ],
+      "key": {
+        "a": "item:birch_planks"
+      },
+      "amount": 6
+    }
+  ]
+}

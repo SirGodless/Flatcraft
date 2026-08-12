@@ -1,0 +1,19 @@
+{
+  "id": "crafting_table",
+  "name": "Crafting Table",
+  "places_block": "crafting_table",
+  "fuel_ticks": 300,
+  "recipes": [
+    {
+      "station": "inventory",
+      "style": "shaped",
+      "recipe": [
+        "aa",
+        "aa"
+      ],
+      "key": {
+        "a": "tag:planks"
+      }
+    }
+  ]
+}

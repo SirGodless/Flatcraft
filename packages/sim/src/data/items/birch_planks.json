@@ -1,0 +1,16 @@
+{
+  "id": "birch_planks",
+  "name": "Birch Planks",
+  "places_block": "birch_planks",
+  "fuel_ticks": 300,
+  "recipes": [
+    {
+      "station": "inventory",
+      "style": "shapeless",
+      "ingredients": [
+        "item:birch_log"
+      ],
+      "amount": 4
+    }
+  ]
+}

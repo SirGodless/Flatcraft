@@ -6,6 +6,7 @@ import {
   HOTBAR_SIZE,
   ingredientLabel,
   ingredientOptions,
+  itemDef,
   matchGrid,
   RECIPES,
   SMALL_GRID_INDICES,
@@ -42,7 +43,8 @@ function prettyName(id: string): string {
 }
 
 function tooltipFor(stack: ItemStack): string {
-  const lines = [prettyName(stack.item)];
+  // The datapack display name, falling back to the prettified id.
+  const lines = [itemDef(stack.item)?.name ?? prettyName(stack.item)];
   for (const ench of stack.ench ?? []) {
     lines.push(`${prettyName(ench.id)} ${ench.level}`);
   }

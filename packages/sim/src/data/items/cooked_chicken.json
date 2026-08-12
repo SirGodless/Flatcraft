@@ -1,0 +1,16 @@
+{
+  "id": "cooked_chicken",
+  "name": "Cooked Chicken",
+  "food": {
+    "hunger": 6,
+    "saturation": 6,
+    "eat_ticks": 32
+  },
+  "recipes": [
+    {
+      "station": "furnace",
+      "input": "item:chicken",
+      "cooking_ticks": 200
+    }
+  ]
+}

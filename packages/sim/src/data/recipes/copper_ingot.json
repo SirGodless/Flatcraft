@@ -1,6 +1,0 @@
-{
-  "type": "flatcraft:smelting",
-  "ingredient": { "item": "flatcraft:copper_ore" },
-  "result": { "item": "flatcraft:copper_ingot" },
-  "cookingtime": 200
-}

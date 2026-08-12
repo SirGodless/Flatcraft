@@ -1,0 +1,7 @@
+{
+  "id": "birch_fence",
+  "name": "Birch Fence",
+  "solid": true,
+  "hardness": 30,
+  "tool": "axe"
+}

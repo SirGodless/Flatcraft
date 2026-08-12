@@ -1,0 +1,19 @@
+{
+  "id": "furnace",
+  "name": "Furnace",
+  "places_block": "furnace",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aaa",
+        "a a",
+        "aaa"
+      ],
+      "key": {
+        "a": "item:cobblestone"
+      }
+    }
+  ]
+}

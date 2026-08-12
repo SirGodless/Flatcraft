@@ -1,0 +1,21 @@
+{
+  "id": "backpack",
+  "name": "Backpack",
+  "max_stack": 1,
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shapeless",
+      "ingredients": [
+        "tag:planks",
+        "tag:planks",
+        "tag:planks",
+        "tag:planks",
+        "item:stick",
+        "item:stick",
+        "item:stick",
+        "item:stick"
+      ]
+    }
+  ]
+}

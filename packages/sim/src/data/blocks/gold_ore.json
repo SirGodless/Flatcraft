@@ -1,0 +1,8 @@
+{
+  "id": "gold_ore",
+  "name": "Gold Ore",
+  "solid": true,
+  "hardness": 40,
+  "tool": "pickaxe",
+  "required_tier": 3
+}

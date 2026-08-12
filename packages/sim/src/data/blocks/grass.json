@@ -1,0 +1,11 @@
+{
+  "id": "grass",
+  "name": "Grass",
+  "solid": true,
+  "hardness": 12,
+  "tool": "shovel",
+  "drops": {
+    "item": "dirt",
+    "amount": 1
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "sandstone",
+  "name": "Sandstone",
+  "places_block": "sandstone",
+  "recipes": [
+    {
+      "station": "inventory",
+      "style": "shaped",
+      "recipe": [
+        "aa",
+        "aa"
+      ],
+      "key": {
+        "a": "item:sand"
+      }
+    }
+  ]
+}

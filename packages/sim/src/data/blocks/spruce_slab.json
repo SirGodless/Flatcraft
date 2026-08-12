@@ -1,0 +1,8 @@
+{
+  "id": "spruce_slab",
+  "name": "Spruce Slab",
+  "solid": false,
+  "hardness": 25,
+  "tool": "axe",
+  "slab": true
+}
