@@ -158,6 +158,28 @@ describe("auth", () => {
     expect(joined.type === "player_joined" && joined.name).toBe("Mallory");
     await mallory.close();
   });
+
+  it("carries the chosen player color and broadcasts color changes", async () => {
+    const ded = await startServer();
+    const alice = await TestClient.connect(ded.port, { name: "Alice", password: "secret1" });
+    alice.send({ type: "join", name: alice.name, color: 0x48b048 });
+    const joined = await alice.waitFor((e) => e.type === "player_joined");
+    expect(joined.type === "player_joined" && joined.color).toBe(0x48b048);
+
+    const bob = await TestClient.connect(ded.port, { name: "Bob", password: "secret1" });
+    bob.join();
+    // Bob sees Alice's color in the join replay...
+    const replay = await bob.waitFor(
+      (e) => e.type === "player_joined" && e.player === alice.playerId,
+    );
+    expect(replay.type === "player_joined" && replay.color).toBe(0x48b048);
+    // ...and a live color change reaches him too.
+    alice.send({ type: "set_color", color: 0xe060b0 });
+    const change = await bob.waitFor((e) => e.type === "player_color");
+    expect(change.type === "player_color" && change.color).toBe(0xe060b0);
+    await alice.close();
+    await bob.close();
+  });
 });
 
 describe("two players", () => {

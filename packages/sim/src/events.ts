@@ -10,8 +10,10 @@ import type { Dimension } from "./world/world.js";
  * Like commands they must remain plain serializable data.
  */
 export type SimEvent =
-  | { type: "player_joined"; player: PlayerId; name: string; x: number; y: number; dim: Dimension }
+  | { type: "player_joined"; player: PlayerId; name: string; x: number; y: number; dim: Dimension; color: number }
   | { type: "player_left"; player: PlayerId }
+  /** A player changed their body color. */
+  | { type: "player_color"; player: PlayerId; color: number }
   | { type: "player_moved"; player: PlayerId; x: number; y: number }
   /** A player switched dimension (portal); position is the arrival spot. */
   | { type: "player_dimension"; player: PlayerId; dim: Dimension; x: number; y: number }

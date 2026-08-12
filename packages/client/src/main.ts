@@ -14,7 +14,13 @@ import { attachInput } from "./input/input.js";
 import { connectWebSocket, type OnlineSession } from "./net/wsConnection.js";
 import { Renderer } from "./render/renderer.js";
 import { deleteWorld, loadExplored, loadWorld, saveExplored, saveWorld } from "./save.js";
-import { disconnectOverlay, loginOverlay } from "./ui/login.js";
+import {
+  disconnectOverlay,
+  loginOverlay,
+  PLAYER_COLORS,
+  storedPlayerColor,
+  storePlayerColor,
+} from "./ui/login.js";
 
 /** Max chunk requests sent per frame, to keep event batches small. */
 const CHUNK_REQUESTS_PER_FRAME = 12;
@@ -54,6 +60,7 @@ interface GameOptions {
   connection: ClientConnection;
   playerId: PlayerId;
   playerName: string;
+  playerColor: number;
   /** Called every frame with the elapsed ms (embedded server ticking). */
   onFrame?: (dtMs: number) => void;
   /** One-time hook once the renderer exists (persistence, debug params). */
@@ -130,10 +137,17 @@ async function runGame(options: GameOptions): Promise<Renderer> {
     onUiWheel: (deltaY) => renderer.handleWheel(deltaY),
     onHotbarScroll: (direction) =>
       connection.send({ type: "select_slot", index: renderer.hotbarSlotAfter(direction) }),
+    onCycleColor: () => {
+      const index = PLAYER_COLORS.indexOf(currentColor as (typeof PLAYER_COLORS)[number]);
+      currentColor = PLAYER_COLORS[(index + 1) % PLAYER_COLORS.length]!;
+      storePlayerColor(currentColor);
+      connection.send({ type: "set_color", color: currentColor });
+    },
     onPointerMove: (x, y) => renderer.setPointer(x, y),
   });
 
-  connection.send({ type: "join", name: options.playerName });
+  let currentColor = options.playerColor;
+  connection.send({ type: "join", name: options.playerName, color: currentColor });
   options.afterInit?.(renderer);
 
   // Chunks already asked for; re-request after dimension changes.
@@ -173,6 +187,7 @@ async function startOnline(info: ServerInfo): Promise<void> {
     connection: session.connection,
     playerId: session.playerId,
     playerName: session.name,
+    playerColor: storedPlayerColor(),
   });
   void renderer;
   session.onDisconnect(() => disconnectOverlay());
@@ -238,6 +253,7 @@ async function startSingleplayer(): Promise<void> {
     connection,
     playerId,
     playerName: "Player",
+    playerColor: storedPlayerColor(),
     onFrame: (dt) => server.advance(dt),
     afterInit: (renderer) => {
       const persist = (): void => {

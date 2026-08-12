@@ -1,6 +1,23 @@
 import type { ServerInfo } from "@flatcraft/server";
 import type { OnlineSession } from "../net/wsConnection.js";
 
+/** Selectable player body colors (login screen + C key in-game). */
+export const PLAYER_COLORS = [
+  0xe04848, 0x4868e0, 0x48b048, 0xe0a030, 0x9048e0,
+  0x30c8c8, 0xe060b0, 0x8a6234, 0xd8d8d8, 0x3a3a44,
+] as const;
+
+const COLOR_STORAGE_KEY = "flatcraft.color";
+
+export function storedPlayerColor(): number {
+  const value = Number(localStorage.getItem(COLOR_STORAGE_KEY));
+  return Number.isInteger(value) && value >= 0 && value <= 0xffffff ? value : PLAYER_COLORS[0];
+}
+
+export function storePlayerColor(color: number): void {
+  localStorage.setItem(COLOR_STORAGE_KEY, String(color));
+}
+
 /**
  * Plain-DOM login screen for online mode (shown before the Pixi renderer
  * exists). Name + password; unknown names register automatically.
@@ -45,6 +62,8 @@ export function loginOverlay(
                autocomplete="username" required pattern="[A-Za-z0-9_]{2,16}" />
         <input name="password" style="${INPUT_STYLE}" type="password" placeholder="Password"
                autocomplete="current-password" required minlength="4" />
+        <div style="font-size: 12px; color: #9a9aac; margin-top: 4px;">Player color</div>
+        <div data-role="colors" style="display: flex; gap: 6px; flex-wrap: wrap;"></div>
         <button style="${BUTTON_STYLE}" type="submit">Play</button>
         <div data-role="error" style="font-size: 12px; color: #e07070; min-height: 15px;"></div>
         <div style="font-size: 11px; color: #6a6a7c;">Unknown names are registered on first login.</div>
@@ -57,6 +76,32 @@ export function loginOverlay(
     const passwordInput = overlay.querySelector<HTMLInputElement>('input[name="password"]')!;
     const button = overlay.querySelector("button")!;
     const error = overlay.querySelector<HTMLDivElement>('[data-role="error"]')!;
+
+    // Color swatches; the picked one is remembered and sent with the join.
+    const colorRow = overlay.querySelector<HTMLDivElement>('[data-role="colors"]')!;
+    let selectedColor = storedPlayerColor();
+    const swatches: HTMLButtonElement[] = [];
+    const refreshSwatches = (): void => {
+      for (const swatch of swatches) {
+        const color = Number(swatch.dataset["color"]);
+        swatch.style.outline = color === selectedColor ? "2px solid #ffffff" : "1px solid #555566";
+      }
+    };
+    for (const color of PLAYER_COLORS) {
+      const swatch = document.createElement("button");
+      swatch.type = "button";
+      swatch.dataset["color"] = String(color);
+      swatch.style.cssText = `width: 22px; height: 22px; border: 0; border-radius: 3px;
+        cursor: pointer; background: #${color.toString(16).padStart(6, "0")};`;
+      swatch.addEventListener("click", () => {
+        selectedColor = color;
+        storePlayerColor(color);
+        refreshSwatches();
+      });
+      swatches.push(swatch);
+      colorRow.appendChild(swatch);
+    }
+    refreshSwatches();
 
     form.addEventListener("submit", (event) => {
       event.preventDefault();
