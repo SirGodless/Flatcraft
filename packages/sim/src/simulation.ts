@@ -471,15 +471,28 @@ export class Simulation {
    */
   private stepLiquids(out: OutboundEvent[]): void {
     const BUDGET = 200;
+    // No liquid kind is due this tick (water every 3, lava every 10):
+    // skip the scan entirely, active cells just stay queued.
+    if (this.tickCount % 3 !== 0 && this.tickCount % 10 !== 0) return;
     for (const dimension of ["overworld", "nether"] as const) {
       const active = this.liquidActive[dimension];
       if (active.size === 0) continue;
       const world = this.worldOf(dimension);
 
+      // Cells often change several times per tick while liquid shuffles
+      // around; clients only need one event with the final state.
+      const touched = new Map<string, { x: number; y: number; before: BlockId }>();
+      const setBlockTracked = (x: number, y: number, block: BlockId): void => {
+        const key = `${x},${y}`;
+        if (!touched.has(key)) {
+          touched.set(key, { x, y, before: world.getBlockGenerating(x, y) });
+        }
+        world.setBlock(x, y, block);
+      };
+
       const setLiquid = (x: number, y: number, kind: "water" | "lava", level: number): void => {
         const block = level <= 0 ? BlockId.Air : liquidBlock(kind, level);
-        world.setBlock(x, y, block);
-        out.push({ event: { type: "block_changed", dim: dimension, x, y, block } });
+        setBlockTracked(x, y, block);
         active.add(`${x},${y}`);
         this.wakeLiquids(dimension, x, y);
       };
@@ -530,8 +543,7 @@ export class Simulation {
         // Water over lava (or vice versa): the contact hardens.
         if (belowDef.liquid && belowDef.liquid.kind !== liquid.kind) {
           setLiquid(x, y + 1, "water", 0);
-          world.setBlock(x, y + 1, BlockId.Obsidian);
-          out.push({ event: { type: "block_changed", dim: dimension, x, y: y + 1, block: BlockId.Obsidian } });
+          setBlockTracked(x, y + 1, BlockId.Obsidian);
         }
 
         // 2) Spread: give one unit to a lower neighbor, alternating the
@@ -542,8 +554,7 @@ export class Simulation {
             const nx = x + dir;
             const neighborDef = blockDef(world.getBlockGenerating(nx, y));
             if (neighborDef.liquid && neighborDef.liquid.kind !== liquid.kind) {
-              world.setBlock(nx, y, BlockId.Obsidian);
-              out.push({ event: { type: "block_changed", dim: dimension, x: nx, y, block: BlockId.Obsidian } });
+              setBlockTracked(nx, y, BlockId.Obsidian);
               continue;
             }
             const neighborLevel = neighborDef.liquid?.kind === liquid.kind ? neighborDef.liquid.level : isOpen(nx, y) ? 0 : null;
@@ -554,6 +565,14 @@ export class Simulation {
               break;
             }
           }
+        }
+      }
+
+      // One event per cell that actually ended up different.
+      for (const { x, y, before } of touched.values()) {
+        const block = world.getBlockGenerating(x, y);
+        if (block !== before) {
+          out.push({ event: { type: "block_changed", dim: dimension, x, y, block } });
         }
       }
     }
