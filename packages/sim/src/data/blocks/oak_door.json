@@ -1,0 +1,9 @@
+{
+  "id": "oak_door",
+  "name": "Oak Door",
+  "solid": true,
+  "hardness": 28,
+  "tool": "axe",
+  "tall": true,
+  "toggle_to": "oak_door_open"
+}

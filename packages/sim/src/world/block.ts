@@ -1,6 +1,16 @@
+import { BLOCK_JSONS } from "../data/blocks/index.js";
+import { validateBlockJson } from "../registry/schema.js";
+
 /**
- * Block type ids. Stored per tile as a uint16, so the registry can grow to
- * cover the full 1.16-era content set without changing the storage format.
+ * Block registry. The canonical identity of a block is its string id
+ * ("copper_ore"); definitions live in datapack JSON files
+ * (src/data/blocks/*.json, see registry/schema.ts).
+ *
+ * The numeric BlockId enum below is a runtime detail: chunks store
+ * blocks as uint16 for compact storage/network transfer. Engine code may
+ * use the enum constants; persisted data never depends on the numbers -
+ * saves carry an id->name palette and are remapped by name on load.
+ * Datapack blocks unknown to the enum get dynamic ids (>= 78).
  */
 export enum BlockId {
   Air = 0,
@@ -87,13 +97,16 @@ export enum BlockId {
 
 export interface BlockDef {
   readonly id: BlockId;
+  /** Canonical string id ("copper_ore"). */
   readonly name: string;
+  /** Human-readable display name. */
+  readonly displayName: string;
   readonly solid: boolean;
   /** Base mining time in ticks; -1 = unbreakable (and not placeable). */
   readonly hardness: number;
   /**
    * What breaking this block yields. Omitted = an item with the block's
-   * own name; null = nothing (e.g. leaves for now).
+   * own name; null = nothing (e.g. leaves).
    */
   readonly drops?: { item: string; count: number } | null;
   /** The tool kind that mines this block faster. */
@@ -114,142 +127,93 @@ export interface BlockDef {
   readonly tall?: boolean;
   /** Flowing liquid: kind and fill level 1..8. */
   readonly liquid?: { kind: "water" | "lava"; level: number };
+  /** Sprite path override (default sprites/block/<name>.png). */
+  readonly sprite?: string;
 }
 
 const defs = new Map<BlockId, BlockDef>();
+const byName = new Map<string, BlockId>();
+/** toggle_to targets may be registered later; resolved in a second pass. */
+const pendingToggles: Array<{ id: BlockId; target: string; source: string }> = [];
+/** Datapack blocks outside the enum get ids from here. */
+let nextDynamicId = 78;
 
-function register(def: BlockDef): BlockDef {
-  defs.set(def.id, def);
+/** "OakDoorOpen" -> "oak_door_open", "Water1" -> "water_1". */
+function enumKeyToId(key: string): string {
+  return key.replace(/([a-z])([A-Z0-9])/g, "$1_$2").toLowerCase();
+}
+
+const BUILTIN_IDS = new Map<string, BlockId>();
+for (const [key, value] of Object.entries(BlockId)) {
+  if (typeof value === "number") {
+    BUILTIN_IDS.set(enumKeyToId(key), value as BlockId);
+  }
+}
+
+/** Air is an engine constant, not a data file. */
+const AIR: BlockDef = { id: BlockId.Air, name: "air", displayName: "Air", solid: false, hardness: 0 };
+defs.set(BlockId.Air, AIR);
+byName.set("air", BlockId.Air);
+
+/** Register a block from datapack JSON. Known names keep their enum id;
+ * new names get a dynamic id. Call resolveBlockLinks() after a batch. */
+export function registerBlockJson(raw: unknown, source = "datapack"): BlockDef {
+  const json = validateBlockJson(raw, source);
+  const id = byName.get(json.id) ?? BUILTIN_IDS.get(json.id) ?? (nextDynamicId++ as BlockId);
+  const def: BlockDef = {
+    id,
+    name: json.id,
+    displayName: json.name ?? json.id,
+    solid: json.solid,
+    hardness: json.hardness,
+    ...(json.tool !== undefined ? { tool: json.tool } : {}),
+    ...(json.required_tier !== undefined ? { requiredTier: json.required_tier } : {}),
+    ...(json.drops === "none"
+      ? { drops: null }
+      : json.drops !== undefined
+        ? { drops: { item: json.drops.item, count: json.drops.amount } }
+        : {}),
+    ...(json.side_permeable ? { sidePermeable: true } : {}),
+    ...(json.slab ? { slab: true } : {}),
+    ...(json.tall ? { tall: true } : {}),
+    ...(json.liquid !== undefined ? { liquid: json.liquid } : {}),
+    ...(json.sprite !== undefined ? { sprite: json.sprite } : {}),
+  };
+  defs.set(id, def);
+  byName.set(json.id, id);
+  if (json.toggle_to !== undefined) {
+    pendingToggles.push({ id, target: json.toggle_to, source });
+  }
   return def;
 }
 
-export const Blocks = {
-  air: register({ id: BlockId.Air, name: "air", solid: false, hardness: 0 }),
-  stone: register({ id: BlockId.Stone, name: "stone", solid: true, hardness: 30, drops: { item: "cobblestone", count: 1 }, tool: "pickaxe", requiredTier: 1 }),
-  dirt: register({ id: BlockId.Dirt, name: "dirt", solid: true, hardness: 10, tool: "shovel" }),
-  grass: register({ id: BlockId.Grass, name: "grass", solid: true, hardness: 12, drops: { item: "dirt", count: 1 }, tool: "shovel" }),
-  bedrock: register({ id: BlockId.Bedrock, name: "bedrock", solid: true, hardness: -1, drops: null }),
-  sand: register({ id: BlockId.Sand, name: "sand", solid: true, hardness: 8, tool: "shovel" }),
-  sandstone: register({ id: BlockId.Sandstone, name: "sandstone", solid: true, hardness: 24, tool: "pickaxe", requiredTier: 1 }),
-  gravel: register({ id: BlockId.Gravel, name: "gravel", solid: true, hardness: 9, tool: "shovel" }),
-  // Full water (level 8); partial levels are separate ids below. Not
-  // minable or placeable by hand (buckets may come later).
-  water: register({ id: BlockId.Water, name: "water", solid: false, hardness: -1, drops: null, liquid: { kind: "water", level: 8 } }),
-  // Trees are background scenery in a 2D world: they never block movement.
-  oakLog: register({ id: BlockId.OakLog, name: "oak_log", solid: false, hardness: 25, tool: "axe" }),
-  oakLeaves: register({ id: BlockId.OakLeaves, name: "oak_leaves", solid: false, hardness: 3, drops: null }),
-  snow: register({ id: BlockId.Snow, name: "snow", solid: true, hardness: 6, tool: "shovel" }),
-  coalOre: register({ id: BlockId.CoalOre, name: "coal_ore", solid: true, hardness: 35, drops: { item: "coal", count: 1 }, tool: "pickaxe", requiredTier: 1 }),
-  ironOre: register({ id: BlockId.IronOre, name: "iron_ore", solid: true, hardness: 40, tool: "pickaxe", requiredTier: 2 }),
-  goldOre: register({ id: BlockId.GoldOre, name: "gold_ore", solid: true, hardness: 40, tool: "pickaxe", requiredTier: 3 }),
-  lapisOre: register({ id: BlockId.LapisOre, name: "lapis_ore", solid: true, hardness: 40, drops: { item: "lapis_lazuli", count: 6 }, tool: "pickaxe", requiredTier: 2 }),
-  redstoneOre: register({ id: BlockId.RedstoneOre, name: "redstone_ore", solid: true, hardness: 40, drops: { item: "redstone", count: 4 }, tool: "pickaxe", requiredTier: 3 }),
-  diamondOre: register({ id: BlockId.DiamondOre, name: "diamond_ore", solid: true, hardness: 45, drops: { item: "diamond", count: 1 }, tool: "pickaxe", requiredTier: 3 }),
-  emeraldOre: register({ id: BlockId.EmeraldOre, name: "emerald_ore", solid: true, hardness: 45, drops: { item: "emerald", count: 1 }, tool: "pickaxe", requiredTier: 3 }),
-  oakPlanks: register({ id: BlockId.OakPlanks, name: "oak_planks", solid: true, hardness: 30, tool: "axe" }),
-  craftingTable: register({ id: BlockId.CraftingTable, name: "crafting_table", solid: true, hardness: 30, tool: "axe" }),
-  cobblestone: register({ id: BlockId.Cobblestone, name: "cobblestone", solid: true, hardness: 32, tool: "pickaxe", requiredTier: 1 }),
-  furnace: register({ id: BlockId.Furnace, name: "furnace", solid: true, hardness: 35, tool: "pickaxe", requiredTier: 1 }),
-  // Like Minecraft, glass shatters: it drops nothing.
-  glass: register({ id: BlockId.Glass, name: "glass", solid: true, hardness: 5, drops: null }),
-  netherrack: register({ id: BlockId.Netherrack, name: "netherrack", solid: true, hardness: 8, tool: "pickaxe", requiredTier: 1 }),
-  soulSand: register({ id: BlockId.SoulSand, name: "soul_sand", solid: true, hardness: 10, tool: "shovel" }),
-  glowstone: register({ id: BlockId.Glowstone, name: "glowstone", solid: true, hardness: 6, drops: { item: "glowstone_dust", count: 3 } }),
-  obsidian: register({ id: BlockId.Obsidian, name: "obsidian", solid: true, hardness: 250, tool: "pickaxe", requiredTier: 4 }),
-  // Portal blocks are placed/removed by portal logic, never mined.
-  netherPortal: register({ id: BlockId.NetherPortal, name: "nether_portal", solid: false, hardness: -1, drops: null }),
-  // Full lava (level 8); damages anything inside it.
-  lava: register({ id: BlockId.Lava, name: "lava", solid: false, hardness: -1, drops: null, liquid: { kind: "lava", level: 8 } }),
-  basalt: register({ id: BlockId.Basalt, name: "basalt", solid: true, hardness: 25, tool: "pickaxe", requiredTier: 1 }),
-  chest: register({ id: BlockId.Chest, name: "chest", solid: true, hardness: 25, tool: "axe" }),
-  brewingStand: register({ id: BlockId.BrewingStand, name: "brewing_stand", solid: true, hardness: 20, tool: "pickaxe" }),
-  enchantingTable: register({ id: BlockId.EnchantingTable, name: "enchanting_table", solid: true, hardness: 40, tool: "pickaxe", requiredTier: 1 }),
-  copperOre: register({ id: BlockId.CopperOre, name: "copper_ore", solid: true, hardness: 38, tool: "pickaxe", requiredTier: 2 }),
-  ancientDebris: register({ id: BlockId.AncientDebris, name: "ancient_debris", solid: true, hardness: 90, tool: "pickaxe", requiredTier: 4 }),
-  // Frame of a lit nether portal: walk through it sideways to enter the
-  // portal, but it still carries you when standing on top (2D adaptation).
-  portalFrame: register({ id: BlockId.PortalFrame, name: "portal_frame", solid: true, sidePermeable: true, hardness: 250, drops: { item: "obsidian", count: 1 }, tool: "pickaxe", requiredTier: 4 }),
-  birchLog: register({ id: BlockId.BirchLog, name: "birch_log", solid: false, hardness: 25, tool: "axe" }),
-  birchLeaves: register({ id: BlockId.BirchLeaves, name: "birch_leaves", solid: false, hardness: 3, drops: null }),
-  birchPlanks: register({ id: BlockId.BirchPlanks, name: "birch_planks", solid: true, hardness: 30, tool: "axe" }),
-  spruceLog: register({ id: BlockId.SpruceLog, name: "spruce_log", solid: false, hardness: 25, tool: "axe" }),
-  spruceLeaves: register({ id: BlockId.SpruceLeaves, name: "spruce_leaves", solid: false, hardness: 3, drops: null }),
-  sprucePlanks: register({ id: BlockId.SprucePlanks, name: "spruce_planks", solid: true, hardness: 30, tool: "axe" }),
-} as const;
-
-/** Stairs, slab, fence, door (2-tall, toggles open) and trapdoor
- * (toggles open) for one wood type. Slabs catch only bodies landing on
- * them (half-height, 2D adaptation); stairs and fences collide fully. */
-function registerWoodSet(
-  wood: string,
-  ids: {
-    stairs: BlockId;
-    slab: BlockId;
-    fence: BlockId;
-    door: BlockId;
-    doorOpen: BlockId;
-    trapdoor: BlockId;
-    trapdoorOpen: BlockId;
-  },
-): void {
-  register({ id: ids.stairs, name: `${wood}_stairs`, solid: true, hardness: 30, tool: "axe" });
-  register({ id: ids.slab, name: `${wood}_slab`, solid: false, slab: true, hardness: 25, tool: "axe" });
-  register({ id: ids.fence, name: `${wood}_fence`, solid: true, hardness: 30, tool: "axe" });
-  register({ id: ids.door, name: `${wood}_door`, solid: true, tall: true, toggleTo: ids.doorOpen, hardness: 28, tool: "axe" });
-  register({ id: ids.doorOpen, name: `${wood}_door_open`, solid: false, tall: true, toggleTo: ids.door, drops: { item: `${wood}_door`, count: 1 }, hardness: 28, tool: "axe" });
-  register({ id: ids.trapdoor, name: `${wood}_trapdoor`, solid: true, toggleTo: ids.trapdoorOpen, hardness: 26, tool: "axe" });
-  register({ id: ids.trapdoorOpen, name: `${wood}_trapdoor_open`, solid: false, toggleTo: ids.trapdoor, drops: { item: `${wood}_trapdoor`, count: 1 }, hardness: 26, tool: "axe" });
-}
-
-registerWoodSet("oak", {
-  stairs: BlockId.OakStairs, slab: BlockId.OakSlab, fence: BlockId.OakFence,
-  door: BlockId.OakDoor, doorOpen: BlockId.OakDoorOpen,
-  trapdoor: BlockId.OakTrapdoor, trapdoorOpen: BlockId.OakTrapdoorOpen,
-});
-registerWoodSet("birch", {
-  stairs: BlockId.BirchStairs, slab: BlockId.BirchSlab, fence: BlockId.BirchFence,
-  door: BlockId.BirchDoor, doorOpen: BlockId.BirchDoorOpen,
-  trapdoor: BlockId.BirchTrapdoor, trapdoorOpen: BlockId.BirchTrapdoorOpen,
-});
-registerWoodSet("spruce", {
-  stairs: BlockId.SpruceStairs, slab: BlockId.SpruceSlab, fence: BlockId.SpruceFence,
-  door: BlockId.SpruceDoor, doorOpen: BlockId.SpruceDoorOpen,
-  trapdoor: BlockId.SpruceTrapdoor, trapdoorOpen: BlockId.SpruceTrapdoorOpen,
-});
-
-// Partial liquids (levels 1..7). Purely simulation-managed.
-for (const [base, kind] of [
-  [BlockId.Water1, "water"],
-  [BlockId.Lava1, "lava"],
-] as const) {
-  for (let level = 1; level <= 7; level++) {
-    register({
-      id: (base + level - 1) as BlockId,
-      name: `${kind}_${level}`,
-      solid: false,
-      hardness: -1,
-      drops: null,
-      liquid: { kind, level },
-    });
+/** Resolve door/trapdoor toggle targets once all blocks are registered. */
+export function resolveBlockLinks(): void {
+  while (pendingToggles.length > 0) {
+    const { id, target, source } = pendingToggles.pop()!;
+    const targetId = byName.get(target);
+    if (targetId === undefined) {
+      throw new Error(`datapack ${source}: toggle_to target "${target}" is not a known block`);
+    }
+    defs.set(id, { ...defs.get(id)!, toggleTo: targetId });
   }
 }
 
-/** The block id representing this liquid kind at the given level 1..8. */
-export function liquidBlock(kind: "water" | "lava", level: number): BlockId {
-  if (level >= 8) return kind === "water" ? BlockId.Water : BlockId.Lava;
-  const base = kind === "water" ? BlockId.Water1 : BlockId.Lava1;
-  return (base + level - 1) as BlockId;
+for (const raw of BLOCK_JSONS) {
+  registerBlockJson(raw, "builtin");
 }
+resolveBlockLinks();
 
 export function blockDef(id: BlockId): BlockDef {
-  return defs.get(id) ?? Blocks.air;
+  return defs.get(id) ?? AIR;
 }
 
 export function blockByName(name: string): BlockId | undefined {
-  for (const def of defs.values()) {
-    if (def.name === name) return def.id;
-  }
-  return undefined;
+  return byName.get(name);
+}
+
+export function allBlocks(): Iterable<BlockDef> {
+  return defs.values();
 }
 
 /** The item stack breaking this block yields, or null for nothing. */
@@ -258,4 +222,11 @@ export function blockDrops(id: BlockId): { item: string; count: number } | null 
   if (!def || def.id === BlockId.Air) return null;
   if (def.drops === null) return null;
   return def.drops ?? { item: def.name, count: 1 };
+}
+
+/** The block id representing this liquid kind at the given level 1..8. */
+export function liquidBlock(kind: "water" | "lava", level: number): BlockId {
+  if (level >= 8) return kind === "water" ? BlockId.Water : BlockId.Lava;
+  const base = kind === "water" ? BlockId.Water1 : BlockId.Lava1;
+  return (base + level - 1) as BlockId;
 }

@@ -43,6 +43,7 @@ import {
 } from "./entities.js";
 import {
   attackDamage,
+  attackKnockback,
   HURT_COOLDOWN_TICKS,
   PLAYER_ATTACK_COOLDOWN,
   PLAYER_MAX_HEALTH,
@@ -110,10 +111,27 @@ import { clickStack } from "./slots.js";
 import { placementsNear, structureLootAt } from "./structures/place.js";
 import { TRADES } from "./data/trades/index.js";
 import { DAY_LENGTH, daylightFactor, isNight } from "./time.js";
-import { blockDef, blockDrops, BlockId, liquidBlock } from "./world/block.js";
+import { allBlocks, blockByName, blockDef, blockDrops, BlockId, liquidBlock } from "./world/block.js";
 import { Biome, biomeAt, findSpawnX, surfaceHeight } from "./world/gen.js";
 import { LAVA_LEVEL } from "./world/nether.js";
 import { World, type Dimension } from "./world/world.js";
+
+/**
+ * Old-id -> current-id table from a save's block palette, or null when
+ * every id already matches (the common case - skips the remap pass).
+ */
+function buildBlockRemap(palette: Record<number, string> | undefined): Map<number, number> | null {
+  if (!palette) return null;
+  const remap = new Map<number, number>();
+  let identical = true;
+  for (const [oldIdRaw, name] of Object.entries(palette)) {
+    const oldId = Number(oldIdRaw);
+    const current = blockByName(name) ?? BlockId.Air;
+    remap.set(oldId, current);
+    if (current !== oldId) identical = false;
+  }
+  return identical ? null : remap;
+}
 
 /** The player's current movement intent, kept until the next move command. */
 export interface PlayerInput {
@@ -175,6 +193,10 @@ export interface PlayerState {
   portalTicks: number;
   /** Ticks left before a portal can trigger again after arriving. */
   portalCooldown: number;
+  /** Saturation buffers hunger drain (eating tops it up). */
+  saturation: number;
+  /** Food currently being eaten (takes the item's eat_ticks). */
+  eating: { item: string; ticks: number } | null;
   /** Worn armor piece (damage absorption). */
   armor: ItemStack | null;
   /** Offhand item (shields block passively from here). */
@@ -241,8 +263,13 @@ export class Simulation {
 
   /** Snapshot the complete simulation state as plain serializable data. */
   serialize(): SimSave {
+    const blockPalette: Record<number, string> = {};
+    for (const def of allBlocks()) {
+      blockPalette[def.id] = def.name;
+    }
     return {
-      version: 1,
+      version: 2,
+      blockPalette,
       seed: this.world.seed,
       tickCount: this.tickCount,
       timeOfDay: this.timeOfDay,
@@ -276,8 +303,19 @@ export class Simulation {
     sim.rngState.s = save.rng;
     sim.nextPlayerId = save.nextPlayerId;
     sim.nextEntityId = save.nextEntityId;
-    sim.worlds.overworld.loadChunks(save.worlds.overworld);
-    sim.worlds.nether.loadChunks(save.worlds.nether);
+    // Saved block numbers are remapped by their palette names, so a
+    // renumbered registry (or removed mod blocks -> air) loads cleanly.
+    const remap = buildBlockRemap(save.blockPalette);
+    for (const dim of ["overworld", "nether"] as const) {
+      const chunks = remap
+        ? save.worlds[dim].map((c) => ({
+            ...c,
+            tiles: c.tiles.map((t) => remap.get(t) ?? t),
+            ...(c.walls ? { walls: c.walls.map((w) => remap.get(w) ?? w) } : {}),
+          }))
+        : save.worlds[dim];
+      sim.worlds[dim].loadChunks(chunks);
+    }
     for (const f of save.furnaces) {
       sim.furnaces.set(furnaceKey(f.dimension, f.x, f.y), structuredClone(f));
     }
@@ -1049,15 +1087,38 @@ export class Simulation {
         out.push({ to: p.id, event: { type: "player_air", player: p.id, air: p.air, max: MAX_AIR_TICKS } });
       }
 
-      // Hunger: activity accumulates exhaustion, which drains the bar
-      // (paused entirely in creative mode).
+      // Eating in progress: finishes after the food's eat_ticks, as long
+      // as the same item stays selected.
+      if (p.eating) {
+        const held = p.inventory[p.selected];
+        if (!held || held.item !== p.eating.item) {
+          p.eating = null;
+        } else if (--p.eating.ticks <= 0) {
+          p.eating = null;
+          const food = itemDef(held.item)?.food;
+          if (food && p.hunger < PLAYER_MAX_HUNGER) {
+            held.count -= 1;
+            if (held.count === 0) p.inventory[p.selected] = null;
+            if (food.returns) addToInventory(p.inventory, food.returns, 1);
+            p.hunger = Math.min(PLAYER_MAX_HUNGER, p.hunger + food.hunger);
+            p.saturation = Math.min(p.hunger, p.saturation + food.saturation);
+            this.syncInventory(p, out);
+            out.push({ to: p.id, event: { type: "player_hunger", player: p.id, hunger: p.hunger, max: PLAYER_MAX_HUNGER } });
+          }
+        }
+      }
+
+      // Hunger: activity accumulates exhaustion, which drains saturation
+      // first, then the bar itself (paused entirely in creative mode).
       if (!p.creative) {
         if (p.input.dx !== 0) p.exhaustion += EXHAUST_WALK;
         if (p.mining) p.exhaustion += EXHAUST_MINE;
       }
       if (p.exhaustion >= EXHAUSTION_PER_POINT) {
         p.exhaustion -= EXHAUSTION_PER_POINT;
-        if (p.hunger > 0) {
+        if (p.saturation > 0) {
+          p.saturation--;
+        } else if (p.hunger > 0) {
           p.hunger--;
           out.push({ to: p.id, event: { type: "player_hunger", player: p.id, hunger: p.hunger, max: PLAYER_MAX_HUNGER } });
         }
@@ -1144,12 +1205,12 @@ export class Simulation {
     out.push({ event: { type: "player_dimension", player: p.id, dim: targetDim, x: p.x, y: p.y } });
   }
 
-  private hurtMob(entity: MobEntity, amount: number, out: OutboundEvent[], fromX?: number): void {
+  private hurtMob(entity: MobEntity, amount: number, out: OutboundEvent[], fromX?: number, knockback = 0.3): void {
     if (amount <= 0 || entity.hurtCooldown > 0) return;
     entity.hurtCooldown = HURT_COOLDOWN_TICKS;
     entity.health -= amount;
     if (fromX !== undefined) {
-      entity.vx += (entity.x >= fromX ? 1 : -1) * 0.3;
+      entity.vx += (entity.x >= fromX ? 1 : -1) * knockback;
       entity.vy = Math.min(entity.vy, -0.2);
     }
     if (entity.health > 0) {
@@ -1316,6 +1377,8 @@ export class Simulation {
       p.health = PLAYER_MAX_HEALTH;
       p.hunger = PLAYER_MAX_HUNGER;
       p.exhaustion = 0;
+      p.saturation = 5;
+      p.eating = null;
       p.mining = null;
       p.portalTicks = 0;
       p.portalCooldown = 0;
@@ -1394,6 +1457,8 @@ export class Simulation {
           state.color = chosenColor ?? sanitizeColor(state.color) ?? DEFAULT_PLAYER_COLOR;
           state.armor = state.armor ?? null;
           state.offhand = state.offhand ?? null;
+          state.saturation = Number.isFinite(state.saturation) ? state.saturation : 5;
+          state.eating = null;
           state.grapple = null;
           state.creative = state.creative === true;
           state.air = Number.isFinite(state.air) ? state.air : MAX_AIR_TICKS;
@@ -1455,6 +1520,8 @@ export class Simulation {
           effects: {},
           portalTicks: 0,
           portalCooldown: 0,
+          saturation: 5,
+          eating: null,
           armor: null,
           offhand: null,
           grapple: null,
@@ -1736,8 +1803,9 @@ export class Simulation {
           break;
         }
         p.attackCooldown = PLAYER_ATTACK_COOLDOWN;
+        const held = p.inventory[p.selected] ?? null;
         const strength = p.effects["strength"] !== undefined ? STRENGTH_BONUS : 0;
-        this.hurtMob(entity, attackDamage(p.inventory[p.selected] ?? null) + strength, out, p.x);
+        this.hurtMob(entity, attackDamage(held) + strength, out, p.x, attackKnockback(held));
         break;
       }
       case "trade": {
@@ -1779,28 +1847,29 @@ export class Simulation {
           reject("nothing to use");
           break;
         }
-        const effect = potionEffect(stack.item);
-        const food = itemDef(stack.item)?.food;
-        if (effect) {
+        const def = itemDef(stack.item);
+        if (def?.effect) {
+          // Potions apply instantly; the datapack decides the effect,
+          // its duration and what stays behind (the bottle).
           stack.count -= 1;
           if (stack.count === 0) p.inventory[p.selected] = null;
-          // Drinking returns the bottle.
-          addToInventory(p.inventory, "glass_bottle", 1);
-          p.effects[effect] = EFFECT_DURATION_TICKS;
+          if (def.effect.returns) {
+            addToInventory(p.inventory, def.effect.returns, 1);
+          }
+          p.effects[def.effect.id] = def.effect.ticks;
           syncInventory(p);
           reply({ type: "player_effects", player: p.id, effects: { ...p.effects } });
           break;
         }
-        if (food !== undefined) {
+        if (def?.food) {
           if (p.hunger >= PLAYER_MAX_HUNGER) {
             reject("not hungry");
             break;
           }
-          stack.count -= 1;
-          if (stack.count === 0) p.inventory[p.selected] = null;
-          p.hunger = Math.min(PLAYER_MAX_HUNGER, p.hunger + food);
-          syncInventory(p);
-          reply({ type: "player_hunger", player: p.id, hunger: p.hunger, max: PLAYER_MAX_HUNGER });
+          // Eating takes the item's eat_ticks; finished in stepPlayers.
+          if (!p.eating) {
+            p.eating = { item: stack.item, ticks: def.food.eatTicks };
+          }
           break;
         }
         reject("nothing to use");

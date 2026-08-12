@@ -1,0 +1,12 @@
+{
+  "id": "spruce_trapdoor_open",
+  "name": "Spruce Trapdoor Open",
+  "solid": false,
+  "hardness": 26,
+  "tool": "axe",
+  "drops": {
+    "item": "spruce_trapdoor",
+    "amount": 1
+  },
+  "toggle_to": "spruce_trapdoor"
+}

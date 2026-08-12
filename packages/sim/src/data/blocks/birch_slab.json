@@ -1,0 +1,8 @@
+{
+  "id": "birch_slab",
+  "name": "Birch Slab",
+  "solid": false,
+  "hardness": 25,
+  "tool": "axe",
+  "slab": true
+}

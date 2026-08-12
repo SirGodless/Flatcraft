@@ -1,0 +1,8 @@
+{
+  "id": "birch_trapdoor",
+  "name": "Birch Trapdoor",
+  "solid": true,
+  "hardness": 26,
+  "tool": "axe",
+  "toggle_to": "birch_trapdoor_open"
+}

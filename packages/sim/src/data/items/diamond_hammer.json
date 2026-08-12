@@ -1,0 +1,33 @@
+{
+  "id": "diamond_hammer",
+  "name": "Diamond Hammer",
+  "max_stack": 1,
+  "tool": {
+    "kind": "hammer",
+    "tier": 4,
+    "mining_speed": 8
+  },
+  "weapon": {
+    "damage": 2,
+    "knockback": 0.35
+  },
+  "enchants": [
+    "efficiency"
+  ],
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aaa",
+        "aba",
+        " c "
+      ],
+      "key": {
+        "a": "item:diamond",
+        "b": "item:iron_hammer",
+        "c": "item:stick"
+      }
+    }
+  ]
+}

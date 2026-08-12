@@ -1,0 +1,32 @@
+{
+  "id": "stone_sword",
+  "name": "Stone Sword",
+  "max_stack": 1,
+  "tool": {
+    "kind": "sword",
+    "tier": 2,
+    "mining_speed": 1
+  },
+  "weapon": {
+    "damage": 5,
+    "knockback": 0.35
+  },
+  "enchants": [
+    "sharpness"
+  ],
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a",
+        "a",
+        "b"
+      ],
+      "key": {
+        "a": "item:cobblestone",
+        "b": "item:stick"
+      }
+    }
+  ]
+}

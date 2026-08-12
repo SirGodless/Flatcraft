@@ -1,0 +1,7 @@
+{
+  "id": "birch_stairs",
+  "name": "Birch Stairs",
+  "solid": true,
+  "hardness": 30,
+  "tool": "axe"
+}

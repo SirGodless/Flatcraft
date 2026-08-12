@@ -9,7 +9,14 @@ import type { Dimension } from "./world/world.js";
  * safe, so it can go to IndexedDB (client) or a file (dedicated server).
  */
 export interface SimSave {
-  version: 1;
+  version: 1 | 2;
+  /**
+   * Numeric block id -> canonical string id at save time. On load,
+   * chunks are remapped by name, so the numbers in `worlds` are never
+   * load-bearing: block ids can be renumbered (or added by mods)
+   * without corrupting existing worlds. Absent in version-1 saves.
+   */
+  blockPalette?: Record<number, string>;
   seed: number;
   tickCount: number;
   timeOfDay: number;

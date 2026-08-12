@@ -1,0 +1,21 @@
+{
+  "id": "arrow",
+  "name": "Arrow",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a",
+        "b",
+        "c"
+      ],
+      "key": {
+        "a": "item:flint",
+        "b": "item:stick",
+        "c": "item:feather"
+      },
+      "amount": 4
+    }
+  ]
+}

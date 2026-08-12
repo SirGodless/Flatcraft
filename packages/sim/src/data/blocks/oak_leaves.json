@@ -1,0 +1,7 @@
+{
+  "id": "oak_leaves",
+  "name": "Oak Leaves",
+  "solid": false,
+  "hardness": 3,
+  "drops": "none"
+}

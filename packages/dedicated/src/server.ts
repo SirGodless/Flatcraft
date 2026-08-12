@@ -1,9 +1,18 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { extname, join, normalize, resolve } from "node:path";
+import { extname, join, normalize, relative, resolve } from "node:path";
 import { GameServer, INFO_PATH, WS_PATH } from "@flatcraft/server";
 import type { AuthRequest, ClientMessage, ServerConnection, ServerInfo, ServerMessage } from "@flatcraft/server";
-import { Simulation, TICK_MS, type Command, type SimSave } from "@flatcraft/sim";
+import {
+  registerBlockJson,
+  registerItemJson,
+  resolveBlockLinks,
+  Simulation,
+  syncItemRecipes,
+  TICK_MS,
+  type Command,
+  type SimSave,
+} from "@flatcraft/sim";
 import { WebSocketServer, type WebSocket } from "ws";
 import { Accounts } from "./accounts.js";
 
@@ -59,6 +68,45 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   const accounts = new Accounts(join(dataDir, "accounts.json"));
   const serverName = options.serverName ?? "FlatCraft";
 
+  // --- Server datapack (mods): DATA_DIR/datapack/{blocks,items,sprites} ---
+  // Loaded before the world, so modded blocks resolve in the save palette;
+  // the raw JSONs are re-served to clients via /api/datapack.
+  const datapackDir = join(dataDir, "datapack");
+  const packBlocks: unknown[] = [];
+  const packItems: unknown[] = [];
+  const spritesDir = join(datapackDir, "sprites");
+  const readPackDir = (sub: string, into: unknown[]): void => {
+    const dir = join(datapackDir, sub);
+    if (!existsSync(dir)) return;
+    for (const file of readdirSync(dir).sort()) {
+      if (!file.endsWith(".json")) continue;
+      into.push(JSON.parse(readFileSync(join(dir, file), "utf8")));
+    }
+  };
+  readPackDir("blocks", packBlocks);
+  readPackDir("items", packItems);
+  for (const raw of packBlocks) {
+    registerBlockJson(raw, "datapack/blocks");
+  }
+  resolveBlockLinks();
+  for (const raw of packItems) {
+    registerItemJson(raw, "datapack/items");
+  }
+  syncItemRecipes();
+  if (packBlocks.length > 0 || packItems.length > 0) {
+    log(`datapack loaded: ${packBlocks.length} blocks, ${packItems.length} items`);
+  }
+  const spriteEntries: string[] = [];
+  const collectSprites = (dir: string): void => {
+    if (!existsSync(dir)) return;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) collectSprites(full);
+      else if (entry.name.endsWith(".png")) spriteEntries.push(relative(spritesDir, full).replaceAll("\\", "/"));
+    }
+  };
+  collectSprites(spritesDir);
+
   // --- World: load from disk or start fresh ---
   let simulation: Simulation;
   if (existsSync(worldFile)) {
@@ -98,7 +146,8 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   // --- HTTP: client files + server info ---
   const clientDir = options.clientDir ? resolve(options.clientDir) : null;
   const httpServer = createServer((request, response) => {
-    if (request.url === INFO_PATH) {
+    const urlPath = (request.url ?? "/").split("?")[0] ?? "/";
+    if (urlPath === INFO_PATH) {
       const info: ServerInfo = {
         flatcraft: true,
         name: serverName,
@@ -106,6 +155,20 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
       };
       response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
       response.end(JSON.stringify(info));
+      return;
+    }
+    if (urlPath === "/api/datapack") {
+      response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      response.end(JSON.stringify({ blocks: packBlocks, items: packItems, sprites: spriteEntries }));
+      return;
+    }
+    if (urlPath === "/sprites/manifest.json") {
+      response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      response.end(JSON.stringify(spriteEntries));
+      return;
+    }
+    if (urlPath.startsWith("/sprites/")) {
+      serveFile(spritesDir, urlPath.slice("/sprites/".length), response);
       return;
     }
     serveStatic(clientDir, request, response);
@@ -235,6 +298,27 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   };
 }
 
+/** Serve one file from a base directory, path-traversal safe. */
+function serveFile(baseDir: string, relativePath: string, response: ServerResponse): void {
+  const filePath = normalize(join(baseDir, relativePath));
+  if (!filePath.startsWith(baseDir) || !existsSync(filePath) || !statSync(filePath).isFile()) {
+    response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+    response.end("not found");
+    return;
+  }
+  try {
+    const content = readFileSync(filePath);
+    response.writeHead(200, {
+      "content-type": MIME_TYPES[extname(filePath)] ?? "application/octet-stream",
+      "cache-control": relativePath.startsWith("assets/") ? "public, max-age=31536000, immutable" : "no-cache",
+    });
+    response.end(content);
+  } catch {
+    response.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+    response.end("read error");
+  }
+}
+
 function serveStatic(
   clientDir: string | null,
   request: IncomingMessage,
@@ -246,24 +330,7 @@ function serveStatic(
     return;
   }
   const urlPath = (request.url ?? "/").split("?")[0] ?? "/";
-  const relative = urlPath === "/" ? "index.html" : urlPath.slice(1);
-  const filePath = normalize(join(clientDir, relative));
-  if (!filePath.startsWith(clientDir) || !existsSync(filePath) || !statSync(filePath).isFile()) {
-    response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
-    response.end("not found");
-    return;
-  }
-  try {
-    const content = readFileSync(filePath);
-    response.writeHead(200, {
-      "content-type": MIME_TYPES[extname(filePath)] ?? "application/octet-stream",
-      "cache-control": relative.startsWith("assets/") ? "public, max-age=31536000, immutable" : "no-cache",
-    });
-    response.end(content);
-  } catch {
-    response.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
-    response.end("read error");
-  }
+  serveFile(clientDir, urlPath === "/" ? "index.html" : urlPath.slice(1), response);
 }
 
 export type { Server };

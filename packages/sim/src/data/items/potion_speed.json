@@ -1,0 +1,20 @@
+{
+  "id": "potion_speed",
+  "name": "Potion Speed",
+  "max_stack": 1,
+  "effect": {
+    "id": "speed",
+    "ticks": 1800,
+    "returns": "glass_bottle"
+  },
+  "recipes": [
+    {
+      "station": "brewing_stand",
+      "ingredients": [
+        "item:glass_bottle",
+        "item:feather",
+        "item:glowstone_dust"
+      ]
+    }
+  ]
+}

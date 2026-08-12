@@ -1,0 +1,21 @@
+{
+  "id": "enchanting_table",
+  "name": "Enchanting Table",
+  "places_block": "enchanting_table",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        " a ",
+        "bcb",
+        "ccc"
+      ],
+      "key": {
+        "a": "item:glass",
+        "b": "item:diamond",
+        "c": "item:obsidian"
+      }
+    }
+  ]
+}

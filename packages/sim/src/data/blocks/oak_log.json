@@ -1,0 +1,7 @@
+{
+  "id": "oak_log",
+  "name": "Oak Log",
+  "solid": false,
+  "hardness": 25,
+  "tool": "axe"
+}

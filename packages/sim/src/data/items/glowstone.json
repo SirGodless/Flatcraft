@@ -1,0 +1,18 @@
+{
+  "id": "glowstone",
+  "name": "Glowstone",
+  "places_block": "glowstone",
+  "recipes": [
+    {
+      "station": "inventory",
+      "style": "shaped",
+      "recipe": [
+        "aa",
+        "aa"
+      ],
+      "key": {
+        "a": "item:glowstone_dust"
+      }
+    }
+  ]
+}

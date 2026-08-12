@@ -1,0 +1,7 @@
+{
+  "id": "spruce_planks",
+  "name": "Spruce Planks",
+  "solid": true,
+  "hardness": 30,
+  "tool": "axe"
+}

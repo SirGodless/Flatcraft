@@ -6,13 +6,18 @@ import {
   findSpawnX,
   itemDef,
   PLAYER_HEIGHT,
+  registerBlockJson,
+  registerItemJson,
+  resolveBlockLinks,
   Simulation,
   surfaceHeight,
+  syncItemRecipes,
   type PlayerId,
 } from "@flatcraft/sim";
 import { attachInput } from "./input/input.js";
 import { connectWebSocket, type OnlineSession } from "./net/wsConnection.js";
 import { Renderer } from "./render/renderer.js";
+import { loadSpriteOverrides } from "./render/sprites.js";
 import { deleteWorld, loadExplored, loadWorld, saveExplored, saveWorld } from "./save.js";
 import {
   disconnectOverlay,
@@ -71,6 +76,9 @@ interface GameOptions {
 async function runGame(options: GameOptions): Promise<Renderer> {
   const { connection } = options;
   const params = new URLSearchParams(location.search);
+
+  // Sprite files (datapack or public/sprites) replace procedural art.
+  await loadSpriteOverrides();
 
   const renderer = new Renderer();
   renderer.localPlayerId = options.playerId;
@@ -142,7 +150,7 @@ async function runGame(options: GameOptions): Promise<Renderer> {
         }
         return true;
       }
-      if (item !== null && (item.startsWith("potion_") || itemDef(item)?.food !== undefined)) {
+      if (item !== null && (itemDef(item)?.effect !== undefined || itemDef(item)?.food !== undefined)) {
         connection.send({ type: "use_item" });
         return true;
       }
@@ -205,8 +213,30 @@ async function runGame(options: GameOptions): Promise<Renderer> {
   return renderer;
 }
 
+/** The server's datapack (mod items/blocks): register before joining,
+ * so both sides agree on the registries. */
+async function applyServerDatapack(): Promise<void> {
+  try {
+    const response = await fetch("/api/datapack", { headers: { accept: "application/json" } });
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!response.ok || !contentType.includes("application/json")) return;
+    const pack = (await response.json()) as { blocks?: unknown[]; items?: unknown[] };
+    for (const raw of pack.blocks ?? []) {
+      registerBlockJson(raw, "server datapack");
+    }
+    resolveBlockLinks();
+    for (const raw of pack.items ?? []) {
+      registerItemJson(raw, "server datapack");
+    }
+    syncItemRecipes();
+  } catch (error) {
+    console.warn("server datapack failed to load:", error);
+  }
+}
+
 /** Online mode: login screen, then WebSocket to the serving host. */
 async function startOnline(info: ServerInfo): Promise<void> {
+  await applyServerDatapack();
   const session = await login(info);
   const renderer = await runGame({
     connection: session.connection,

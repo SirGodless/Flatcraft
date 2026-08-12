@@ -1,0 +1,23 @@
+{
+  "id": "emerald_shield",
+  "name": "Emerald Shield",
+  "max_stack": 1,
+  "shield": {
+    "block": 0.55
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aaa",
+        "aba",
+        " a "
+      ],
+      "key": {
+        "a": "item:emerald",
+        "b": "item:iron_shield"
+      }
+    }
+  ]
+}

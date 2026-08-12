@@ -1,0 +1,32 @@
+{
+  "id": "wooden_sword",
+  "name": "Wooden Sword",
+  "max_stack": 1,
+  "tool": {
+    "kind": "sword",
+    "tier": 1,
+    "mining_speed": 1
+  },
+  "weapon": {
+    "damage": 4,
+    "knockback": 0.35
+  },
+  "enchants": [
+    "sharpness"
+  ],
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a",
+        "a",
+        "b"
+      ],
+      "key": {
+        "a": "tag:planks",
+        "b": "item:stick"
+      }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "cooked_porkchop",
+  "name": "Cooked Porkchop",
+  "food": {
+    "hunger": 8,
+    "saturation": 8,
+    "eat_ticks": 32
+  },
+  "recipes": [
+    {
+      "station": "furnace",
+      "input": "item:porkchop",
+      "cooking_ticks": 200
+    }
+  ]
+}

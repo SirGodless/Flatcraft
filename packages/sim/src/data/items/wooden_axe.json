@@ -1,0 +1,32 @@
+{
+  "id": "wooden_axe",
+  "name": "Wooden Axe",
+  "max_stack": 1,
+  "tool": {
+    "kind": "axe",
+    "tier": 1,
+    "mining_speed": 2
+  },
+  "weapon": {
+    "damage": 2,
+    "knockback": 0.35
+  },
+  "enchants": [
+    "efficiency"
+  ],
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aa",
+        "ab",
+        " b"
+      ],
+      "key": {
+        "a": "tag:planks",
+        "b": "item:stick"
+      }
+    }
+  ]
+}

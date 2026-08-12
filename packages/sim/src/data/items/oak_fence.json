@@ -1,0 +1,20 @@
+{
+  "id": "oak_fence",
+  "name": "Oak Fence",
+  "places_block": "oak_fence",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aba",
+        "aba"
+      ],
+      "key": {
+        "a": "item:oak_planks",
+        "b": "item:stick"
+      },
+      "amount": 3
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "gold_ingot",
+  "name": "Gold Ingot",
+  "recipes": [
+    {
+      "station": "furnace",
+      "input": "item:gold_ore",
+      "cooking_ticks": 200
+    }
+  ]
+}

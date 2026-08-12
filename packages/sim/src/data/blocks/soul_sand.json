@@ -1,0 +1,7 @@
+{
+  "id": "soul_sand",
+  "name": "Soul Sand",
+  "solid": true,
+  "hardness": 10,
+  "tool": "shovel"
+}

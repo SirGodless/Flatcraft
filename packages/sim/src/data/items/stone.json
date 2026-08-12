@@ -1,0 +1,12 @@
+{
+  "id": "stone",
+  "name": "Stone",
+  "places_block": "stone",
+  "recipes": [
+    {
+      "station": "furnace",
+      "input": "item:cobblestone",
+      "cooking_ticks": 200
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "id": "spruce_fence",
+  "name": "Spruce Fence",
+  "solid": true,
+  "hardness": 30,
+  "tool": "axe"
+}

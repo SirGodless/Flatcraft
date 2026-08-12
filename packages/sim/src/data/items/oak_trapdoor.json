@@ -1,0 +1,19 @@
+{
+  "id": "oak_trapdoor",
+  "name": "Oak Trapdoor",
+  "places_block": "oak_trapdoor",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aaa",
+        "aaa"
+      ],
+      "key": {
+        "a": "item:oak_planks"
+      },
+      "amount": 2
+    }
+  ]
+}

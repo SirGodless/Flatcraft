@@ -1,0 +1,8 @@
+{
+  "id": "spruce_trapdoor",
+  "name": "Spruce Trapdoor",
+  "solid": true,
+  "hardness": 26,
+  "tool": "axe",
+  "toggle_to": "spruce_trapdoor_open"
+}

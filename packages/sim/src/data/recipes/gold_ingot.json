@@ -1,6 +1,0 @@
-{
-  "type": "flatcraft:smelting",
-  "ingredient": { "item": "flatcraft:gold_ore" },
-  "result": { "item": "flatcraft:gold_ingot" },
-  "cookingtime": 200
-}

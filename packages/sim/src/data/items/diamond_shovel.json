@@ -1,0 +1,32 @@
+{
+  "id": "diamond_shovel",
+  "name": "Diamond Shovel",
+  "max_stack": 1,
+  "tool": {
+    "kind": "shovel",
+    "tier": 4,
+    "mining_speed": 8
+  },
+  "weapon": {
+    "damage": 2,
+    "knockback": 0.35
+  },
+  "enchants": [
+    "efficiency"
+  ],
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a",
+        "b",
+        "b"
+      ],
+      "key": {
+        "a": "item:diamond",
+        "b": "item:stick"
+      }
+    }
+  ]
+}

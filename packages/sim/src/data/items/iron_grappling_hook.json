@@ -1,0 +1,22 @@
+{
+  "id": "iron_grappling_hook",
+  "name": "Iron Grappling Hook",
+  "max_stack": 1,
+  "grapple": {
+    "range": 16
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shapeless",
+      "ingredients": [
+        "item:iron_ingot",
+        "item:iron_ingot",
+        "item:iron_ingot",
+        "item:string",
+        "item:string",
+        "item:copper_grappling_hook"
+      ]
+    }
+  ]
+}

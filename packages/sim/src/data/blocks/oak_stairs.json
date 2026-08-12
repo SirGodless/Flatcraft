@@ -1,0 +1,7 @@
+{
+  "id": "oak_stairs",
+  "name": "Oak Stairs",
+  "solid": true,
+  "hardness": 30,
+  "tool": "axe"
+}

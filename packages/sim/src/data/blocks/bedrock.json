@@ -1,0 +1,7 @@
+{
+  "id": "bedrock",
+  "name": "Bedrock",
+  "solid": true,
+  "hardness": -1,
+  "drops": "none"
+}

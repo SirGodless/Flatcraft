@@ -1,0 +1,20 @@
+{
+  "id": "spruce_fence",
+  "name": "Spruce Fence",
+  "places_block": "spruce_fence",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aba",
+        "aba"
+      ],
+      "key": {
+        "a": "item:spruce_planks",
+        "b": "item:stick"
+      },
+      "amount": 3
+    }
+  ]
+}

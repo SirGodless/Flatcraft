@@ -1,0 +1,7 @@
+{
+  "id": "spruce_stairs",
+  "name": "Spruce Stairs",
+  "solid": true,
+  "hardness": 30,
+  "tool": "axe"
+}

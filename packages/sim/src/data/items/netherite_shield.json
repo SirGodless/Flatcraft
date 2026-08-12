@@ -1,0 +1,22 @@
+{
+  "id": "netherite_shield",
+  "name": "Netherite Shield",
+  "max_stack": 1,
+  "shield": {
+    "block": 0.6000000000000001
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aaa",
+        "aaa",
+        " a "
+      ],
+      "key": {
+        "a": "item:netherite_ingot"
+      }
+    }
+  ]
+}

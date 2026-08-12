@@ -1,5 +1,0 @@
-{
-  "type": "flatcraft:crafting_shapeless",
-  "ingredients": [{ "item": "flatcraft:birch_log" }],
-  "result": { "item": "flatcraft:birch_planks", "count": 4 }
-}

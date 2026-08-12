@@ -1,0 +1,20 @@
+{
+  "id": "oak_door",
+  "name": "Oak Door",
+  "places_block": "oak_door",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aa",
+        "aa",
+        "aa"
+      ],
+      "key": {
+        "a": "item:oak_planks"
+      },
+      "amount": 3
+    }
+  ]
+}

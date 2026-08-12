@@ -1,0 +1,19 @@
+{
+  "id": "birch_trapdoor",
+  "name": "Birch Trapdoor",
+  "places_block": "birch_trapdoor",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aaa",
+        "aaa"
+      ],
+      "key": {
+        "a": "item:birch_planks"
+      },
+      "amount": 2
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "id": "emerald_grappling_hook",
+  "name": "Emerald Grappling Hook",
+  "max_stack": 1,
+  "grapple": {
+    "range": 22
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shapeless",
+      "ingredients": [
+        "item:emerald",
+        "item:emerald",
+        "item:emerald",
+        "item:string",
+        "item:string",
+        "item:diamond_grappling_hook"
+      ]
+    }
+  ]
+}

@@ -1,5 +1,0 @@
-{
-  "type": "flatcraft:crafting_shapeless",
-  "ingredients": [{ "item": "flatcraft:spruce_log" }],
-  "result": { "item": "flatcraft:spruce_planks", "count": 4 }
-}

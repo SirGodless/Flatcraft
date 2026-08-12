@@ -1,6 +1,0 @@
-{
-  "type": "flatcraft:smelting",
-  "ingredient": { "item": "flatcraft:chicken" },
-  "result": { "item": "flatcraft:cooked_chicken" },
-  "cookingtime": 200
-}

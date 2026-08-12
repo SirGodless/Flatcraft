@@ -1,0 +1,19 @@
+{
+  "id": "spruce_trapdoor",
+  "name": "Spruce Trapdoor",
+  "places_block": "spruce_trapdoor",
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aaa",
+        "aaa"
+      ],
+      "key": {
+        "a": "item:spruce_planks"
+      },
+      "amount": 2
+    }
+  ]
+}

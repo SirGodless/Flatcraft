@@ -1,5 +1,0 @@
-{
-  "type": "flatcraft:crafting_shapeless",
-  "ingredients": [{ "item": "flatcraft:oak_log" }],
-  "result": { "item": "flatcraft:oak_planks", "count": 4 }
-}

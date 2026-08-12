@@ -1,0 +1,22 @@
+{
+  "id": "stone_grappling_hook",
+  "name": "Stone Grappling Hook",
+  "max_stack": 1,
+  "grapple": {
+    "range": 12
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shapeless",
+      "ingredients": [
+        "item:cobblestone",
+        "item:cobblestone",
+        "item:cobblestone",
+        "item:string",
+        "item:string",
+        "item:stick"
+      ]
+    }
+  ]
+}

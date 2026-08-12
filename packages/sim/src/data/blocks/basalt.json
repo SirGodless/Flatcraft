@@ -1,0 +1,8 @@
+{
+  "id": "basalt",
+  "name": "Basalt",
+  "solid": true,
+  "hardness": 25,
+  "tool": "pickaxe",
+  "required_tier": 1
+}

@@ -1,9 +1,0 @@
-{
-  "type": "flatcraft:crafting_shaped",
-  "pattern": ["##", "#|", " |"],
-  "key": {
-    "#": { "item": "flatcraft:cobblestone" },
-    "|": { "item": "flatcraft:stick" }
-  },
-  "result": { "item": "flatcraft:stone_axe" }
-}

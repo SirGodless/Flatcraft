@@ -1,0 +1,32 @@
+{
+  "id": "golden_shovel",
+  "name": "Golden Shovel",
+  "max_stack": 1,
+  "tool": {
+    "kind": "shovel",
+    "tier": 1,
+    "mining_speed": 12
+  },
+  "weapon": {
+    "damage": 2,
+    "knockback": 0.35
+  },
+  "enchants": [
+    "efficiency"
+  ],
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a",
+        "b",
+        "b"
+      ],
+      "key": {
+        "a": "item:gold_ingot",
+        "b": "item:stick"
+      }
+    }
+  ]
+}

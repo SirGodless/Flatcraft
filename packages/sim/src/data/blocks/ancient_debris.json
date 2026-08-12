@@ -1,0 +1,8 @@
+{
+  "id": "ancient_debris",
+  "name": "Ancient Debris",
+  "solid": true,
+  "hardness": 90,
+  "tool": "pickaxe",
+  "required_tier": 4
+}

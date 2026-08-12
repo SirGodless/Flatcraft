@@ -1,0 +1,23 @@
+{
+  "id": "diamond_shield",
+  "name": "Diamond Shield",
+  "max_stack": 1,
+  "shield": {
+    "block": 0.5
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "aaa",
+        "aba",
+        " a "
+      ],
+      "key": {
+        "a": "item:diamond",
+        "b": "item:iron_shield"
+      }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "emerald_ore",
+  "name": "Emerald Ore",
+  "solid": true,
+  "hardness": 45,
+  "tool": "pickaxe",
+  "required_tier": 3,
+  "drops": {
+    "item": "emerald",
+    "amount": 1
+  }
+}

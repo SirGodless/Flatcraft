@@ -1,0 +1,8 @@
+{
+  "id": "netherrack",
+  "name": "Netherrack",
+  "solid": true,
+  "hardness": 8,
+  "tool": "pickaxe",
+  "required_tier": 1
+}
