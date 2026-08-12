@@ -67,6 +67,7 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   const worldFile = join(dataDir, "world.json");
   const accounts = new Accounts(join(dataDir, "accounts.json"));
   const serverName = options.serverName ?? "FlatCraft";
+  const clientDir = options.clientDir ? resolve(options.clientDir) : null;
 
   // --- Server datapack (mods): DATA_DIR/datapack/{blocks,items,sprites} ---
   // Loaded before the world, so modded blocks resolve in the save palette;
@@ -96,16 +97,22 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   if (packBlocks.length > 0 || packItems.length > 0) {
     log(`datapack loaded: ${packBlocks.length} blocks, ${packItems.length} items`);
   }
-  const spriteEntries: string[] = [];
-  const collectSprites = (dir: string): void => {
+  // Sprites come from two places: the repo (shipped inside the client
+  // build, dist/sprites) and the server datapack; the datapack wins on
+  // conflicts. The manifest is the union of both.
+  const clientSpritesDir = clientDir ? join(clientDir, "sprites") : null;
+  const spriteSet = new Set<string>();
+  const collectSprites = (base: string, dir = base): void => {
     if (!existsSync(dir)) return;
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const full = join(dir, entry.name);
-      if (entry.isDirectory()) collectSprites(full);
-      else if (entry.name.endsWith(".png")) spriteEntries.push(relative(spritesDir, full).replaceAll("\\", "/"));
+      if (entry.isDirectory()) collectSprites(base, full);
+      else if (entry.name.endsWith(".png")) spriteSet.add(relative(base, full).replaceAll("\\", "/"));
     }
   };
+  if (clientSpritesDir) collectSprites(clientSpritesDir);
   collectSprites(spritesDir);
+  const spriteEntries = [...spriteSet];
 
   // --- World: load from disk or start fresh ---
   let simulation: Simulation;
@@ -144,7 +151,6 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   const saveTimer = setInterval(save, options.saveIntervalMs ?? 60_000);
 
   // --- HTTP: client files + server info ---
-  const clientDir = options.clientDir ? resolve(options.clientDir) : null;
   const httpServer = createServer((request, response) => {
     const urlPath = (request.url ?? "/").split("?")[0] ?? "/";
     if (urlPath === INFO_PATH) {
@@ -168,7 +174,16 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
       return;
     }
     if (urlPath.startsWith("/sprites/")) {
-      serveFile(spritesDir, urlPath.slice("/sprites/".length), response);
+      const spritePath = urlPath.slice("/sprites/".length);
+      // Datapack sprites override the repo-shipped ones.
+      if (existsSync(join(spritesDir, spritePath))) {
+        serveFile(spritesDir, spritePath, response);
+      } else if (clientSpritesDir) {
+        serveFile(clientSpritesDir, spritePath, response);
+      } else {
+        response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+        response.end("not found");
+      }
       return;
     }
     serveStatic(clientDir, request, response);
