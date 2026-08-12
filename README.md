@@ -113,9 +113,18 @@ data/datapack/
 ```
 
 Mod content gets dynamic block ids, is served to every client via
-`/api/datapack` on join, and its sprites via `/sprites/`. Sprite rules:
-PNG, 8 bit per channel, dimensions a multiple of 2, at most 128x128.
-Sprites can also override built-in art (e.g. `sprites/block/stone.png`).
+`/api/datapack` on join, and its sprites via `/sprites/`.
+
+**Sprites** normally live in the repo:
+`packages/client/public/sprites/<type>/<id>.png` (e.g.
+`item/golden_shovel.png`, `block/stone.png` to re-skin a built-in).
+Commit the PNG, rebuild/redeploy, done - the manifest is generated
+automatically and the dedicated server ships them to every client.
+Rules: PNG, 8 bit per channel, dimensions a multiple of 2, at most
+128x128; broken files are skipped with a console warning and the
+procedural art remains. Server-datapack sprites
+(`DATA_DIR/datapack/sprites/`) work the same way and win over the repo
+versions.
 
 ## Behind an Apache reverse proxy
 
