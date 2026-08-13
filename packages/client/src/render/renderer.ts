@@ -55,6 +55,13 @@ interface PlayerMarker {
   y: number;
   /** When the latest position arrived, for inter-tick interpolation. */
   updatedAt: number;
+  /** Which way this player is facing - flips which side each hand renders on. */
+  facing: "left" | "right";
+  /** Held item ids (not full stacks - other players don't see counts). */
+  main: string | null;
+  off: string | null;
+  mainSprite: Sprite | null;
+  offSprite: Sprite | null;
 }
 
 interface EntityView {
@@ -435,7 +442,7 @@ export class Renderer {
           label.visible = gfx.visible;
           this.worldContainer.addChild(label);
         }
-        this.players.set(event.player, {
+        const marker: PlayerMarker = {
           gfx,
           label,
           prevX: event.x,
@@ -443,9 +450,26 @@ export class Renderer {
           x: event.x,
           y: event.y,
           updatedAt: performance.now(),
-        });
+          facing: event.facing,
+          main: event.main,
+          off: event.off,
+          mainSprite: null,
+          offSprite: null,
+        };
+        this.players.set(event.player, marker);
+        this.refreshHeldItems(marker);
         if (event.player === this.localPlayerId) {
           this.camera.centerOnTile(event.x, event.y);
+        }
+        break;
+      }
+      case "player_gear": {
+        const marker = this.players.get(event.player);
+        if (marker) {
+          marker.facing = event.facing;
+          marker.main = event.main;
+          marker.off = event.off;
+          this.refreshHeldItems(marker);
         }
         break;
       }
@@ -576,7 +600,7 @@ export class Renderer {
       case "player_left": {
         const marker = this.players.get(event.player);
         if (marker) {
-          marker.gfx.destroy();
+          marker.gfx.destroy({ children: true });
           marker.label?.destroy();
           this.players.delete(event.player);
         }
@@ -688,6 +712,35 @@ export class Renderer {
   /** Player body in their chosen color. */
   private drawPlayerBody(gfx: Graphics, color: number): void {
     gfx.clear().rect(0, 0, PLAYER_WIDTH * TILE_PX, PLAYER_HEIGHT * TILE_PX).fill({ color });
+  }
+
+  /** Rebuilds the held-item icons: main-hand on the side faced, offhand
+   * on the other. Both mirror with the player's facing so they read as
+   * turning around with the body, not just swapping sides in place. */
+  private refreshHeldItems(marker: PlayerMarker): void {
+    marker.mainSprite?.destroy();
+    marker.offSprite?.destroy();
+    const mainOnRight = marker.facing === "right";
+    marker.mainSprite = this.buildHeldSprite(marker.main, mainOnRight, marker.facing);
+    marker.offSprite = this.buildHeldSprite(marker.off, !mainOnRight, marker.facing);
+    if (marker.mainSprite) marker.gfx.addChild(marker.mainSprite);
+    if (marker.offSprite) marker.gfx.addChild(marker.offSprite);
+  }
+
+  private buildHeldSprite(item: string | null, onRightSide: boolean, facing: "left" | "right"): Sprite | null {
+    if (item === null) return null;
+    const texture = itemTexture(item, this.blockTextures);
+    if (!texture) return null;
+    const sprite = new Sprite(texture);
+    sprite.anchor.set(0.5, 0.5);
+    const size = TILE_PX * 0.55;
+    sprite.width = size;
+    sprite.height = size;
+    const bodyWidth = PLAYER_WIDTH * TILE_PX;
+    const handY = PLAYER_HEIGHT * TILE_PX * 0.42;
+    sprite.position.set(onRightSide ? bodyWidth + size * 0.4 : -size * 0.4, handY);
+    if (facing === "left") sprite.scale.x = -Math.abs(sprite.scale.x);
+    return sprite;
   }
 
   private buildEntityGfx(kind: string, stack?: ItemStack): Container {

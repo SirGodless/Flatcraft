@@ -207,6 +207,8 @@ export interface PlayerState {
   creative: boolean;
   /** Remaining diving air in ticks (MAX_AIR_TICKS when surfaced). */
   air: number;
+  /** Which way this player is visually facing (last nonzero move dx). */
+  facing: "left" | "right";
 }
 
 /** Diving: air supply in ticks, and drowning damage cadence. */
@@ -251,6 +253,9 @@ export class Simulation {
   private nextEntityId: EntityId = 1;
   /** Disconnected players' state, by name, adopted on rejoin. */
   private readonly savedPlayers = new Map<string, PlayerState>();
+  /** Last facing/held-item state broadcast per player, to detect changes
+   * without hooking every place inventory/offhand/facing can mutate. */
+  private readonly lastGear = new Map<PlayerId, { facing: "left" | "right"; main: string | null; off: string | null }>();
 
   constructor(seed: number) {
     this.worlds = {
@@ -362,6 +367,7 @@ export class Simulation {
     this.stepLiquids(out);
     this.stepEntities(out);
     this.stepPlayers(out);
+    this.stepGearSync(out);
     this.stepSpawning(out);
     this.tickCount++;
     this.timeOfDay = (this.timeOfDay + 1) % DAY_LENGTH;
@@ -1220,6 +1226,25 @@ export class Simulation {
     }
   }
 
+  /** Broadcast facing/held-item changes - covers every way the selected
+   * slot or offhand can change (crafting, mining, eating, drag-and-drop,
+   * ...) without hooking each site individually. */
+  private stepGearSync(out: OutboundEvent[]): void {
+    for (const p of this.players.values()) {
+      const current = {
+        facing: p.facing,
+        main: p.inventory[p.selected]?.item ?? null,
+        off: p.offhand?.item ?? null,
+      };
+      const last = this.lastGear.get(p.id);
+      if (last && last.facing === current.facing && last.main === current.main && last.off === current.off) {
+        continue;
+      }
+      this.lastGear.set(p.id, current);
+      out.push({ event: { type: "player_gear", player: p.id, ...current } });
+    }
+  }
+
   private teleportThroughPortal(p: PlayerState, out: OutboundEvent[]): void {
     const targetDim: Dimension = p.dimension === "overworld" ? "nether" : "overworld";
     const targetWorld = this.worldOf(targetDim);
@@ -1509,6 +1534,9 @@ export class Simulation {
               y: other.y,
               dim: other.dimension,
               color: other.color,
+              facing: other.facing,
+              main: other.inventory[other.selected]?.item ?? null,
+              off: other.offhand?.item ?? null,
             });
           }
         };
@@ -1529,7 +1557,11 @@ export class Simulation {
           state.grapple = null;
           state.creative = state.creative === true;
           state.air = Number.isFinite(state.air) ? state.air : MAX_AIR_TICKS;
+          state.facing = state.facing === "left" ? "left" : "right";
           this.players.set(player, state);
+          const rejoinMain = state.inventory[state.selected]?.item ?? null;
+          const rejoinOff = state.offhand?.item ?? null;
+          this.lastGear.set(player, { facing: state.facing, main: rejoinMain, off: rejoinOff });
           broadcast({
             type: "player_joined",
             player,
@@ -1538,6 +1570,9 @@ export class Simulation {
             y: state.y,
             dim: state.dimension,
             color: state.color,
+            facing: state.facing,
+            main: rejoinMain,
+            off: rejoinOff,
           });
           this.syncInventory(state, out);
           reply({ type: "player_health", player, health: state.health, max: PLAYER_MAX_HEALTH });
@@ -1594,9 +1629,22 @@ export class Simulation {
           grapple: null,
           creative: false,
           air: MAX_AIR_TICKS,
+          facing: "right",
         };
         this.players.set(player, state);
-        broadcast({ type: "player_joined", player, name: state.name, x, y, dim: "overworld", color: state.color });
+        this.lastGear.set(player, { facing: state.facing, main: null, off: null });
+        broadcast({
+          type: "player_joined",
+          player,
+          name: state.name,
+          x,
+          y,
+          dim: "overworld",
+          color: state.color,
+          facing: state.facing,
+          main: null,
+          off: null,
+        });
         syncInventory(state);
         reply({ type: "player_health", player, health: state.health, max: PLAYER_MAX_HEALTH });
         reply({ type: "player_hunger", player, hunger: state.hunger, max: PLAYER_MAX_HUNGER });
@@ -1620,6 +1668,7 @@ export class Simulation {
         if (p && this.players.delete(player)) {
           // Keep the state for a future rejoin (and for saves).
           this.savedPlayers.set(p.name, p);
+          this.lastGear.delete(player);
           broadcast({ type: "player_left", player });
         }
         break;
@@ -1635,6 +1684,7 @@ export class Simulation {
           break;
         }
         p.input = { dx: command.dx, jump: command.jump, down: command.down === true };
+        if (command.dx !== 0) p.facing = command.dx > 0 ? "right" : "left";
         break;
       }
       case "set_color": {
