@@ -4,6 +4,7 @@ import {
   BlockId,
   daylightFactor,
   ENTITY_SIZES,
+  itemDef,
   PLAYER_HEIGHT,
   PLAYER_MAX_HEALTH,
   PLAYER_WIDTH,
@@ -31,6 +32,7 @@ import {
   HeartsUI,
   HotbarUI,
   HungerUI,
+  liquidTint,
   TradePanelUI,
 } from "./ui.js";
 import { CHUNK_PX_H, CHUNK_PX_W, WorldView } from "./worldView.js";
@@ -293,24 +295,29 @@ export class Renderer {
     return marker ? { x: marker.x, y: marker.y } : null;
   }
 
-  /** Open the backpack screen for the selected hotbar slot. */
+  /** Open the container screen (backpack or datapack equivalent) for the
+   * selected hotbar slot. */
   openBackpack(): void {
+    const held = this.inventory[this.selectedSlot];
+    const capacity = held ? itemDef(held.item)?.container : undefined;
+    if (!held || capacity === undefined) return;
     this.craftingPanel.close();
     this.furnacePanel.close();
     this.chestPanel.close();
     this.backpackPanel.setInventory(this.inventory, this.selectedSlot);
-    this.backpackPanel.open((index) => ({ container: "backpack", index }));
+    this.backpackPanel.open((index) => ({ container: "backpack", index }), capacity);
     this.refreshBackpack();
   }
 
   private refreshBackpack(): void {
     if (!this.backpackPanel.visible) return;
     const held = this.inventory[this.selectedSlot];
-    if (!held || held.item !== "backpack") {
+    const capacity = held ? itemDef(held.item)?.container : undefined;
+    if (!held || capacity === undefined) {
       this.backpackPanel.close();
       return;
     }
-    this.backpackPanel.update(held.data?.slots ?? new Array(9).fill(null));
+    this.backpackPanel.update(held.data?.slots ?? new Array(capacity).fill(null));
   }
 
   /**
@@ -690,6 +697,8 @@ export class Renderer {
         const sprite = new Sprite(texture);
         sprite.width = TILE_PX * 0.5;
         sprite.height = TILE_PX * 0.5;
+        const tint = liquidTint(stack);
+        if (tint !== undefined) sprite.tint = tint;
         container.addChild(sprite);
       }
       return container;

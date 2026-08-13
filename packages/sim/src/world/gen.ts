@@ -69,7 +69,12 @@ interface ColumnInfo {
   biome: Biome;
 }
 
-function terrainBlock(y: number, col: ColumnInfo): BlockId {
+/** Patchy clay pockets in the sand layer right at the waterline. */
+function isClayPatch(seed: number, x: number, y: number): boolean {
+  return valueNoise2(hashSeed(seed, 0xc1a4), x, y, 5) > 0.72;
+}
+
+function terrainBlock(seed: number, y: number, col: ColumnInfo): BlockId {
   const { surface, biome } = col;
   if (y >= BEDROCK_Y) return BlockId.Bedrock;
   if (y < surface) {
@@ -79,7 +84,7 @@ function terrainBlock(y: number, col: ColumnInfo): BlockId {
   const underwater = surface > SEA_LEVEL;
   const beach = !underwater && surface >= SEA_LEVEL - 1;
   if (underwater || beach) {
-    if (depth <= 2) return BlockId.Sand;
+    if (depth <= 2) return isClayPatch(seed, col.x, y) ? BlockId.Clay : BlockId.Sand;
     if (depth <= 5) return BlockId.Sandstone;
     return BlockId.Stone;
   }
@@ -134,6 +139,8 @@ interface VeinSpec {
 
 const VEINS: readonly VeinSpec[] = [
   { block: BlockId.Obsidian, attempts: 2, sizeMin: 3, sizeMax: 6, minY: 236, maxY: 255 },
+  // Rarer than gravel: small clay pockets buried away from any shore.
+  { block: BlockId.Clay, attempts: 1, sizeMin: 4, sizeMax: 8, minY: 4, maxY: 120 },
   { block: BlockId.Gravel, attempts: 3, sizeMin: 6, sizeMax: 12, minY: 12, maxY: 255 },
   { block: BlockId.CoalOre, attempts: 5, sizeMin: 4, sizeMax: 10, minY: 2, maxY: 255 },
   { block: BlockId.CopperOre, attempts: 3, sizeMin: 3, sizeMax: 7, minY: 8, maxY: 140 },
@@ -294,7 +301,7 @@ export function generateChunk(seed: number, cx: number, cy: number): Chunk {
     const col = cols[lx]!;
     for (let ly = 0; ly < CHUNK_HEIGHT; ly++) {
       const y = cy * CHUNK_HEIGHT + ly;
-      chunk.setBlock(lx, ly, terrainBlock(y, col));
+      chunk.setBlock(lx, ly, terrainBlock(seed, y, col));
       // Background walls: caves show earth instead of sky.
       if (y >= col.surface && y < BEDROCK_Y) {
         const depth = y - col.surface;

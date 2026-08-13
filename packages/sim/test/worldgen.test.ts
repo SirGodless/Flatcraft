@@ -81,6 +81,7 @@ describe("world generation", () => {
     expect(found).toContain(BlockId.GoldOre);
     expect(found).toContain(BlockId.DiamondOre);
     expect(found).toContain(BlockId.Gravel);
+    expect(found).toContain(BlockId.Clay); // rare underground blobs, away from any shore
 
     // Diamond must never appear above its minimum depth (y >= 192 -> cy >= 6).
     for (let cx = -4; cx <= 4; cx++) {
@@ -133,6 +134,21 @@ describe("world generation", () => {
     }
     expect(desertChecked).toBe(true);
     expect(snowChecked).toBe(true);
+  });
+
+  it("dots clay patches into the shoreline sand", () => {
+    const world = freshWorld();
+    let clayAtShore = 0;
+    for (let x = 0; x < 2048; x++) {
+      const surface = surfaceHeight(SEED, x);
+      const underwater = surface > SEA_LEVEL;
+      const beach = !underwater && surface >= SEA_LEVEL - 1;
+      if (!underwater && !beach) continue;
+      for (let y = surface; y <= surface + 2; y++) {
+        if (world.getBlockGenerating(x, y) === BlockId.Clay) clayAtShore++;
+      }
+    }
+    expect(clayAtShore).toBeGreaterThan(0);
   });
 });
 

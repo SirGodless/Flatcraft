@@ -353,6 +353,35 @@ for (const [tier, color] of Object.entries(TIER_COLORS)) {
   }
   ARTS[`${tier}_armor`] = armorArt(color);
 }
+
+const bucketArt = (color: string): Art => ({
+  rows: [
+    "..HHHH..",
+    ".H....H.",
+    ".H....H.",
+    ".H....H.",
+    "..H..H..",
+    "..HHHH..",
+    "........",
+    "........",
+  ],
+  palette: { H: color },
+});
+
+// Buckets: clay through netherite, matching the datapack's bucket tiers
+// (no wooden/stone bucket exists).
+const BUCKET_TIER_COLORS: Record<string, string> = {
+  clay: "#c17a4a",
+  copper: TIER_COLORS["copper"]!,
+  iron: TIER_COLORS["iron"]!,
+  golden: TIER_COLORS["golden"]!,
+  diamond: TIER_COLORS["diamond"]!,
+  emerald: TIER_COLORS["emerald"]!,
+  netherite: TIER_COLORS["netherite"]!,
+};
+for (const [tier, color] of Object.entries(BUCKET_TIER_COLORS)) {
+  ARTS[`${tier}_bucket`] = bucketArt(color);
+}
 ARTS["copper_ingot"] = ingot("#d87a4e");
 ARTS["netherite_ingot"] = ingot("#4a4048");
 ARTS["netherite_scrap"] = blob("#5a4a44");

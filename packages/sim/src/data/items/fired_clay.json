@@ -1,0 +1,11 @@
+{
+  "id": "fired_clay",
+  "name": "Fired Clay",
+  "recipes": [
+    {
+      "station": "furnace",
+      "input": "item:clay",
+      "cooking_ticks": 200
+    }
+  ]
+}

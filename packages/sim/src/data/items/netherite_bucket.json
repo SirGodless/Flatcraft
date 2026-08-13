@@ -1,0 +1,21 @@
+{
+  "id": "netherite_bucket",
+  "name": "Netherite Bucket",
+  "max_stack": 1,
+  "bucket": {
+    "capacity": 7
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a a",
+        " a "
+      ],
+      "key": {
+        "a": "item:netherite_ingot"
+      }
+    }
+  ]
+}

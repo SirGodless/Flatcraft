@@ -1,0 +1,22 @@
+{
+  "id": "diamond_bucket",
+  "name": "Diamond Bucket",
+  "max_stack": 1,
+  "bucket": {
+    "capacity": 5
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a a",
+        " b "
+      ],
+      "key": {
+        "a": "item:diamond",
+        "b": "item:iron_bucket"
+      }
+    }
+  ]
+}

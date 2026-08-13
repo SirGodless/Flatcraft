@@ -1,0 +1,21 @@
+{
+  "id": "iron_bucket",
+  "name": "Iron Bucket",
+  "max_stack": 1,
+  "bucket": {
+    "capacity": 3
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a a",
+        " a "
+      ],
+      "key": {
+        "a": "item:iron_ingot"
+      }
+    }
+  ]
+}

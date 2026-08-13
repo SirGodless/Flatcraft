@@ -93,6 +93,8 @@ export enum BlockId {
   Lava5 = 75,
   Lava6 = 76,
   Lava7 = 77,
+  /** Clay: mined for raw Clay, fired in a furnace into Fired Clay. */
+  Clay = 78,
 }
 
 export interface BlockDef {
@@ -136,7 +138,7 @@ const byName = new Map<string, BlockId>();
 /** toggle_to targets may be registered later; resolved in a second pass. */
 const pendingToggles: Array<{ id: BlockId; target: string; source: string }> = [];
 /** Datapack blocks outside the enum get ids from here. */
-let nextDynamicId = 78;
+let nextDynamicId = 79;
 
 /** "OakDoorOpen" -> "oak_door_open", "Water1" -> "water_1". */
 function enumKeyToId(key: string): string {
