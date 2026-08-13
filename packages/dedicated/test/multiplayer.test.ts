@@ -18,6 +18,9 @@ import { startDedicatedServer, type DedicatedServer } from "../src/server.js";
 /**
  * End-to-end multiplayer tests over the real WebSocket transport: a real
  * dedicated server on an ephemeral port, real sockets, JSON on the wire.
+ * Sessions are bootstrapped via DedicatedServer.issueSession, the same
+ * Accounts.establishSession call a real anfall-auth login triggers from
+ * /auth/callback - the OIDC round trip itself isn't exercised here.
  * White-box access to server.gameServer.simulation is used to seed
  * inventories - everything else goes through the network.
  */
@@ -33,10 +36,7 @@ class TestClient {
   token = "";
   private socket!: WebSocket;
 
-  static connect(
-    port: number,
-    auth: { name: string; password?: string; token?: string },
-  ): Promise<TestClient> {
+  static connect(port: number, auth: { name: string; token: string }): Promise<TestClient> {
     const client = new TestClient();
     client.socket = new WebSocket(`ws://localhost:${port}/ws`);
     return new Promise((resolve, reject) => {
@@ -110,6 +110,12 @@ async function startServer(existingDataDir?: string): Promise<DedicatedServer> {
   return server;
 }
 
+/** Bootstraps a session the way a real anfall-auth login would, and connects with it. */
+async function connectAs(ded: DedicatedServer, name: string): Promise<TestClient> {
+  const { token } = ded.issueSession(name);
+  return TestClient.connect(ded.port, { name, token });
+}
+
 afterEach(async () => {
   await server?.close();
   server = null;
@@ -120,39 +126,35 @@ afterEach(async () => {
 });
 
 describe("auth", () => {
-  it("registers on first login, rejects wrong passwords, accepts tokens", async () => {
+  it("accepts a session token issued via issueSession, rejects invalid or unknown ones", async () => {
     const ded = await startServer();
-    const alice = await TestClient.connect(ded.port, { name: "Alice", password: "secret1" });
-    expect(alice.token.length).toBeGreaterThan(10);
+    const { token } = ded.issueSession("Alice");
+    const alice = await TestClient.connect(ded.port, { name: "Alice", token });
+    expect(alice.token).toBe(token);
     await alice.close();
 
-    await expect(TestClient.connect(ded.port, { name: "Alice", password: "wrong" })).rejects.toThrow(
-      "wrong password",
+    await expect(TestClient.connect(ded.port, { name: "Alice", token: "wrong" })).rejects.toThrow(
+      "invalid session, log in again",
     );
-    const byToken = await TestClient.connect(ded.port, { name: "Alice", token: alice.token });
-    expect(byToken.playerId).not.toBe(alice.playerId);
-    await byToken.close();
-
-    await expect(TestClient.connect(ded.port, { name: "x", password: "secret1" })).rejects.toThrow(
+    await expect(TestClient.connect(ded.port, { name: "x", token: "whatever" })).rejects.toThrow(
       "invalid name",
     );
   });
 
   it("allows only one live session per account", async () => {
     const ded = await startServer();
-    const first = await TestClient.connect(ded.port, { name: "Bob", password: "secret1" });
-    await expect(TestClient.connect(ded.port, { name: "Bob", password: "secret1" })).rejects.toThrow(
-      "already connected",
-    );
+    const { token } = ded.issueSession("Bob");
+    const first = await TestClient.connect(ded.port, { name: "Bob", token });
+    await expect(TestClient.connect(ded.port, { name: "Bob", token })).rejects.toThrow("already connected");
     await first.close();
     // After disconnecting, the account is free again.
-    const again = await TestClient.connect(ded.port, { name: "Bob", password: "secret1" });
+    const again = await TestClient.connect(ded.port, { name: "Bob", token });
     await again.close();
   });
 
   it("forces the account name onto join commands", async () => {
     const ded = await startServer();
-    const mallory = await TestClient.connect(ded.port, { name: "Mallory", password: "secret1" });
+    const mallory = await connectAs(ded, "Mallory");
     mallory.send({ type: "join", name: "Admin" });
     const joined = await mallory.waitFor((e) => e.type === "player_joined");
     expect(joined.type === "player_joined" && joined.name).toBe("Mallory");
@@ -161,12 +163,12 @@ describe("auth", () => {
 
   it("carries the chosen player color and broadcasts color changes", async () => {
     const ded = await startServer();
-    const alice = await TestClient.connect(ded.port, { name: "Alice", password: "secret1" });
+    const alice = await connectAs(ded, "Alice");
     alice.send({ type: "join", name: alice.name, color: 0x48b048 });
     const joined = await alice.waitFor((e) => e.type === "player_joined");
     expect(joined.type === "player_joined" && joined.color).toBe(0x48b048);
 
-    const bob = await TestClient.connect(ded.port, { name: "Bob", password: "secret1" });
+    const bob = await connectAs(ded, "Bob");
     bob.join();
     // Bob sees Alice's color in the join replay...
     const replay = await bob.waitFor(
@@ -185,11 +187,11 @@ describe("auth", () => {
 describe("two players", () => {
   it("see each other join and move", async () => {
     const ded = await startServer();
-    const alice = await TestClient.connect(ded.port, { name: "Alice", password: "secret1" });
+    const alice = await connectAs(ded, "Alice");
     alice.join();
     await alice.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
 
-    const bob = await TestClient.connect(ded.port, { name: "Bob", password: "secret1" });
+    const bob = await connectAs(ded, "Bob");
     bob.join();
     // Bob learns about Alice (join replay) and Alice learns about Bob.
     const bobSeesAlice = await bob.waitFor(
@@ -210,10 +212,10 @@ describe("two players", () => {
 
   it("broadcast block changes and share chest contents", async () => {
     const ded = await startServer();
-    const alice = await TestClient.connect(ded.port, { name: "Alice", password: "secret1" });
+    const alice = await connectAs(ded, "Alice");
     alice.join();
     await alice.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
-    const bob = await TestClient.connect(ded.port, { name: "Bob", password: "secret1" });
+    const bob = await connectAs(ded, "Bob");
     bob.join();
     await bob.waitFor((e) => e.type === "player_joined" && e.player === bob.playerId);
 
@@ -262,7 +264,7 @@ describe("two players", () => {
 describe("persistence", () => {
   it("keeps player state across reconnects", async () => {
     const ded = await startServer();
-    const alice = await TestClient.connect(ded.port, { name: "Alice", password: "secret1" });
+    const alice = await connectAs(ded, "Alice");
     alice.join();
     await alice.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
     const sim = ded.gameServer.simulation;
@@ -283,7 +285,7 @@ describe("persistence", () => {
   it("persists world, players and accounts across a server restart", async () => {
     const ded = await startServer();
     const dir = dataDir!;
-    const alice = await TestClient.connect(ded.port, { name: "Alice", password: "secret1" });
+    const alice = await connectAs(ded, "Alice");
     alice.join();
     await alice.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
     const sim = ded.gameServer.simulation;

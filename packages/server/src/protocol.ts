@@ -21,13 +21,12 @@ export interface ServerInfo {
   players: number;
 }
 
-/** First message on a socket: name + password (register-or-login) or a
- * previously issued token for auto-login. */
+/** First message on a socket: a session token issued via the anfall-auth
+ * login (see @flatcraft/dedicated's /auth/login, /auth/callback). */
 export interface AuthRequest {
   type: "auth";
   name: string;
-  password?: string;
-  token?: string;
+  token: string;
 }
 
 export type AuthResponse =

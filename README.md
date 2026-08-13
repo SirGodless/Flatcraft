@@ -58,10 +58,32 @@ npm install && npm run build
 npm start -w @flatcraft/dedicated
 ```
 
-Open http://localhost:8080 - the client detects the server, shows a login
-screen (unknown names register on first login), and connects over
-WebSocket on `/ws`. Player state is tied to the account name, the world
-autosaves to disk every 60 s and on shutdown.
+Open http://localhost:8080 - the client detects the server and connects
+over WebSocket on `/ws`. Player state is tied to the account name, the
+world autosaves to disk every 60 s and on shutdown.
+
+### Login (anfall-auth / OIDC)
+
+Identity comes entirely from [anfall-auth](https://github.com/SirGodless/anfall-auth),
+a self-hosted OIDC provider - there's no local username/password anymore.
+The account name is the anfall-auth username (`preferred_username` claim).
+
+1. Register a client at anfall-auth (as an admin, requires an existing
+   session - see anfall-auth's README):
+   ```sh
+   curl -X POST https://auth.anfall.net/api/clients/admin/register \
+     -H "Content-Type: application/json" -b cookies.txt \
+     -d '{"name":"flatcraft","redirectUris":["https://flatcraft.anfall.net/auth/callback"]}'
+   ```
+2. Set `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` (from step 1)
+   and `PUBLIC_URL` (this server's own public origin) - see below.
+3. Players click "Login with anfall-auth" on the title screen, log in at
+   anfall-auth, get redirected back and are in.
+
+Without all four of `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`/`PUBLIC_URL`
+set, `/auth/login` answers `501` and nobody can log in - the server starts
+fine either way (useful for local dev without a real anfall-auth instance,
+combined with `DedicatedServer.issueSession` in tests).
 
 Configuration via environment variables:
 
@@ -72,10 +94,14 @@ Configuration via environment variables:
 | `CLIENT_DIR` | `packages/client/dist` | Built client to serve |
 | `SEED` | `1337` | Seed for freshly generated worlds |
 | `SERVER_NAME` | `FlatCraft` | Name shown on the login screen |
+| `OIDC_ISSUER` | - | anfall-auth issuer URL, e.g. `https://auth.anfall.net` |
+| `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | - | From the client registered at anfall-auth |
+| `PUBLIC_URL` | - | This server's own public origin, e.g. `https://flatcraft.anfall.net` |
 
 ## Run with Docker
 
 ```sh
+cp .env.example .env   # fill in OIDC_ISSUER/OIDC_CLIENT_ID/OIDC_CLIENT_SECRET/PUBLIC_URL
 docker compose up -d --build
 ```
 
