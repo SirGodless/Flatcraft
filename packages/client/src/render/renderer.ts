@@ -4,6 +4,7 @@ import {
   BlockId,
   daylightFactor,
   itemDef,
+  mobDef,
   PLAYER_HEIGHT,
   PLAYER_MAX_HEALTH,
   PLAYER_WIDTH,
@@ -20,6 +21,7 @@ import { Camera } from "./camera.js";
 import { FogOfWar } from "./fog.js";
 import { itemTexture } from "./icons.js";
 import { entityAnimationStates, entityTexture } from "./entitySprites.js";
+import { createShaderEffect, type ShaderEffect } from "./shaders.js";
 import { createBlockTextures, createBlockTextureVariants, TILE_PX } from "./textures.js";
 import {
   AirUI,
@@ -102,6 +104,8 @@ interface EntityView {
   updatedAt: number;
   hurtAt: number;
   anim?: EntityAnimationView;
+  /** From the item/mob def's visual.shader, if it names a known effect. */
+  shaderFx?: ShaderEffect;
   /** Set by entity_removed when a death clip is still playing; the draw
    * loop performs the actual destroy/delete once it finishes. */
   removeRequested: boolean;
@@ -201,7 +205,9 @@ export class Renderer {
   }
 
   async init(container: HTMLElement): Promise<void> {
-    await this.app.init({ resizeTo: container, background: "#87b9e7" });
+    // WebGL-only: shaders.ts's named effects only ship a glProgram, not a
+    // gpuProgram, to avoid maintaining duplicate GLSL/WGSL for one effect.
+    await this.app.init({ resizeTo: container, background: "#87b9e7", preference: "webgl" });
     container.appendChild(this.app.canvas);
 
     const blockTextures = createBlockTextures();
@@ -600,7 +606,7 @@ export class Renderer {
       }
       case "entity_spawned": {
         if (this.entities.has(event.id)) break;
-        const { gfx, anim } = this.buildEntityGfx(event.kind, event.id, event.stack);
+        const { gfx, anim, shaderFx } = this.buildEntityGfx(event.kind, event.id, event.stack);
         gfx.visible = event.dim === this.localDim;
         this.worldContainer.addChild(gfx);
         this.entities.set(event.id, {
@@ -615,6 +621,7 @@ export class Renderer {
           hurtAt: 0,
           removeRequested: false,
           ...(anim ? { anim } : {}),
+          ...(shaderFx ? { shaderFx } : {}),
         });
         break;
       }
@@ -658,6 +665,7 @@ export class Renderer {
             view.removeRequested = true;
           } else {
             view.gfx.destroy({ children: true });
+            view.shaderFx?.destroy();
             this.entities.delete(event.id);
           }
         }
@@ -835,7 +843,16 @@ export class Renderer {
     anim.startedAt = now;
   }
 
-  private buildEntityGfx(kind: string, entityId: EntityId, stack?: ItemStack): { gfx: Container; anim?: EntityAnimationView } {
+  private buildEntityGfx(
+    kind: string,
+    entityId: EntityId,
+    stack?: ItemStack,
+  ): { gfx: Container; anim?: EntityAnimationView; shaderFx?: ShaderEffect } {
+    // Same def either names a shader effect or it doesn't, regardless of
+    // which branch below ends up building the actual graphics.
+    const shaderDef = kind === "item" && stack ? itemDef(stack.item)?.visual?.shader : mobDef(kind)?.visual?.shader;
+    const shaderFx = shaderDef ? createShaderEffect(shaderDef.id, shaderDef.params) : undefined;
+
     if (kind === "item" && stack) {
       const container = new Container();
       const texture = itemTexture(stack.item, this.blockTextures, entityId);
@@ -847,7 +864,8 @@ export class Renderer {
         if (tint !== undefined) sprite.tint = tint;
         container.addChild(sprite);
       }
-      return { gfx: container };
+      if (shaderFx) container.filters = [shaderFx];
+      return { gfx: container, ...(shaderFx ? { shaderFx } : {}) };
     }
     {
       const clips = entityAnimationStates(kind);
@@ -874,9 +892,11 @@ export class Renderer {
           sprite.width = size.width * TILE_PX;
           sprite.height = size.height * TILE_PX;
           container.addChild(sprite);
+          if (shaderFx) container.filters = [shaderFx];
           return {
             gfx: container,
             anim: { sprite, states, current: initial, startedAt: performance.now(), priority: 0, pendingRemoval: false },
+            ...(shaderFx ? { shaderFx } : {}),
           };
         }
       }
@@ -895,7 +915,8 @@ export class Renderer {
           sprite.anchor.set(0.5);
         }
         container.addChild(sprite);
-        return { gfx: container };
+        if (shaderFx) container.filters = [shaderFx];
+        return { gfx: container, ...(shaderFx ? { shaderFx } : {}) };
       }
     }
     const gfx = new Graphics();
@@ -949,7 +970,8 @@ export class Renderer {
       default:
         gfx.rect(0, 0, TILE_PX, TILE_PX).fill({ color: 0xff00ff });
     }
-    return { gfx };
+    if (shaderFx) gfx.filters = [shaderFx];
+    return { gfx, ...(shaderFx ? { shaderFx } : {}) };
   }
 
   /**
@@ -1065,6 +1087,7 @@ export class Renderer {
         view.gfx.position.set((x - size.width / 2) * TILE_PX, (y - size.height) * TILE_PX + bob);
       }
       view.gfx.tint = now - view.hurtAt < 150 ? 0xff6060 : 0xffffff;
+      view.shaderFx?.setTime(now);
       if (view.anim) {
         if (!view.anim.pendingRemoval) {
           const moved = view.x !== view.prevX || view.y !== view.prevY;
@@ -1089,7 +1112,10 @@ export class Renderer {
     }
     for (const id of finishedDeaths) {
       const view = this.entities.get(id);
-      if (view) view.gfx.destroy({ children: true });
+      if (view) {
+        view.gfx.destroy({ children: true });
+        view.shaderFx?.destroy();
+      }
       this.entities.delete(id);
     }
 
