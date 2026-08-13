@@ -33,3 +33,25 @@ export function entityTexture(kind: string, variantSeed?: number): Texture | und
   if (def) return SPRITE_OVERRIDES.get((spriteKey(def.sprite) ?? `mob/${kind}`) + suffix);
   return SPRITE_OVERRIDES.get(`entity/${kind}${suffix}`);
 }
+
+/**
+ * A mob kind's animation sheet, if its def declares `visual.animation`
+ * AND the corresponding sprite-sheet file (sprites/mob/<kind>_<state>.png)
+ * is actually present - stage d plays a single default clip (no state
+ * machine yet, that's stage e), preferring "idle" if declared, else
+ * whichever state comes first. Missing sheet file simply means: no
+ * animation, caller falls back to entityTexture()'s single-frame path.
+ */
+export function entityAnimation(kind: string): { clip: { frames: number; frameWidth: number; fps: number; loop: boolean }; sheet: Texture } | undefined {
+  const def = mobDef(kind);
+  const states = def?.visual?.animation?.states;
+  if (!states) return undefined;
+  const stateName = states["idle"] !== undefined ? "idle" : Object.keys(states)[0];
+  if (stateName === undefined) return undefined;
+  const clip = states[stateName];
+  if (!clip) return undefined;
+  const baseKey = spriteKey(def!.sprite) ?? `mob/${kind}`;
+  const sheet = SPRITE_OVERRIDES.get(`${baseKey}_${stateName}`);
+  if (!sheet) return undefined;
+  return { clip: { frames: clip.frames, frameWidth: clip.frame_width, fps: clip.fps, loop: clip.loop ?? true }, sheet };
+}

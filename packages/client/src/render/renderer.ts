@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Sprite, Text, type Texture } from "pixi.js";
+import { Application, Container, Graphics, Rectangle, Sprite, Texture, Text } from "pixi.js";
 import {
   blockDef,
   BlockId,
@@ -19,7 +19,7 @@ import {
 import { Camera } from "./camera.js";
 import { FogOfWar } from "./fog.js";
 import { itemTexture } from "./icons.js";
-import { entityTexture } from "./entitySprites.js";
+import { entityAnimation, entityTexture } from "./entitySprites.js";
 import { createBlockTextures, createBlockTextureVariants, TILE_PX } from "./textures.js";
 import {
   AirUI,
@@ -65,6 +65,19 @@ interface PlayerMarker {
   offSprite: Sprite | null;
 }
 
+/** Sprite-sheet playback state, advanced manually every frame (draw()
+ * loop, alongside position/rotation/tint) rather than via PixiJS's
+ * AnimatedSprite autoplay - this app's Application uses its own
+ * private ticker (not Ticker.shared), which is what AnimatedSprite's
+ * default autoUpdate hooks into, so autoplay never actually ticks here. */
+interface EntityAnimationView {
+  sprite: Sprite;
+  frames: Texture[];
+  fps: number;
+  loop: boolean;
+  startedAt: number;
+}
+
 interface EntityView {
   gfx: Container;
   kind: string;
@@ -75,6 +88,7 @@ interface EntityView {
   y: number;
   updatedAt: number;
   hurtAt: number;
+  anim?: EntityAnimationView;
 }
 
 /**
@@ -560,7 +574,7 @@ export class Renderer {
       }
       case "entity_spawned": {
         if (this.entities.has(event.id)) break;
-        const gfx = this.buildEntityGfx(event.kind, event.id, event.stack);
+        const { gfx, anim } = this.buildEntityGfx(event.kind, event.id, event.stack);
         gfx.visible = event.dim === this.localDim;
         this.worldContainer.addChild(gfx);
         this.entities.set(event.id, {
@@ -573,6 +587,7 @@ export class Renderer {
           y: event.y,
           updatedAt: performance.now(),
           hurtAt: 0,
+          ...(anim ? { anim } : {}),
         });
         break;
       }
@@ -745,7 +760,7 @@ export class Renderer {
     return sprite;
   }
 
-  private buildEntityGfx(kind: string, entityId: EntityId, stack?: ItemStack): Container {
+  private buildEntityGfx(kind: string, entityId: EntityId, stack?: ItemStack): { gfx: Container; anim?: EntityAnimationView } {
     if (kind === "item" && stack) {
       const container = new Container();
       const texture = itemTexture(stack.item, this.blockTextures, entityId);
@@ -757,7 +772,34 @@ export class Renderer {
         if (tint !== undefined) sprite.tint = tint;
         container.addChild(sprite);
       }
-      return container;
+      return { gfx: container };
+    }
+    {
+      const anim = entityAnimation(kind);
+      const frames: Texture[] = [];
+      if (anim) {
+        const frameCount = Math.min(anim.clip.frames, Math.floor(anim.sheet.width / anim.clip.frameWidth));
+        for (let i = 0; i < frameCount; i++) {
+          frames.push(
+            new Texture({
+              source: anim.sheet.source,
+              frame: new Rectangle(i * anim.clip.frameWidth, 0, anim.clip.frameWidth, anim.sheet.height),
+            }),
+          );
+        }
+      }
+      if (anim && frames.length > 0) {
+        const container = new Container();
+        const size = sizeOf(kind);
+        const sprite = new Sprite(frames[0]);
+        sprite.width = size.width * TILE_PX;
+        sprite.height = size.height * TILE_PX;
+        container.addChild(sprite);
+        return {
+          gfx: container,
+          anim: { sprite, frames, fps: anim.clip.fps, loop: anim.clip.loop, startedAt: performance.now() },
+        };
+      }
     }
     {
       const texture = entityTexture(kind, entityId);
@@ -773,7 +815,7 @@ export class Renderer {
           sprite.anchor.set(0.5);
         }
         container.addChild(sprite);
-        return container;
+        return { gfx: container };
       }
     }
     const gfx = new Graphics();
@@ -827,7 +869,7 @@ export class Renderer {
       default:
         gfx.rect(0, 0, TILE_PX, TILE_PX).fill({ color: 0xff00ff });
     }
-    return gfx;
+    return { gfx };
   }
 
   /**
@@ -942,6 +984,14 @@ export class Renderer {
         view.gfx.position.set((x - size.width / 2) * TILE_PX, (y - size.height) * TILE_PX + bob);
       }
       view.gfx.tint = now - view.hurtAt < 150 ? 0xff6060 : 0xffffff;
+      if (view.anim) {
+        const { sprite, frames, fps, loop, startedAt } = view.anim;
+        const elapsedFrames = ((now - startedAt) / 1000) * fps;
+        const frameIndex = loop
+          ? Math.floor(elapsedFrames) % frames.length
+          : Math.min(frames.length - 1, Math.floor(elapsedFrames));
+        sprite.texture = frames[frameIndex]!;
+      }
     }
 
     if (localX !== null && localY !== null) {
