@@ -364,6 +364,8 @@ export class Simulation {
       attackCooldown: 0,
       wanderDir: 0,
       wanderTimer: 0,
+      ...(def.equipment?.armor !== undefined ? { armor: { item: def.equipment.armor, count: 1 } } : {}),
+      ...(def.equipment?.offhand !== undefined ? { offhand: { item: def.equipment.offhand, count: 1 } } : {}),
     };
     this.entities.set(entity.id, entity);
     out.push({ event: { type: "entity_spawned", id: entity.id, kind, dim: dimension, x, y } });

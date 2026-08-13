@@ -95,6 +95,9 @@ export interface MobJson {
   burns_in_daylight?: boolean;
   /** Death drops: item, max count (1..max rolled), chance. */
   loot?: Array<{ item: string; max: number; chance: number }>;
+  /** Gear this mob spawns wearing (armor absorbs damage, offhand blocks
+   * like a shield) - dropped again on death, same as a player's. */
+  equipment?: { armor?: string; offhand?: string };
   /** Natural-spawn eligibility. group buckets this mob into one of the
    * pools stepSpawning already rolls against; weight repeats it within
    * that pool (2 = twice as likely as weight 1). near_structure anchors
@@ -353,7 +356,7 @@ export function validateMobJson(raw: unknown, source: string): MobJson {
   const value = need<Record<string, unknown>>(source, "(root)", raw, "object");
   checkKeys(source, "", value, [
     "id", "name", "sprite", "health", "speed", "size", "melee", "ranged",
-    "explodes", "wanders", "burns_in_daylight", "loot", "spawn",
+    "explodes", "wanders", "burns_in_daylight", "loot", "equipment", "spawn",
   ]);
   const size = need<Record<string, unknown>>(source, "size", value["size"], "object");
   checkKeys(source, "size.", size, ["width", "height"]);
@@ -416,6 +419,13 @@ export function validateMobJson(raw: unknown, source: string): MobJson {
         chance: needNumber(source, `${path}chance`, drop["chance"], 0, 1),
       };
     });
+  }
+  if (value["equipment"] !== undefined) {
+    const equipment = need<Record<string, unknown>>(source, "equipment", value["equipment"], "object");
+    checkKeys(source, "equipment.", equipment, ["armor", "offhand"]);
+    out.equipment = {};
+    if (equipment["armor"] !== undefined) out.equipment.armor = needId(source, "equipment.armor", equipment["armor"]);
+    if (equipment["offhand"] !== undefined) out.equipment.offhand = needId(source, "equipment.offhand", equipment["offhand"]);
   }
   if (value["spawn"] !== undefined) {
     const spawn = need<Record<string, unknown>>(source, "spawn", value["spawn"], "object");

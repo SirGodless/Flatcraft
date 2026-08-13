@@ -40,6 +40,11 @@ export interface MobLootEntry {
   readonly chance: number;
 }
 
+export interface MobEquipmentDef {
+  readonly armor?: string;
+  readonly offhand?: string;
+}
+
 export interface MobSpawnDef {
   readonly group?: "hostile_surface" | "grass_day" | "nether_pocket";
   readonly weight: number;
@@ -58,6 +63,7 @@ export interface MobDef {
   readonly wanders?: boolean;
   readonly burnsInDaylight?: boolean;
   readonly loot?: readonly MobLootEntry[];
+  readonly equipment?: MobEquipmentDef;
   readonly spawn?: MobSpawnDef;
   /** Sprite path override (default sprites/mob/<id>.png). */
   readonly sprite?: string;
@@ -107,6 +113,14 @@ export function registerMobJson(raw: unknown, source = "datapack"): MobDef {
     ...(json.wanders !== undefined ? { wanders: json.wanders } : {}),
     ...(json.burns_in_daylight !== undefined ? { burnsInDaylight: json.burns_in_daylight } : {}),
     ...(json.loot !== undefined ? { loot: json.loot } : {}),
+    ...(json.equipment !== undefined
+      ? {
+          equipment: {
+            ...(json.equipment.armor !== undefined ? { armor: json.equipment.armor } : {}),
+            ...(json.equipment.offhand !== undefined ? { offhand: json.equipment.offhand } : {}),
+          },
+        }
+      : {}),
     ...(json.spawn !== undefined
       ? { spawn: { weight: json.spawn.weight ?? 1, ...(json.spawn.group !== undefined ? { group: json.spawn.group } : {}), ...(json.spawn.near_structure !== undefined ? { nearStructure: json.spawn.near_structure } : {}) } }
       : {}),
