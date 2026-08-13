@@ -1,0 +1,13 @@
+{
+  "id": "zombified_piglin",
+  "name": "Zombified Piglin",
+  "health": 20,
+  "speed": 0.1,
+  "size": { "width": 0.6, "height": 1.8 },
+  "melee": { "damage": 3, "cooldown": 20, "follow_range": 16 },
+  "loot": [
+    { "item": "gold_nugget", "max": 2, "chance": 0.6 },
+    { "item": "rotten_flesh", "max": 1, "chance": 0.5 }
+  ],
+  "spawn": { "group": "nether_pocket", "weight": 1 }
+}

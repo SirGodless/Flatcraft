@@ -3,11 +3,11 @@ import {
   blockDef,
   BlockId,
   daylightFactor,
-  ENTITY_SIZES,
   itemDef,
   PLAYER_HEIGHT,
   PLAYER_MAX_HEALTH,
   PLAYER_WIDTH,
+  sizeOf,
   TICK_MS,
   type EntityId,
   type InventorySlots,
@@ -831,7 +831,7 @@ export class Renderer {
   mobAt(tileX: number, tileY: number): EntityId | null {
     for (const [id, view] of this.entities) {
       if (view.kind === "item") continue;
-      const size = ENTITY_SIZES[view.kind as keyof typeof ENTITY_SIZES];
+      const size = sizeOf(view.kind);
       if (
         tileX >= view.x - size.width / 2 &&
         tileX <= view.x + size.width / 2 &&
@@ -906,7 +906,7 @@ export class Renderer {
       const alpha = Math.min(1, (now - view.updatedAt) / TICK_MS);
       const x = view.prevX + (view.x - view.prevX) * alpha;
       const y = view.prevY + (view.y - view.prevY) * alpha;
-      const size = ENTITY_SIZES[view.kind as keyof typeof ENTITY_SIZES] ?? { width: 1, height: 1 };
+      const size = sizeOf(view.kind);
       // Items bob gently so they read as pickups.
       const bob = view.kind === "item" ? Math.sin(now / 300 + view.x) * 1.5 : 0;
       view.gfx.position.set((x - size.width / 2) * TILE_PX, (y - size.height) * TILE_PX + bob);

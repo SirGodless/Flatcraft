@@ -6,34 +6,18 @@ import { DEFAULT_COOK_TICKS, fuelTicks, ingredientOptions } from "./crafting/rec
 import { RECIPES } from "./data/recipes/index.js";
 import { createFurnace, furnaceIdle, furnaceKey, stepFurnace, type FurnaceState } from "./furnace.js";
 import {
-  ARROW_DAMAGE,
   ARROW_TTL,
   ATTACK_REACH,
   BOW_ARROW_SPEED,
   BOW_COOLDOWN,
   BOW_DAMAGE,
-  BURNING_MOBS,
-  CREEPER_FUSE,
-  CREEPER_TRIGGER_RANGE,
-  ENTITY_SIZES,
-  EXPLOSION_BLOCK_RADIUS,
-  EXPLOSION_DAMAGE_RADIUS,
-  EXPLOSION_MAX_DAMAGE,
   ITEM_DESPAWN_TICKS,
   ITEM_PICKUP_DELAY,
   ITEM_PICKUP_RADIUS,
-  MELEE_MOBS,
+  isArrowEntity,
+  isItemEntity,
   MOB_CAP,
   MOB_DESPAWN_RANGE,
-  MOB_LOOT,
-  MOB_STATS,
-  PASSIVE_MOBS,
-  SKELETON_RANGE,
-  WANDERING_MOBS,
-  SKELETON_SHOOT_COOLDOWN,
-  ZOMBIE_ATTACK_COOLDOWN,
-  ZOMBIE_DAMAGE,
-  ZOMBIE_FOLLOW_RANGE,
   type ArrowEntity,
   type Entity,
   type EntityId,
@@ -41,6 +25,7 @@ import {
   type MobEntity,
   type MobKind,
 } from "./entities.js";
+import { mobDef, mobsNearStructure, sizeOf, spawnPool, type ExplodesDef } from "./mobs.js";
 import {
   attackDamage,
   attackKnockback,
@@ -401,6 +386,8 @@ export class Simulation {
   }
 
   spawnMob(kind: MobKind, x: number, y: number, out: OutboundEvent[], dimension: Dimension = "overworld"): MobEntity {
+    const def = mobDef(kind);
+    if (!def) throw new Error(`spawnMob: unknown mob kind "${kind}"`);
     const entity: MobEntity = {
       id: this.nextId++,
       kind,
@@ -410,7 +397,7 @@ export class Simulation {
       vx: 0,
       vy: 0,
       onGround: false,
-      health: MOB_STATS[kind].health,
+      health: def.health,
       hurtCooldown: 0,
       attackCooldown: 0,
       wanderDir: 0,
@@ -764,10 +751,10 @@ export class Simulation {
     for (const entity of [...this.entities.values()]) {
       const prevX = entity.x;
       const prevY = entity.y;
-      const size = ENTITY_SIZES[entity.kind];
+      const size = sizeOf(entity.kind);
       const world = this.worldOf(entity.dimension);
 
-      if (entity.kind === "item") {
+      if (isItemEntity(entity)) {
         entity.age++;
         if (entity.pickupDelay > 0) entity.pickupDelay--;
         if (entity.age >= ITEM_DESPAWN_TICKS) {
@@ -795,7 +782,7 @@ export class Simulation {
             this.syncInventory(taker, out);
           }
         }
-      } else if (entity.kind === "arrow") {
+      } else if (isArrowEntity(entity)) {
         entity.ttl--;
         if (entity.ttl <= 0) {
           this.removeEntity(entity.id, out);
@@ -840,9 +827,11 @@ export class Simulation {
           if (!this.entities.has(entity.id)) continue;
         }
 
+        const mob = mobDef(entity.kind);
+
         // Daylight burning for undead (not in the nether).
         if (
-          BURNING_MOBS.includes(entity.kind) &&
+          mob?.burnsInDaylight &&
           entity.dimension === "overworld" &&
           this.tickCount % 40 === 0 &&
           daylightFactor(this.timeOfDay) > 0.5 &&
@@ -854,46 +843,50 @@ export class Simulation {
 
         let dir: -1 | 0 | 1 = 0;
         const target = this.nearestPlayer(entity.dimension, entity.x, entity.y);
-        const inRange =
-          target !== null &&
-          Math.abs(target.p.x - entity.x) <= ZOMBIE_FOLLOW_RANGE &&
-          target.dist <= ZOMBIE_FOLLOW_RANGE * 1.5;
+        /** Is the target within followRange (and not comically far by
+         * pure x-distance, for the tighter horizontal chase check)? */
+        const approaching = (followRange: number): boolean =>
+          target !== null && Math.abs(target.p.x - entity.x) <= followRange && target.dist <= followRange * 1.5;
 
-        if (MELEE_MOBS.includes(entity.kind)) {
-          if (target && inRange) {
+        const melee = mob?.melee;
+        const ranged = mob?.ranged;
+        const explodes = mob?.explodes;
+        if (melee) {
+          if (target && approaching(melee.followRange)) {
             const dx = target.p.x - entity.x;
             dir = Math.abs(dx) > 0.4 ? (dx > 0 ? 1 : -1) : 0;
             if (entity.attackCooldown === 0 && this.entityTouchesPlayer(entity, target.p)) {
-              entity.attackCooldown = ZOMBIE_ATTACK_COOLDOWN;
-              this.hurtPlayer(target.p, ZOMBIE_DAMAGE, out, entity.x);
+              entity.attackCooldown = melee.cooldown;
+              this.hurtPlayer(target.p, melee.damage, out, entity.x);
             }
           }
-        } else if (entity.kind === "skeleton") {
-          if (target && target.dist <= SKELETON_RANGE + 2) {
+        } else if (ranged) {
+          if (target && target.dist <= ranged.range + 2) {
             const dx = target.p.x - entity.x;
             // Kite: back off when close, approach when far.
-            dir = target.dist < 5 ? (dx > 0 ? -1 : 1) : target.dist > 9 ? (dx > 0 ? 1 : -1) : 0;
-            if (entity.attackCooldown === 0 && target.dist <= SKELETON_RANGE) {
-              entity.attackCooldown = SKELETON_SHOOT_COOLDOWN;
-              this.shootArrow(entity, target.p, out);
+            dir =
+              target.dist < ranged.kiteNear ? (dx > 0 ? -1 : 1) : target.dist > ranged.kiteFar ? (dx > 0 ? 1 : -1) : 0;
+            if (entity.attackCooldown === 0 && target.dist <= ranged.range) {
+              entity.attackCooldown = ranged.shootCooldown;
+              this.shootArrow(entity, target.p, ranged.damage, out);
             }
           }
-        } else if (entity.kind === "creeper") {
+        } else if (explodes) {
           if (entity.fuse !== undefined && entity.fuse >= 0) {
             // Hissing: stand still and count down.
             entity.fuse--;
             if (entity.fuse < 0) {
-              this.explode(entity, out);
+              this.explode(entity, explodes, out);
               continue;
             }
-          } else if (target && inRange) {
+          } else if (target && approaching(explodes.followRange)) {
             const dx = target.p.x - entity.x;
             dir = Math.abs(dx) > 0.4 ? (dx > 0 ? 1 : -1) : 0;
-            if (target.dist <= CREEPER_TRIGGER_RANGE) {
-              entity.fuse = CREEPER_FUSE;
+            if (target.dist <= explodes.triggerRange) {
+              entity.fuse = explodes.fuseTicks;
             }
           }
-        } else if (WANDERING_MOBS.includes(entity.kind)) {
+        } else if (mob?.wanders) {
           entity.wanderTimer--;
           if (entity.wanderTimer <= 0) {
             const roll = this.rng();
@@ -903,7 +896,7 @@ export class Simulation {
           dir = entity.wanderDir;
         }
 
-        entity.vx = dir * MOB_STATS[entity.kind].speed;
+        entity.vx = dir * (mob?.speed ?? 0);
         if (world.getBlockGenerating(Math.floor(entity.x), Math.floor(entity.y)) === BlockId.SoulSand) {
           entity.vx *= 0.4;
         }
@@ -956,22 +949,26 @@ export class Simulation {
       return false;
     };
 
-    // Villagers move into houses: if a house stands near the player and
-    // has no villager around, one appears.
+    // Structure-anchored mobs (villagers move into houses): if a
+    // structure with such a mob stands near the player and has no
+    // instance around yet, one appears. Generalizes past just
+    // villagers/houses to whatever a datapack mob declares via
+    // spawn.near_structure.
     if (anchor.dimension === "overworld" && this.tickCount % 200 === 0) {
       const pcx = Math.floor(anchor.x / CHUNK_WIDTH);
       for (let cx = pcx - 2; cx <= pcx + 2; cx++) {
         for (let cy = -2; cy <= 3; cy++) {
           for (const placement of placementsNear(world.seed, "overworld", cx, cy)) {
-            if (placement.structure.id !== "house") continue;
+            const residents = mobsNearStructure(placement.structure.id);
+            if (residents.length === 0) continue;
             const homeX = placement.originX + 3.5;
             const homeY = placement.originY + 4;
             let occupied = false;
             for (const e of this.entities.values()) {
-              if (e.kind === "villager" && Math.abs(e.x - homeX) < 20) occupied = true;
+              if (residents.includes(e.kind) && Math.abs(e.x - homeX) < 20) occupied = true;
             }
             if (!occupied) {
-              this.spawnMob("villager", homeX, homeY, out);
+              this.spawnMob(residents[0]!, homeX, homeY, out);
               return;
             }
           }
@@ -981,13 +978,13 @@ export class Simulation {
 
     if (anchor.dimension === "nether") {
       const yStart = 10 + Math.floor(this.rng() * 50);
-      spawnInPocket(yStart, yStart + 16, "zombified_piglin");
+      spawnInPocket(yStart, yStart + 16, pickMob(spawnPool("nether_pocket")));
       return;
     }
 
     const surface = surfaceHeight(world.seed, x);
     const night = isNight(this.timeOfDay);
-    const hostiles: readonly MobKind[] = ["zombie", "zombie", "skeleton", "creeper"];
+    const hostiles = spawnPool("hostile_surface");
     if (this.rng() < 0.5) {
       if (night) {
         // At night, hostile mobs rise on the surface instead of animals.
@@ -1002,7 +999,7 @@ export class Simulation {
       if (world.getBlockGenerating(x, surface) !== BlockId.Grass) return;
       const biome = biomeAt(world.seed, x);
       if (biome !== Biome.Plains && biome !== Biome.Forest) return;
-      this.spawnMob(pickMob(PASSIVE_MOBS), x + 0.5, surface, out);
+      this.spawnMob(pickMob(spawnPool("grass_day")), x + 0.5, surface, out);
     } else {
       const yStart = surface + 6 + Math.floor(this.rng() * 40);
       spawnInPocket(yStart, yStart + 12, pickMob(hostiles));
@@ -1329,7 +1326,7 @@ export class Simulation {
       out.push({ event: { type: "entity_hurt", id: entity.id, health: entity.health } });
       return;
     }
-    for (const loot of MOB_LOOT[entity.kind] ?? []) {
+    for (const loot of mobDef(entity.kind)?.loot ?? []) {
       const roll = this.rng();
       const countRoll = this.rng();
       if (roll < loot.chance) {
@@ -1340,8 +1337,8 @@ export class Simulation {
     this.removeEntity(entity.id, out);
   }
 
-  private shootArrow(from: MobEntity, target: PlayerState, out: OutboundEvent[]): void {
-    const originY = from.y - ENTITY_SIZES[from.kind].height * 0.75;
+  private shootArrow(from: MobEntity, target: PlayerState, damage: number, out: OutboundEvent[]): void {
+    const originY = from.y - sizeOf(from.kind).height * 0.75;
     const dx = target.x - from.x;
     const dy = target.y - PLAYER_HEIGHT / 2 - originY;
     const dist = Math.max(1, Math.hypot(dx, dy));
@@ -1355,7 +1352,7 @@ export class Simulation {
       // Arc the shot slightly upward for the travel time.
       vy: (dy / dist) * 0.6 - dist * 0.015,
       onGround: false,
-      damage: ARROW_DAMAGE,
+      damage,
       ttl: ARROW_TTL,
     };
     this.entities.set(arrow.id, arrow);
@@ -1364,20 +1361,20 @@ export class Simulation {
     });
   }
 
-  private explode(creeper: MobEntity, out: OutboundEvent[]): void {
+  private explode(creeper: MobEntity, def: ExplodesDef, out: OutboundEvent[]): void {
     const world = this.worldOf(creeper.dimension);
     const cx = creeper.x;
-    const cy = creeper.y - ENTITY_SIZES.creeper.height / 2;
+    const cy = creeper.y - sizeOf("creeper").height / 2;
     this.removeEntity(creeper.id, out);
 
     // Blast a crater (tough blocks survive; nothing drops).
-    const r = EXPLOSION_BLOCK_RADIUS;
+    const r = def.blockRadius;
     for (let ty = Math.floor(cy - r); ty <= Math.floor(cy + r); ty++) {
       for (let tx = Math.floor(cx - r); tx <= Math.floor(cx + r); tx++) {
         if (Math.hypot(tx + 0.5 - cx, ty + 0.5 - cy) > r) continue;
         const block = world.getBlockGenerating(tx, ty);
-        const def = blockDef(block);
-        if (block === BlockId.Air || def.hardness < 0 || def.hardness >= 100) continue;
+        const blockInfo = blockDef(block);
+        if (block === BlockId.Air || blockInfo.hardness < 0 || blockInfo.hardness >= 100) continue;
         world.setBlock(tx, ty, BlockId.Air);
         out.push({ event: { type: "block_changed", dim: creeper.dimension, x: tx, y: ty, block: BlockId.Air } });
       }
@@ -1387,17 +1384,17 @@ export class Simulation {
     for (const p of this.players.values()) {
       if (p.dimension !== creeper.dimension) continue;
       const dist = Math.hypot(p.x - cx, p.y - PLAYER_HEIGHT / 2 - cy);
-      if (dist > EXPLOSION_DAMAGE_RADIUS) continue;
+      if (dist > def.damageRadius) continue;
       p.hurtCooldown = 0; // explosions pierce invulnerability frames
-      this.hurtPlayer(p, Math.round(EXPLOSION_MAX_DAMAGE * (1 - dist / EXPLOSION_DAMAGE_RADIUS)), out, cx);
+      this.hurtPlayer(p, Math.round(def.maxDamage * (1 - dist / def.damageRadius)), out, cx);
     }
     for (const other of this.entities.values()) {
-      if (other.kind === "item" || other.kind === "arrow") continue;
+      if (isItemEntity(other) || isArrowEntity(other)) continue;
       if (other.dimension !== creeper.dimension) continue;
       const dist = Math.hypot(other.x - cx, other.y - cy);
-      if (dist > EXPLOSION_DAMAGE_RADIUS) continue;
+      if (dist > def.damageRadius) continue;
       other.hurtCooldown = 0;
-      this.hurtMob(other, Math.round(EXPLOSION_MAX_DAMAGE * (1 - dist / EXPLOSION_DAMAGE_RADIUS)), out, cx);
+      this.hurtMob(other, Math.round(def.maxDamage * (1 - dist / def.damageRadius)), out, cx);
     }
   }
 
@@ -1414,9 +1411,9 @@ export class Simulation {
   /** Mob whose AABB (expanded by radius) contains the point. */
   private mobNear(dimension: Dimension, x: number, y: number, radius: number): MobEntity | null {
     for (const entity of this.entities.values()) {
-      if (entity.kind === "item" || entity.kind === "arrow") continue;
+      if (isItemEntity(entity) || isArrowEntity(entity)) continue;
       if (entity.dimension !== dimension) continue;
-      const size = ENTITY_SIZES[entity.kind];
+      const size = sizeOf(entity.kind);
       const dx = Math.max(0, Math.abs(x - entity.x) - size.width / 2);
       const top = entity.y - size.height;
       const dy = y < top ? top - y : y > entity.y ? y - entity.y : 0;
@@ -1438,7 +1435,7 @@ export class Simulation {
   }
 
   private entityTouchesPlayer(entity: MobEntity, p: PlayerState): boolean {
-    const size = ENTITY_SIZES[entity.kind];
+    const size = sizeOf(entity.kind);
     const overlapsX = Math.abs(entity.x - p.x) < (size.width + PLAYER_WIDTH) / 2 + 0.2;
     const overlapsY = entity.y > p.y - PLAYER_HEIGHT - 0.2 && entity.y - size.height < p.y + 0.2;
     return overlapsX && overlapsY;
@@ -1608,7 +1605,7 @@ export class Simulation {
               dim: entity.dimension,
               x: entity.x,
               y: entity.y,
-              ...(entity.kind === "item" ? { stack: { ...entity.stack } } : {}),
+              ...(isItemEntity(entity) ? { stack: { ...entity.stack } } : {}),
             });
           }
           break;
@@ -1678,7 +1675,7 @@ export class Simulation {
             dim: entity.dimension,
             x: entity.x,
             y: entity.y,
-            ...(entity.kind === "item" ? { stack: { ...entity.stack } } : {}),
+            ...(isItemEntity(entity) ? { stack: { ...entity.stack } } : {}),
           });
         }
         break;
@@ -1931,11 +1928,11 @@ export class Simulation {
           break;
         }
         const entity = this.entities.get(command.entity);
-        if (!entity || entity.kind === "item" || entity.kind === "arrow" || entity.dimension !== p.dimension) {
+        if (!entity || isItemEntity(entity) || isArrowEntity(entity) || entity.dimension !== p.dimension) {
           reject("no such target");
           break;
         }
-        const size = ENTITY_SIZES[entity.kind];
+        const size = sizeOf(entity.kind);
         const dist = Math.hypot(entity.x - p.x, entity.y - size.height / 2 - (p.y - PLAYER_HEIGHT / 2));
         if (dist > ATTACK_REACH) {
           reject("out of reach");

@@ -1,0 +1,13 @@
+{
+  "id": "chicken",
+  "name": "Chicken",
+  "health": 4,
+  "speed": 0.05,
+  "size": { "width": 0.5, "height": 0.6 },
+  "wanders": true,
+  "loot": [
+    { "item": "chicken", "max": 1, "chance": 1 },
+    { "item": "feather", "max": 2, "chance": 0.7 }
+  ],
+  "spawn": { "group": "grass_day", "weight": 1 }
+}

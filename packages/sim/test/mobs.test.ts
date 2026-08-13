@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   BlockId,
-  CREEPER_FUSE,
   findSpawnX,
-  MOB_LOOT,
-  MOB_STATS,
+  isItemEntity,
+  mobDef,
   Simulation,
   surfaceHeight,
   type MobKind,
@@ -26,8 +25,8 @@ describe("new mobs", () => {
   it("every mob kind has stats and loot", () => {
     const kinds: MobKind[] = ["zombie", "skeleton", "creeper", "zombified_piglin", "pig", "cow", "sheep", "chicken"];
     for (const kind of kinds) {
-      expect(MOB_STATS[kind].health).toBeGreaterThan(0);
-      expect(MOB_LOOT[kind]).toBeDefined();
+      expect(mobDef(kind)!.health).toBeGreaterThan(0);
+      expect(mobDef(kind)!.loot).toBeDefined();
     }
   });
 
@@ -60,7 +59,8 @@ describe("new mobs", () => {
 
     let exploded = false;
     let blocksDestroyed = 0;
-    for (let i = 0; i < CREEPER_FUSE + 60 && !exploded; i++) {
+    const fuseTicks = mobDef("creeper")!.explodes!.fuseTicks;
+    for (let i = 0; i < fuseTicks + 60 && !exploded; i++) {
       const events = sim.tick([]);
       for (const o of events) {
         if (o.event.type === "entity_removed" && o.event.id === creeper.id) exploded = true;
@@ -82,8 +82,8 @@ describe("new mobs", () => {
       sim.tick([{ player, command: { type: "attack", entity: cow.id } }]);
     }
     expect(sim.entities.has(cow.id)).toBe(false);
-    const drops = [...sim.entities.values()].filter((e) => e.kind === "item");
-    const items = drops.map((d) => (d.kind === "item" ? d.stack.item : ""));
+    const drops = [...sim.entities.values()].filter(isItemEntity);
+    const items = drops.map((d) => d.stack.item);
     expect(items).toContain("beef");
   });
 

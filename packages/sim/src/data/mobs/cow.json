@@ -1,0 +1,13 @@
+{
+  "id": "cow",
+  "name": "Cow",
+  "health": 10,
+  "speed": 0.05,
+  "size": { "width": 0.9, "height": 1.2 },
+  "wanders": true,
+  "loot": [
+    { "item": "leather", "max": 2, "chance": 0.9 },
+    { "item": "beef", "max": 3, "chance": 1 }
+  ],
+  "spawn": { "group": "grass_day", "weight": 1 }
+}

@@ -1,0 +1,14 @@
+{
+  "id": "skeleton",
+  "name": "Skeleton",
+  "health": 20,
+  "speed": 0.09,
+  "size": { "width": 0.6, "height": 1.8 },
+  "ranged": { "damage": 3, "range": 12, "shoot_cooldown": 50, "kite_near": 5, "kite_far": 9 },
+  "burns_in_daylight": true,
+  "loot": [
+    { "item": "bone", "max": 2, "chance": 0.9 },
+    { "item": "arrow", "max": 2, "chance": 0.6 }
+  ],
+  "spawn": { "group": "hostile_surface", "weight": 1 }
+}

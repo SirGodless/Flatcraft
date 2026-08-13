@@ -8,6 +8,7 @@ import {
   PLAYER_HEIGHT,
   registerBlockJson,
   registerItemJson,
+  registerMobJson,
   resolveBlockLinks,
   Simulation,
   surfaceHeight,
@@ -224,7 +225,7 @@ async function applyServerDatapack(): Promise<void> {
     const response = await fetch("/api/datapack", { headers: { accept: "application/json" } });
     const contentType = response.headers.get("content-type") ?? "";
     if (!response.ok || !contentType.includes("application/json")) return;
-    const pack = (await response.json()) as { blocks?: unknown[]; items?: unknown[] };
+    const pack = (await response.json()) as { blocks?: unknown[]; items?: unknown[]; mobs?: unknown[] };
     for (const raw of pack.blocks ?? []) {
       registerBlockJson(raw, "server datapack");
     }
@@ -233,6 +234,9 @@ async function applyServerDatapack(): Promise<void> {
       registerItemJson(raw, "server datapack");
     }
     syncItemRecipes();
+    for (const raw of pack.mobs ?? []) {
+      registerMobJson(raw, "server datapack");
+    }
   } catch (error) {
     console.warn("server datapack failed to load:", error);
   }

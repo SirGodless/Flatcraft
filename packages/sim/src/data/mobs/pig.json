@@ -1,0 +1,10 @@
+{
+  "id": "pig",
+  "name": "Pig",
+  "health": 10,
+  "speed": 0.06,
+  "size": { "width": 0.9, "height": 0.9 },
+  "wanders": true,
+  "loot": [{ "item": "porkchop", "max": 2, "chance": 1 }],
+  "spawn": { "group": "grass_day", "weight": 1 }
+}

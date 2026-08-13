@@ -6,6 +6,7 @@ import type { AuthRequest, ClientMessage, ServerConnection, ServerInfo, ServerMe
 import {
   registerBlockJson,
   registerItemJson,
+  registerMobJson,
   resolveBlockLinks,
   Simulation,
   syncItemRecipes,
@@ -78,12 +79,13 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   const serverName = options.serverName ?? "FlatCraft";
   const clientDir = options.clientDir ? resolve(options.clientDir) : null;
 
-  // --- Server datapack (mods): DATA_DIR/datapack/{blocks,items,sprites} ---
+  // --- Server datapack (mods): DATA_DIR/datapack/{blocks,items,mobs,sprites} ---
   // Loaded before the world, so modded blocks resolve in the save palette;
   // the raw JSONs are re-served to clients via /api/datapack.
   const datapackDir = join(dataDir, "datapack");
   const packBlocks: unknown[] = [];
   const packItems: unknown[] = [];
+  const packMobs: unknown[] = [];
   const spritesDir = join(datapackDir, "sprites");
   const readPackDir = (sub: string, into: unknown[]): void => {
     const dir = join(datapackDir, sub);
@@ -95,6 +97,7 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   };
   readPackDir("blocks", packBlocks);
   readPackDir("items", packItems);
+  readPackDir("mobs", packMobs);
   for (const raw of packBlocks) {
     registerBlockJson(raw, "datapack/blocks");
   }
@@ -103,8 +106,11 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
     registerItemJson(raw, "datapack/items");
   }
   syncItemRecipes();
-  if (packBlocks.length > 0 || packItems.length > 0) {
-    log(`datapack loaded: ${packBlocks.length} blocks, ${packItems.length} items`);
+  for (const raw of packMobs) {
+    registerMobJson(raw, "datapack/mobs");
+  }
+  if (packBlocks.length > 0 || packItems.length > 0 || packMobs.length > 0) {
+    log(`datapack loaded: ${packBlocks.length} blocks, ${packItems.length} items, ${packMobs.length} mobs`);
   }
   // Sprites come from two places: the repo (shipped inside the client
   // build, dist/sprites) and the server datapack; the datapack wins on
@@ -174,7 +180,7 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
     }
     if (urlPath === "/api/datapack") {
       response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-      response.end(JSON.stringify({ blocks: packBlocks, items: packItems, sprites: spriteEntries }));
+      response.end(JSON.stringify({ blocks: packBlocks, items: packItems, mobs: packMobs, sprites: spriteEntries }));
       return;
     }
     if (urlPath === "/sprites/manifest.json") {

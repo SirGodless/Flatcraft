@@ -74,6 +74,39 @@ export interface BlockJson {
   furnace?: { speed?: number };
 }
 
+export interface MobJson {
+  id: string;
+  name?: string;
+  sprite?: string;
+  health: number;
+  speed: number;
+  size: { width: number; height: number };
+  /** Chases within follow_range and hits on contact. */
+  melee?: { damage: number; cooldown: number; follow_range: number };
+  /** Kites: backs off closer than kite_near, closes in past kite_far,
+   * fires an arrow whenever in range and off cooldown. */
+  ranged?: { damage: number; range: number; shoot_cooldown: number; kite_near: number; kite_far: number };
+  /** Approaches within follow_range, ignites within trigger_range, counts
+   * down fuse_ticks, then blows. */
+  explodes?: { follow_range: number; trigger_range: number; fuse_ticks: number; block_radius: number; damage_radius: number; max_damage: number };
+  /** Ambles in a random direction, changing every so often. */
+  wanders?: boolean;
+  /** Undead: takes damage standing in daylight (overworld only). */
+  burns_in_daylight?: boolean;
+  /** Death drops: item, max count (1..max rolled), chance. */
+  loot?: Array<{ item: string; max: number; chance: number }>;
+  /** Natural-spawn eligibility. group buckets this mob into one of the
+   * pools stepSpawning already rolls against; weight repeats it within
+   * that pool (2 = twice as likely as weight 1). near_structure anchors
+   * spawning to a placed structure (villagers appear near houses)
+   * instead of the ambient roll. */
+  spawn?: {
+    group?: "hostile_surface" | "grass_day" | "nether_pocket";
+    weight?: number;
+    near_structure?: string;
+  };
+}
+
 class SchemaError extends Error {
   constructor(source: string, message: string) {
     super(`datapack ${source}: ${message}`);
@@ -312,6 +345,87 @@ export function validateBlockJson(raw: unknown, source: string): BlockJson {
     checkKeys(source, "furnace.", furnace, ["speed"]);
     out.furnace = {};
     if (furnace["speed"] !== undefined) out.furnace.speed = needNumber(source, "furnace.speed", furnace["speed"], 0.1, 100);
+  }
+  return out;
+}
+
+export function validateMobJson(raw: unknown, source: string): MobJson {
+  const value = need<Record<string, unknown>>(source, "(root)", raw, "object");
+  checkKeys(source, "", value, [
+    "id", "name", "sprite", "health", "speed", "size", "melee", "ranged",
+    "explodes", "wanders", "burns_in_daylight", "loot", "spawn",
+  ]);
+  const size = need<Record<string, unknown>>(source, "size", value["size"], "object");
+  checkKeys(source, "size.", size, ["width", "height"]);
+  const out: MobJson = {
+    id: needId(source, "id", value["id"]),
+    health: needNumber(source, "health", value["health"], 1, 10_000),
+    speed: needNumber(source, "speed", value["speed"], 0, 10),
+    size: {
+      width: needNumber(source, "size.width", size["width"], 0.1, 10),
+      height: needNumber(source, "size.height", size["height"], 0.1, 10),
+    },
+  };
+  if (value["name"] !== undefined) out.name = need<string>(source, "name", value["name"], "string");
+  if (value["sprite"] !== undefined) out.sprite = need<string>(source, "sprite", value["sprite"], "string");
+  if (value["melee"] !== undefined) {
+    const melee = need<Record<string, unknown>>(source, "melee", value["melee"], "object");
+    checkKeys(source, "melee.", melee, ["damage", "cooldown", "follow_range"]);
+    out.melee = {
+      damage: needNumber(source, "melee.damage", melee["damage"], 0, 1000),
+      cooldown: needNumber(source, "melee.cooldown", melee["cooldown"], 1, 1000),
+      follow_range: needNumber(source, "melee.follow_range", melee["follow_range"], 1, 256),
+    };
+  }
+  if (value["ranged"] !== undefined) {
+    const ranged = need<Record<string, unknown>>(source, "ranged", value["ranged"], "object");
+    checkKeys(source, "ranged.", ranged, ["damage", "range", "shoot_cooldown", "kite_near", "kite_far"]);
+    out.ranged = {
+      damage: needNumber(source, "ranged.damage", ranged["damage"], 0, 1000),
+      range: needNumber(source, "ranged.range", ranged["range"], 1, 256),
+      shoot_cooldown: needNumber(source, "ranged.shoot_cooldown", ranged["shoot_cooldown"], 1, 1000),
+      kite_near: needNumber(source, "ranged.kite_near", ranged["kite_near"], 0, 256),
+      kite_far: needNumber(source, "ranged.kite_far", ranged["kite_far"], 0, 256),
+    };
+  }
+  if (value["explodes"] !== undefined) {
+    const explodes = need<Record<string, unknown>>(source, "explodes", value["explodes"], "object");
+    checkKeys(source, "explodes.", explodes, ["follow_range", "trigger_range", "fuse_ticks", "block_radius", "damage_radius", "max_damage"]);
+    out.explodes = {
+      follow_range: needNumber(source, "explodes.follow_range", explodes["follow_range"], 0, 256),
+      trigger_range: needNumber(source, "explodes.trigger_range", explodes["trigger_range"], 0, 256),
+      fuse_ticks: needNumber(source, "explodes.fuse_ticks", explodes["fuse_ticks"], 1, 1000),
+      block_radius: needNumber(source, "explodes.block_radius", explodes["block_radius"], 0, 64),
+      damage_radius: needNumber(source, "explodes.damage_radius", explodes["damage_radius"], 0, 64),
+      max_damage: needNumber(source, "explodes.max_damage", explodes["max_damage"], 0, 1000),
+    };
+  }
+  if (value["wanders"] !== undefined) out.wanders = need<boolean>(source, "wanders", value["wanders"], "boolean");
+  if (value["burns_in_daylight"] !== undefined) {
+    out.burns_in_daylight = need<boolean>(source, "burns_in_daylight", value["burns_in_daylight"], "boolean");
+  }
+  if (value["loot"] !== undefined) {
+    const list = need<unknown[]>(source, "loot", value["loot"], "array");
+    out.loot = list.map((entry, i) => {
+      const path = `loot[${i}].`;
+      const drop = need<Record<string, unknown>>(source, `loot[${i}]`, entry, "object");
+      checkKeys(source, path, drop, ["item", "max", "chance"]);
+      return {
+        item: needId(source, `${path}item`, drop["item"]),
+        max: needNumber(source, `${path}max`, drop["max"], 1, 64),
+        chance: needNumber(source, `${path}chance`, drop["chance"], 0, 1),
+      };
+    });
+  }
+  if (value["spawn"] !== undefined) {
+    const spawn = need<Record<string, unknown>>(source, "spawn", value["spawn"], "object");
+    checkKeys(source, "spawn.", spawn, ["group", "weight", "near_structure"]);
+    out.spawn = {};
+    if (spawn["group"] !== undefined) {
+      out.spawn.group = needOneOf(source, "spawn.group", spawn["group"], ["hostile_surface", "grass_day", "nether_pocket"] as const);
+    }
+    if (spawn["weight"] !== undefined) out.spawn.weight = needNumber(source, "spawn.weight", spawn["weight"], 1, 100);
+    if (spawn["near_structure"] !== undefined) out.spawn.near_structure = needId(source, "spawn.near_structure", spawn["near_structure"]);
   }
   return out;
 }
