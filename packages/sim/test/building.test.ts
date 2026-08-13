@@ -214,9 +214,57 @@ describe("liquids", () => {
       }
     }
     expect(volume).toBe(8);
-    for (let x = bx + 4; x <= bx + 6; x++) {
-      expect(blockDef(sim.world.getBlockGenerating(x, SURFACE)).liquid?.kind).toBe("water");
+    // It's not just conserved, it's flat: 8 units over 3 basin columns
+    // settle to the closest possible split (3+3+2), not a staircase.
+    const basinLevels = [bx + 4, bx + 5, bx + 6].map(
+      (x) => blockDef(sim.world.getBlockGenerating(x, SURFACE)).liquid?.level,
+    );
+    expect(basinLevels.reduce((a, b) => a! + b!, 0)).toBe(8);
+    expect(Math.max(...(basinLevels as number[])) - Math.min(...(basinLevels as number[]))).toBeLessThanOrEqual(1);
+  });
+
+  it("a pond on flat ground settles perfectly level, not a staircase", () => {
+    const sim = new Simulation(SEED);
+    const { player, state } = joinPlayer(sim);
+    sim.tick([{ player, command: { type: "set_creative", on: true } }]);
+    const bx = Math.floor(state.x) + 2;
+    const top = SURFACE - 6;
+    const width = 12;
+    // A sealed, flat-floored basin.
+    for (let x = bx - 1; x <= bx + width; x++) {
+      for (let y = top; y <= SURFACE; y++) setBlock(sim, x, y, BlockId.Air);
+      setBlock(sim, x, SURFACE, BlockId.Stone);
     }
+    for (let y = top; y <= SURFACE; y++) {
+      setBlock(sim, bx - 1, y, BlockId.Stone);
+      setBlock(sim, bx + width, y, BlockId.Stone);
+    }
+    // Pour water from one corner only, plugged so it must spread the
+    // full width to level out (24 units over 12 columns = 2 each).
+    setBlock(sim, bx, top, BlockId.Water);
+    setBlock(sim, bx, top + 1, BlockId.Water);
+    setBlock(sim, bx, top + 2, BlockId.Water);
+    setBlock(sim, bx + 1, top + 2, BlockId.Stone);
+
+    state.x = bx + 1.5;
+    state.y = top + 1;
+    state.vy = 0;
+    sim.tick([{ player, command: { type: "start_mining", x: bx + 1, y: top + 2 } }]);
+    for (let i = 0; i < 400; i++) sim.tick([]);
+
+    const levels = [];
+    for (let x = bx; x <= bx + width - 1; x++) {
+      levels.push(blockDef(sim.world.getBlockGenerating(x, SURFACE - 1)).liquid?.level ?? 0);
+    }
+    expect(levels).toEqual(new Array(width).fill(2));
+
+    // And it stays that way: no more liquid activity once settled.
+    let laterEvents = 0;
+    for (let i = 0; i < 100; i++) {
+      const out = sim.tick([]);
+      laterEvents += out.filter((o) => o.event.type === "block_changed").length;
+    }
+    expect(laterEvents).toBe(0);
   });
 
   it("flowing water emits at most one block_changed per cell per tick", () => {
