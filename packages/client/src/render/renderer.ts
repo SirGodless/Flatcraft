@@ -559,7 +559,7 @@ export class Renderer {
       }
       case "entity_spawned": {
         if (this.entities.has(event.id)) break;
-        const gfx = this.buildEntityGfx(event.kind, event.stack);
+        const gfx = this.buildEntityGfx(event.kind, event.id, event.stack);
         gfx.visible = event.dim === this.localDim;
         this.worldContainer.addChild(gfx);
         this.entities.set(event.id, {
@@ -744,10 +744,10 @@ export class Renderer {
     return sprite;
   }
 
-  private buildEntityGfx(kind: string, stack?: ItemStack): Container {
+  private buildEntityGfx(kind: string, entityId: EntityId, stack?: ItemStack): Container {
     if (kind === "item" && stack) {
       const container = new Container();
-      const texture = itemTexture(stack.item, this.blockTextures);
+      const texture = itemTexture(stack.item, this.blockTextures, entityId);
       if (texture) {
         const sprite = new Sprite(texture);
         sprite.width = TILE_PX * 0.5;
@@ -759,7 +759,7 @@ export class Renderer {
       return container;
     }
     {
-      const texture = entityTexture(kind);
+      const texture = entityTexture(kind, entityId);
       if (texture) {
         const container = new Container();
         const size = sizeOf(kind);
