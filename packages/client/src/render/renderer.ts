@@ -19,7 +19,7 @@ import {
 import { Camera } from "./camera.js";
 import { FogOfWar } from "./fog.js";
 import { itemTexture } from "./icons.js";
-import { mobTexture } from "./mobs.js";
+import { entityTexture } from "./entitySprites.js";
 import { createBlockTextures, TILE_PX } from "./textures.js";
 import {
   AirUI,
@@ -758,14 +758,19 @@ export class Renderer {
       }
       return container;
     }
-    if (kind !== "arrow") {
-      const texture = mobTexture(kind);
+    {
+      const texture = entityTexture(kind);
       if (texture) {
         const container = new Container();
         const size = sizeOf(kind);
         const sprite = new Sprite(texture);
         sprite.width = size.width * TILE_PX;
         sprite.height = size.height * TILE_PX;
+        if (kind === "arrow") {
+          // Centered anchor (not top-left, like every other kind here)
+          // so it can rotate in place - see the per-frame update loop.
+          sprite.anchor.set(0.5);
+        }
         container.addChild(sprite);
         return container;
       }
