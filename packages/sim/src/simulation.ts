@@ -546,44 +546,71 @@ export class Simulation {
           setBlockTracked(x, y + 1, BlockId.Obsidian);
         }
 
-        // 2) Spread: give one unit to a lower neighbor, alternating the
-        // preferred side per row so ponds settle symmetrically.
+        // 2) Drain: prefer a neighbor that itself hangs over a drop, so
+        // liquid keeps moving downhill (off ledges, down stairs) instead
+        // of settling on a step above open space. Alternates the
+        // preferred side per row so drainage looks symmetric.
         const order = (x + y) % 2 === 0 ? [-1, 1] : [1, -1];
-        if (level > 1) {
-          for (const dir of order) {
-            const nx = x + dir;
-            const neighborDef = blockDef(world.getBlockGenerating(nx, y));
-            if (neighborDef.liquid && neighborDef.liquid.kind !== liquid.kind) {
-              setBlockTracked(nx, y, BlockId.Obsidian);
-              continue;
-            }
-            const neighborLevel = neighborDef.liquid?.kind === liquid.kind ? neighborDef.liquid.level : isOpen(nx, y) ? 0 : null;
-            if (neighborLevel !== null && neighborLevel < level - 1) {
-              setLiquid(nx, y, liquid.kind, neighborLevel + 1);
-              level -= 1;
-              setLiquid(x, y, liquid.kind, level);
-              break;
-            }
+        let drained = false;
+        for (const dir of order) {
+          const nx = x + dir;
+          const neighborDef = blockDef(world.getBlockGenerating(nx, y));
+          if (neighborDef.liquid && neighborDef.liquid.kind !== liquid.kind) {
+            setBlockTracked(nx, y, BlockId.Obsidian);
+            continue;
           }
-        } else {
-          // 2b) Run-off: the last unit can't split, but it keeps moving
-          // when the neighbor cell hangs over a drop - so water runs
-          // down slopes and stairs instead of stranding a thin film on
-          // every step. It only ever moves toward a fall, which keeps
-          // puddles on flat ground stable (no back-and-forth).
-          for (const dir of order) {
-            const nx = x + dir;
-            if (!isOpen(nx, y)) continue;
-            const belowNeighbor = blockDef(world.getBlockGenerating(nx, y + 1));
-            const drop =
-              isOpen(nx, y + 1) ||
-              (belowNeighbor.liquid?.kind === liquid.kind && belowNeighbor.liquid.level < 8);
-            if (drop) {
-              setLiquid(nx, y, liquid.kind, 1);
-              setLiquid(x, y, liquid.kind, 0);
-              break;
-            }
+          const neighborLevel = neighborDef.liquid?.kind === liquid.kind ? neighborDef.liquid.level : isOpen(nx, y) ? 0 : null;
+          if (neighborLevel === null || neighborLevel >= 8) continue;
+          const belowNeighbor = blockDef(world.getBlockGenerating(nx, y + 1));
+          const drop =
+            isOpen(nx, y + 1) || (belowNeighbor.liquid?.kind === liquid.kind && belowNeighbor.liquid.level < 8);
+          if (drop) {
+            setLiquid(nx, y, liquid.kind, neighborLevel + 1);
+            level -= 1;
+            setLiquid(x, y, liquid.kind, level);
+            drained = true;
+            break;
           }
+        }
+        if (drained) continue; // the neighbor falls on its own turn next.
+
+        // 3) Level: flatten the resting run this cell belongs to (this
+        // row only, bounded by walls or a drop on either side) by
+        // spreading its total volume evenly. This is an exact solve
+        // instead of one-unit-at-a-time diffusion, so pools settle
+        // completely flat rather than getting stuck wherever
+        // neighboring cells merely differ by 1 - which a pairwise rule
+        // treats as "close enough" and a whole pond can end up as a
+        // permanent staircase of such differences.
+        if (level <= 0) continue;
+        const restsHere = (cx: number): boolean => {
+          const cdef = blockDef(world.getBlockGenerating(cx, y));
+          const isSameLiquid = cdef.liquid?.kind === liquid.kind;
+          if (!isSameLiquid && !isOpen(cx, y)) return false;
+          const belowDef2 = blockDef(world.getBlockGenerating(cx, y + 1));
+          const wouldFall = isOpen(cx, y + 1) || (belowDef2.liquid?.kind === liquid.kind && belowDef2.liquid.level < 8);
+          return !wouldFall;
+        };
+        const MAX_RUN_RADIUS = 64;
+        let left = x;
+        while (left > x - MAX_RUN_RADIUS && restsHere(left - 1)) left--;
+        let right = x;
+        while (right < x + MAX_RUN_RADIUS && restsHere(right + 1)) right++;
+        if (right === left) continue;
+        let total = 0;
+        for (let cx = left; cx <= right; cx++) {
+          const cdef = blockDef(world.getBlockGenerating(cx, y));
+          total += cdef.liquid?.kind === liquid.kind ? cdef.liquid.level : 0;
+        }
+        const count = right - left + 1;
+        const base = Math.floor(total / count);
+        let remainder = total - base * count;
+        for (let cx = left; cx <= right; cx++) {
+          const target = remainder > 0 ? base + 1 : base;
+          if (remainder > 0) remainder--;
+          const cdef = blockDef(world.getBlockGenerating(cx, y));
+          const current = cdef.liquid?.kind === liquid.kind ? cdef.liquid.level : 0;
+          if (current !== target) setLiquid(cx, y, liquid.kind, target);
         }
       }
 
