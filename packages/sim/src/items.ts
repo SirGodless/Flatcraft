@@ -1,5 +1,6 @@
 import { ITEM_JSONS } from "./data/items/index.js";
 import { validateItemJson, type RecipeJson } from "./registry/schema.js";
+import type { VisualDef } from "./registry/visual.js";
 import { blockByName, BlockId } from "./world/block.js";
 
 /**
@@ -68,6 +69,8 @@ export interface ItemDef {
   readonly enchants?: readonly string[] | undefined;
   /** Sprite path override (default sprites/item/<id>.png). */
   readonly sprite?: string | undefined;
+  /** Sprite variants/animation/shader. */
+  readonly visual?: VisualDef | undefined;
 }
 
 /**
@@ -167,6 +170,7 @@ export function registerItemJson(raw: unknown, source = "datapack"): ItemDef {
     ...(json.fuel_ticks !== undefined ? { fuelTicks: json.fuel_ticks } : {}),
     ...(json.enchants !== undefined ? { enchants: json.enchants } : {}),
     ...(json.sprite !== undefined ? { sprite: json.sprite } : {}),
+    ...(json.visual !== undefined ? { visual: json.visual } : {}),
   };
   defs.set(def.id, def);
   for (const recipe of json.recipes ?? []) {

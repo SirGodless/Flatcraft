@@ -39,6 +39,7 @@ describe("server datapack", () => {
         tool: "pickaxe",
         required_tier: 3,
         drops: { item: "ruby", amount: 1 },
+        visual: { variants: 3, shader: { id: "shimmer" } },
       }),
     );
     writeFileSync(
@@ -79,6 +80,7 @@ describe("server datapack", () => {
     expect(blockId).toBeDefined();
     expect(blockId!).toBeGreaterThanOrEqual(78); // dynamic id range
     expect(blockDef(blockId!).displayName).toBe("Ruby Block");
+    expect(blockDef(blockId!).visual).toEqual({ variants: 3, shader: { id: "shimmer" } });
     expect(itemDef("ruby")?.name).toBe("Ruby");
     expect(itemDef("ruby_block_item")?.block).toBe(blockId);
     expect(RECIPES.get("ruby")?.kind).toBe("crafting");
@@ -93,6 +95,7 @@ describe("server datapack", () => {
     expect(pack.blocks).toHaveLength(1);
     expect(pack.items).toHaveLength(2);
     expect(pack.mobs).toHaveLength(1);
+    expect((pack.blocks[0] as { visual?: unknown }).visual).toEqual({ variants: 3, shader: { id: "shimmer" } });
 
     // The world save's palette carries the mod block by name.
     server.gameServer.simulation.world.ensureChunk(0, 0);

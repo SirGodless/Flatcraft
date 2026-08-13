@@ -2,6 +2,7 @@ import { MOB_JSONS } from "./data/mobs/index.js";
 import type { EntitySize } from "./entities.js";
 import { NON_MOB_SIZES } from "./entities.js";
 import { validateMobJson } from "./registry/schema.js";
+import type { VisualDef } from "./registry/visual.js";
 
 /**
  * Mob registry. Every mob kind is defined by a datapack JSON file
@@ -67,6 +68,8 @@ export interface MobDef {
   readonly spawn?: MobSpawnDef;
   /** Sprite path override (default sprites/mob/<id>.png). */
   readonly sprite?: string;
+  /** Sprite variants/animation/shader. */
+  readonly visual?: VisualDef;
 }
 
 const defs = new Map<string, MobDef>();
@@ -125,6 +128,7 @@ export function registerMobJson(raw: unknown, source = "datapack"): MobDef {
       ? { spawn: { weight: json.spawn.weight ?? 1, ...(json.spawn.group !== undefined ? { group: json.spawn.group } : {}), ...(json.spawn.near_structure !== undefined ? { nearStructure: json.spawn.near_structure } : {}) } }
       : {}),
     ...(json.sprite !== undefined ? { sprite: json.sprite } : {}),
+    ...(json.visual !== undefined ? { visual: json.visual } : {}),
   };
   defs.set(def.id, def);
   return def;

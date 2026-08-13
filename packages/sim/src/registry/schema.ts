@@ -8,6 +8,31 @@
  * with the source file named, so typos never fail silently.
  */
 
+export interface AnimationClipJson {
+  /** Total frame count in this state's strip. */
+  frames: number;
+  /** Pixel width of one frame (frames tile horizontally in the sheet). */
+  frame_width: number;
+  fps: number;
+  /** Loop (idle/walk) or play once and hold/signal done (hurt/death). Default true. */
+  loop?: boolean;
+}
+
+export interface VisualJson {
+  /** Declared count of numbered sprite variants at the sprite's base
+   * path (sprites/<type>/<id>_0.png .. _<variants-1>.png), for visual
+   * variety (e.g. ore that doesn't look identical every tile). Default
+   * 1 (today's single-sprite behavior). */
+  variants?: number;
+  /** Named animation states (idle/walk/hurt/death/...), each its own
+   * sprite-sheet strip. */
+  animation?: { states: Record<string, AnimationClipJson> };
+  /** A named client-side shader effect (e.g. "shimmer"); unknown ids
+   * simply render with no effect, same as a missing sprite falls back
+   * to the procedural shape - never an error. */
+  shader?: { id: string; params?: Record<string, number | string | boolean> };
+}
+
 export interface RecipeJson {
   /** Where this recipe is crafted. */
   station: "inventory" | "crafting_table" | "furnace" | "brewing_stand";
@@ -34,6 +59,8 @@ export interface ItemJson {
   max_stack?: number;
   /** Sprite path override (default sprites/item/<id>.png). */
   sprite?: string;
+  /** Variants/animation/shader - see VisualJson. */
+  visual?: VisualJson;
   /** Block id (string) this item places. */
   places_block?: string;
   tool?: { kind: "pickaxe" | "axe" | "shovel" | "sword" | "hammer"; tier: number; mining_speed: number };
@@ -56,6 +83,8 @@ export interface BlockJson {
   id: string;
   name?: string;
   sprite?: string;
+  /** Variants/animation/shader - see VisualJson. */
+  visual?: VisualJson;
   solid: boolean;
   hardness: number;
   tool?: "pickaxe" | "axe" | "shovel";
@@ -78,6 +107,8 @@ export interface MobJson {
   id: string;
   name?: string;
   sprite?: string;
+  /** Variants/animation/shader - see VisualJson. */
+  visual?: VisualJson;
   health: number;
   speed: number;
   size: { width: number; height: number };
@@ -168,6 +199,59 @@ function needIngredientRef(source: string, path: string, value: unknown): string
   return cleaned;
 }
 
+function validateAnimationClipJson(raw: unknown, source: string, path: string): AnimationClipJson {
+  const value = need<Record<string, unknown>>(source, path, raw, "object");
+  checkKeys(source, `${path}.`, value, ["frames", "frame_width", "fps", "loop"]);
+  const out: AnimationClipJson = {
+    frames: needNumber(source, `${path}.frames`, value["frames"], 1, 64),
+    frame_width: needNumber(source, `${path}.frame_width`, value["frame_width"], 2, 128),
+    fps: needNumber(source, `${path}.fps`, value["fps"], 1, 60),
+  };
+  if (value["loop"] !== undefined) out.loop = need<boolean>(source, `${path}.loop`, value["loop"], "boolean");
+  return out;
+}
+
+/** Shared `visual` sub-validator, called identically from items/blocks/mobs
+ * - see VisualJson for field meanings. */
+function validateVisualJson(raw: unknown, source: string): VisualJson {
+  const value = need<Record<string, unknown>>(source, "visual", raw, "object");
+  checkKeys(source, "visual.", value, ["variants", "animation", "shader"]);
+  const out: VisualJson = {};
+  if (value["variants"] !== undefined) {
+    out.variants = needNumber(source, "visual.variants", value["variants"], 1, 16);
+  }
+  if (value["animation"] !== undefined) {
+    const animation = need<Record<string, unknown>>(source, "visual.animation", value["animation"], "object");
+    checkKeys(source, "visual.animation.", animation, ["states"]);
+    const states = need<Record<string, unknown>>(source, "visual.animation.states", animation["states"], "object");
+    const outStates: Record<string, AnimationClipJson> = {};
+    for (const [name, clip] of Object.entries(states)) {
+      if (!ID_PATTERN.test(name)) {
+        throw new SchemaError(source, `"visual.animation.states" key "${name}" must be a lowercase snake_case id`);
+      }
+      outStates[name] = validateAnimationClipJson(clip, source, `visual.animation.states.${name}`);
+    }
+    out.animation = { states: outStates };
+  }
+  if (value["shader"] !== undefined) {
+    const shader = need<Record<string, unknown>>(source, "visual.shader", value["shader"], "object");
+    checkKeys(source, "visual.shader.", shader, ["id", "params"]);
+    out.shader = { id: needId(source, "visual.shader.id", shader["id"]) };
+    if (shader["params"] !== undefined) {
+      const params = need<Record<string, unknown>>(source, "visual.shader.params", shader["params"], "object");
+      const outParams: Record<string, number | string | boolean> = {};
+      for (const [key, entry] of Object.entries(params)) {
+        if (typeof entry !== "number" && typeof entry !== "string" && typeof entry !== "boolean") {
+          throw new SchemaError(source, `"visual.shader.params.${key}" must be a number, string, or boolean`);
+        }
+        outParams[key] = entry;
+      }
+      out.shader.params = outParams;
+    }
+  }
+  return out;
+}
+
 function validateRecipeJson(raw: unknown, source: string, index: number): RecipeJson {
   const path = `recipes[${index}].`;
   const value = need<Record<string, unknown>>(source, `recipes[${index}]`, raw, "object");
@@ -220,13 +304,14 @@ function validateRecipeJson(raw: unknown, source: string, index: number): Recipe
 export function validateItemJson(raw: unknown, source: string): ItemJson {
   const value = need<Record<string, unknown>>(source, "(root)", raw, "object");
   checkKeys(source, "", value, [
-    "id", "name", "max_stack", "sprite", "places_block", "tool", "weapon", "food",
+    "id", "name", "max_stack", "sprite", "visual", "places_block", "tool", "weapon", "food",
     "armor", "shield", "grapple", "effect", "bucket", "container", "fuel_ticks", "enchants", "recipes",
   ]);
   const out: ItemJson = { id: needId(source, "id", value["id"]) };
   if (value["name"] !== undefined) out.name = need<string>(source, "name", value["name"], "string");
   if (value["max_stack"] !== undefined) out.max_stack = needNumber(source, "max_stack", value["max_stack"], 1, 64);
   if (value["sprite"] !== undefined) out.sprite = need<string>(source, "sprite", value["sprite"], "string");
+  if (value["visual"] !== undefined) out.visual = validateVisualJson(value["visual"], source);
   if (value["places_block"] !== undefined) out.places_block = needId(source, "places_block", value["places_block"]);
   if (value["tool"] !== undefined) {
     const tool = need<Record<string, unknown>>(source, "tool", value["tool"], "object");
@@ -302,7 +387,7 @@ export function validateItemJson(raw: unknown, source: string): ItemJson {
 export function validateBlockJson(raw: unknown, source: string): BlockJson {
   const value = need<Record<string, unknown>>(source, "(root)", raw, "object");
   checkKeys(source, "", value, [
-    "id", "name", "sprite", "solid", "hardness", "tool", "required_tier", "drops",
+    "id", "name", "sprite", "visual", "solid", "hardness", "tool", "required_tier", "drops",
     "side_permeable", "slab", "tall", "toggle_to", "liquid", "container", "furnace",
   ]);
   const out: BlockJson = {
@@ -312,6 +397,7 @@ export function validateBlockJson(raw: unknown, source: string): BlockJson {
   };
   if (value["name"] !== undefined) out.name = need<string>(source, "name", value["name"], "string");
   if (value["sprite"] !== undefined) out.sprite = need<string>(source, "sprite", value["sprite"], "string");
+  if (value["visual"] !== undefined) out.visual = validateVisualJson(value["visual"], source);
   if (value["tool"] !== undefined) out.tool = needOneOf(source, "tool", value["tool"], ["pickaxe", "axe", "shovel"] as const);
   if (value["required_tier"] !== undefined) out.required_tier = needNumber(source, "required_tier", value["required_tier"], 0, 8);
   if (value["drops"] !== undefined) {
@@ -355,7 +441,7 @@ export function validateBlockJson(raw: unknown, source: string): BlockJson {
 export function validateMobJson(raw: unknown, source: string): MobJson {
   const value = need<Record<string, unknown>>(source, "(root)", raw, "object");
   checkKeys(source, "", value, [
-    "id", "name", "sprite", "health", "speed", "size", "melee", "ranged",
+    "id", "name", "sprite", "visual", "health", "speed", "size", "melee", "ranged",
     "explodes", "wanders", "burns_in_daylight", "loot", "equipment", "spawn",
   ]);
   const size = need<Record<string, unknown>>(source, "size", value["size"], "object");
@@ -371,6 +457,7 @@ export function validateMobJson(raw: unknown, source: string): MobJson {
   };
   if (value["name"] !== undefined) out.name = need<string>(source, "name", value["name"], "string");
   if (value["sprite"] !== undefined) out.sprite = need<string>(source, "sprite", value["sprite"], "string");
+  if (value["visual"] !== undefined) out.visual = validateVisualJson(value["visual"], source);
   if (value["melee"] !== undefined) {
     const melee = need<Record<string, unknown>>(source, "melee", value["melee"], "object");
     checkKeys(source, "melee.", melee, ["damage", "cooldown", "follow_range"]);

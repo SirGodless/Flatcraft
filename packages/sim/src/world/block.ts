@@ -1,5 +1,6 @@
 import { BLOCK_JSONS } from "../data/blocks/index.js";
 import { validateBlockJson } from "../registry/schema.js";
+import type { VisualDef } from "../registry/visual.js";
 
 /**
  * Block registry. The canonical identity of a block is its string id
@@ -135,6 +136,8 @@ export interface BlockDef {
   readonly furnace?: { speed: number };
   /** Sprite path override (default sprites/block/<name>.png). */
   readonly sprite?: string;
+  /** Sprite variants/animation/shader. */
+  readonly visual?: VisualDef;
 }
 
 const defs = new Map<BlockId, BlockDef>();
@@ -186,6 +189,7 @@ export function registerBlockJson(raw: unknown, source = "datapack"): BlockDef {
     ...(json.container !== undefined ? { container: json.container.slots } : {}),
     ...(json.furnace !== undefined ? { furnace: { speed: json.furnace.speed ?? 1 } } : {}),
     ...(json.sprite !== undefined ? { sprite: json.sprite } : {}),
+    ...(json.visual !== undefined ? { visual: json.visual } : {}),
   };
   defs.set(id, def);
   byName.set(json.id, id);
