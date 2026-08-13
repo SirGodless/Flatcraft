@@ -1317,6 +1317,7 @@ export class Simulation {
     }
     if (entity.armor) this.spawnItem(entity.dimension, entity.x, entity.y - 0.5, entity.armor, out);
     if (entity.offhand) this.spawnItem(entity.dimension, entity.x, entity.y - 0.5, entity.offhand, out);
+    out.push({ event: { type: "entity_died", id: entity.id, kind: entity.kind } });
     this.removeEntity(entity.id, out);
   }
 
@@ -1348,6 +1349,7 @@ export class Simulation {
     const world = this.worldOf(creeper.dimension);
     const cx = creeper.x;
     const cy = creeper.y - sizeOf("creeper").height / 2;
+    out.push({ event: { type: "entity_died", id: creeper.id, kind: creeper.kind } });
     this.removeEntity(creeper.id, out);
 
     // Blast a crater (tough blocks survive; nothing drops).

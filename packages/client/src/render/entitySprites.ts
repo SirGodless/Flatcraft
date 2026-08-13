@@ -34,24 +34,33 @@ export function entityTexture(kind: string, variantSeed?: number): Texture | und
   return SPRITE_OVERRIDES.get(`entity/${kind}${suffix}`);
 }
 
+export interface AnimationClip {
+  frames: number;
+  frameWidth: number;
+  fps: number;
+  loop: boolean;
+  sheet: Texture;
+}
+
 /**
- * A mob kind's animation sheet, if its def declares `visual.animation`
- * AND the corresponding sprite-sheet file (sprites/mob/<kind>_<state>.png)
- * is actually present - stage d plays a single default clip (no state
- * machine yet, that's stage e), preferring "idle" if declared, else
- * whichever state comes first. Missing sheet file simply means: no
- * animation, caller falls back to entityTexture()'s single-frame path.
+ * Every named animation state a mob kind declares, for whichever ones
+ * actually have their sprite-sheet file present
+ * (sprites/mob/<kind>_<state>.png) - a state without a file simply
+ * doesn't appear here (not fatal; the state machine just can't play
+ * it, same "missing sprite -> no crash" rule as everywhere else). Empty
+ * / undefined means: no animation, caller falls back to
+ * entityTexture()'s single-frame path.
  */
-export function entityAnimation(kind: string): { clip: { frames: number; frameWidth: number; fps: number; loop: boolean }; sheet: Texture } | undefined {
+export function entityAnimationStates(kind: string): Record<string, AnimationClip> | undefined {
   const def = mobDef(kind);
   const states = def?.visual?.animation?.states;
   if (!states) return undefined;
-  const stateName = states["idle"] !== undefined ? "idle" : Object.keys(states)[0];
-  if (stateName === undefined) return undefined;
-  const clip = states[stateName];
-  if (!clip) return undefined;
   const baseKey = spriteKey(def!.sprite) ?? `mob/${kind}`;
-  const sheet = SPRITE_OVERRIDES.get(`${baseKey}_${stateName}`);
-  if (!sheet) return undefined;
-  return { clip: { frames: clip.frames, frameWidth: clip.frame_width, fps: clip.fps, loop: clip.loop ?? true }, sheet };
+  const result: Record<string, AnimationClip> = {};
+  for (const [name, clip] of Object.entries(states)) {
+    const sheet = SPRITE_OVERRIDES.get(`${baseKey}_${name}`);
+    if (!sheet) continue;
+    result[name] = { frames: clip.frames, frameWidth: clip.frame_width, fps: clip.fps, loop: clip.loop ?? true, sheet };
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
 }

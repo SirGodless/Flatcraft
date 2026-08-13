@@ -47,6 +47,12 @@ export type SimEvent =
   | { type: "entity_spawned"; id: EntityId; kind: string; dim: Dimension; x: number; y: number; stack?: ItemStack }
   | { type: "entity_moved"; id: EntityId; x: number; y: number }
   | { type: "entity_hurt"; id: EntityId; health: number }
+  /** Fired right before entity_removed, only on an actual death (lethal
+   * hit or explosion) - never on despawn, pickup, or arrow expiry, which
+   * also remove an entity but aren't a death. Pure presentation signal
+   * (like entity_hurt): drives a client-side death animation, carries no
+   * authoritative state of its own. */
+  | { type: "entity_died"; id: EntityId; kind: string }
   | { type: "entity_removed"; id: EntityId }
   | { type: "block_changed"; dim: Dimension; x: number; y: number; block: BlockId }
   /** Background wall layer changed (hammer mining / wall placement). */

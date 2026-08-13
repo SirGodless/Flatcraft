@@ -19,7 +19,7 @@ import {
 import { Camera } from "./camera.js";
 import { FogOfWar } from "./fog.js";
 import { itemTexture } from "./icons.js";
-import { entityAnimation, entityTexture } from "./entitySprites.js";
+import { entityAnimationStates, entityTexture } from "./entitySprites.js";
 import { createBlockTextures, createBlockTextureVariants, TILE_PX } from "./textures.js";
 import {
   AirUI,
@@ -65,17 +65,30 @@ interface PlayerMarker {
   offSprite: Sprite | null;
 }
 
-/** Sprite-sheet playback state, advanced manually every frame (draw()
- * loop, alongside position/rotation/tint) rather than via PixiJS's
- * AnimatedSprite autoplay - this app's Application uses its own
- * private ticker (not Ticker.shared), which is what AnimatedSprite's
- * default autoUpdate hooks into, so autoplay never actually ticks here. */
-interface EntityAnimationView {
-  sprite: Sprite;
+/** A single named state's pre-sliced frame textures and playback rate. */
+interface EntityAnimationState {
   frames: Texture[];
   fps: number;
   loop: boolean;
+}
+
+/** Sprite-sheet playback state: which named state is currently showing
+ * and since when, advanced manually every frame (draw() loop, alongside
+ * position/rotation/tint) rather than via PixiJS's AnimatedSprite
+ * autoplay - this app's Application uses its own private ticker (not
+ * Ticker.shared), which is what AnimatedSprite's default autoUpdate
+ * hooks into, so autoplay never actually ticks here. See requestAnim()
+ * for the state machine (transitions, priority) driving `current`. */
+interface EntityAnimationView {
+  sprite: Sprite;
+  states: Record<string, EntityAnimationState>;
+  current: string;
   startedAt: number;
+  priority: number;
+  /** Set once a death clip starts; entity_removed defers actually
+   * destroying the entity until the clip finishes instead of cutting
+   * it off mid-animation. */
+  pendingRemoval: boolean;
 }
 
 interface EntityView {
@@ -89,7 +102,20 @@ interface EntityView {
   updatedAt: number;
   hurtAt: number;
   anim?: EntityAnimationView;
+  /** Set by entity_removed when a death clip is still playing; the draw
+   * loop performs the actual destroy/delete once it finishes. */
+  removeRequested: boolean;
 }
+
+/** Continuous states (idle/walk) are mutually exclusive and always
+ * overridable; one-shots (attack/hurt/death) play to completion before
+ * anything at their priority or below can take over. Mob/remote-player
+ * attack animation isn't wired up yet (no sim signal exists for "who
+ * attacked" beyond the local player's own command - see the visual
+ * system plan's stage e notes), but the slot is reserved here so
+ * that's a pure addition later, not a schema change. */
+const ANIM_PRIORITY: Record<string, number> = { idle: 0, walk: 0, attack: 1, hurt: 2, death: 3 };
+const ANIM_ONE_SHOT = new Set(["attack", "hurt", "death"]);
 
 /**
  * Rendering layer. Consumes SimEvents and draws; it never mutates game
@@ -587,6 +613,7 @@ export class Renderer {
           y: event.y,
           updatedAt: performance.now(),
           hurtAt: 0,
+          removeRequested: false,
           ...(anim ? { anim } : {}),
         });
         break;
@@ -603,14 +630,36 @@ export class Renderer {
       }
       case "entity_hurt": {
         const view = this.entities.get(event.id);
-        if (view) view.hurtAt = performance.now();
+        if (view) {
+          view.hurtAt = performance.now();
+          if (view.anim) this.requestAnim(view, "hurt", view.hurtAt);
+        }
+        break;
+      }
+      case "entity_died": {
+        const view = this.entities.get(event.id);
+        if (view?.anim?.states["death"]) {
+          const now = performance.now();
+          this.requestAnim(view, "death", now);
+          view.anim.pendingRemoval = true;
+        }
         break;
       }
       case "entity_removed": {
         const view = this.entities.get(event.id);
         if (view) {
-          view.gfx.destroy({ children: true });
-          this.entities.delete(event.id);
+          const anim = view.anim;
+          const deathClip = anim?.pendingRemoval ? anim.states["death"] : undefined;
+          const deathStillPlaying =
+            deathClip !== undefined &&
+            anim!.current === "death" &&
+            performance.now() - anim!.startedAt < this.clipDurationMs(deathClip);
+          if (deathStillPlaying) {
+            view.removeRequested = true;
+          } else {
+            view.gfx.destroy({ children: true });
+            this.entities.delete(event.id);
+          }
         }
         break;
       }
@@ -760,6 +809,32 @@ export class Renderer {
     return sprite;
   }
 
+  private clipDurationMs(state: EntityAnimationState): number {
+    return (state.frames.length / state.fps) * 1000;
+  }
+
+  /** Animation state machine transition: applies the priority/one-shot
+   * rules from the visual system plan (higher priority always
+   * interrupts, even mid-clip; a playing one-shot blocks anything at
+   * its priority or below; continuous states never restart themselves
+   * to avoid stutter, but do restart a same-named one-shot). */
+  private requestAnim(view: EntityView, state: string, now: number): void {
+    const anim = view.anim;
+    if (!anim || !anim.states[state]) return;
+    const priority = ANIM_PRIORITY[state] ?? 0;
+    if (ANIM_ONE_SHOT.has(anim.current) && priority <= anim.priority && state !== anim.current) {
+      const stillPlaying = now - anim.startedAt < this.clipDurationMs(anim.states[anim.current]!);
+      if (stillPlaying) return;
+    }
+    if (state === anim.current) {
+      if (ANIM_ONE_SHOT.has(state)) anim.startedAt = now;
+      return;
+    }
+    anim.current = state;
+    anim.priority = priority;
+    anim.startedAt = now;
+  }
+
   private buildEntityGfx(kind: string, entityId: EntityId, stack?: ItemStack): { gfx: Container; anim?: EntityAnimationView } {
     if (kind === "item" && stack) {
       const container = new Container();
@@ -775,30 +850,35 @@ export class Renderer {
       return { gfx: container };
     }
     {
-      const anim = entityAnimation(kind);
-      const frames: Texture[] = [];
-      if (anim) {
-        const frameCount = Math.min(anim.clip.frames, Math.floor(anim.sheet.width / anim.clip.frameWidth));
-        for (let i = 0; i < frameCount; i++) {
-          frames.push(
-            new Texture({
-              source: anim.sheet.source,
-              frame: new Rectangle(i * anim.clip.frameWidth, 0, anim.clip.frameWidth, anim.sheet.height),
-            }),
-          );
+      const clips = entityAnimationStates(kind);
+      if (clips) {
+        const states: Record<string, EntityAnimationState> = {};
+        for (const [name, clip] of Object.entries(clips)) {
+          const frameCount = Math.min(clip.frames, Math.floor(clip.sheet.width / clip.frameWidth));
+          const frames: Texture[] = [];
+          for (let i = 0; i < frameCount; i++) {
+            frames.push(
+              new Texture({
+                source: clip.sheet.source,
+                frame: new Rectangle(i * clip.frameWidth, 0, clip.frameWidth, clip.sheet.height),
+              }),
+            );
+          }
+          if (frames.length > 0) states[name] = { frames, fps: clip.fps, loop: clip.loop };
         }
-      }
-      if (anim && frames.length > 0) {
-        const container = new Container();
-        const size = sizeOf(kind);
-        const sprite = new Sprite(frames[0]);
-        sprite.width = size.width * TILE_PX;
-        sprite.height = size.height * TILE_PX;
-        container.addChild(sprite);
-        return {
-          gfx: container,
-          anim: { sprite, frames, fps: anim.clip.fps, loop: anim.clip.loop, startedAt: performance.now() },
-        };
+        const initial = states["idle"] ? "idle" : Object.keys(states)[0];
+        if (initial !== undefined) {
+          const container = new Container();
+          const size = sizeOf(kind);
+          const sprite = new Sprite(states[initial]!.frames[0]);
+          sprite.width = size.width * TILE_PX;
+          sprite.height = size.height * TILE_PX;
+          container.addChild(sprite);
+          return {
+            gfx: container,
+            anim: { sprite, states, current: initial, startedAt: performance.now(), priority: 0, pendingRemoval: false },
+          };
+        }
       }
     }
     {
@@ -966,7 +1046,8 @@ export class Renderer {
       }
     }
 
-    for (const view of this.entities.values()) {
+    const finishedDeaths: EntityId[] = [];
+    for (const [id, view] of this.entities) {
       const alpha = Math.min(1, (now - view.updatedAt) / TICK_MS);
       const x = view.prevX + (view.x - view.prevX) * alpha;
       const y = view.prevY + (view.y - view.prevY) * alpha;
@@ -985,13 +1066,31 @@ export class Renderer {
       }
       view.gfx.tint = now - view.hurtAt < 150 ? 0xff6060 : 0xffffff;
       if (view.anim) {
-        const { sprite, frames, fps, loop, startedAt } = view.anim;
-        const elapsedFrames = ((now - startedAt) / 1000) * fps;
-        const frameIndex = loop
-          ? Math.floor(elapsedFrames) % frames.length
-          : Math.min(frames.length - 1, Math.floor(elapsedFrames));
-        sprite.texture = frames[frameIndex]!;
+        if (!view.anim.pendingRemoval) {
+          const moved = view.x !== view.prevX || view.y !== view.prevY;
+          this.requestAnim(view, moved ? "walk" : "idle", now);
+        }
+        const state = view.anim.states[view.anim.current];
+        if (state) {
+          const elapsedFrames = ((now - view.anim.startedAt) / 1000) * state.fps;
+          const frameIndex = state.loop
+            ? Math.floor(elapsedFrames) % state.frames.length
+            : Math.min(state.frames.length - 1, Math.floor(elapsedFrames));
+          view.anim.sprite.texture = state.frames[frameIndex]!;
+          if (
+            view.removeRequested &&
+            view.anim.current === "death" &&
+            now - view.anim.startedAt >= this.clipDurationMs(state)
+          ) {
+            finishedDeaths.push(id);
+          }
+        }
       }
+    }
+    for (const id of finishedDeaths) {
+      const view = this.entities.get(id);
+      if (view) view.gfx.destroy({ children: true });
+      this.entities.delete(id);
     }
 
     if (localX !== null && localY !== null) {
