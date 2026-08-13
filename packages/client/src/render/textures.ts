@@ -1,6 +1,6 @@
 import { Texture } from "pixi.js";
-import { allBlocks, BlockId } from "@flatcraft/sim";
-import { SPRITE_OVERRIDES } from "./sprites.js";
+import { allBlocks, BlockId, hash01 } from "@flatcraft/sim";
+import { spriteKey, SPRITE_OVERRIDES } from "./sprites.js";
 
 /** On-screen size of one tile at zoom 1, and texture resolution per block. */
 export const TILE_PX = 16;
@@ -174,12 +174,15 @@ function lcg(seed: number): () => number {
   };
 }
 
-function makeBlockTexture(id: BlockId, style: BlockStyle): Texture {
+/** `variant` picks a distinct-but-still-deterministic noise seed, so a
+ * block with declared visual.variants gets free procedural variety
+ * even without any sprite files (createBlockTextureVariants below). */
+function makeBlockTexture(id: BlockId, style: BlockStyle, variant = 0): Texture {
   const canvas = document.createElement("canvas");
   canvas.width = TILE_PX;
   canvas.height = TILE_PX;
   const ctx = canvas.getContext("2d")!;
-  const rand = lcg(0xf1a7 + id * 7919);
+  const rand = lcg(0xf1a7 + id * 7919 + variant * 104729);
   ctx.globalAlpha = style.alpha ?? 1;
 
   for (let y = 0; y < TILE_PX; y++) {
@@ -256,4 +259,52 @@ export function createBlockTextures(): Map<BlockId, Texture> {
     }
   }
   return textures;
+}
+
+/** Distinguishes this hash use from icons.ts's/entitySprites.ts's own
+ * VARIANT_SALT (each only needs to be internally consistent). */
+const VARIANT_SALT = 0x2;
+
+/**
+ * Per-tile texture variants for blocks whose def declares
+ * `visual.variants > 1` (e.g. an ore that shouldn't look identical
+ * every tile) - sparse, only block ids that opt in get an entry.
+ * Procedural blocks (STYLES) get distinctly-seeded variants for free,
+ * no sprite files required; sprite-backed blocks look for numbered
+ * files (block/<name>_0.png, _1.png, ...), falling back to the block's
+ * single base texture for any variant whose file is missing - never
+ * invisible, same rule every other sprite lookup here follows.
+ */
+export function createBlockTextureVariants(base: Map<BlockId, Texture>): Map<BlockId, Texture[]> {
+  const variants = new Map<BlockId, Texture[]>();
+  for (const def of allBlocks()) {
+    const count = def.visual?.variants ?? 1;
+    if (count <= 1) continue;
+    const style = STYLES[def.id];
+    const key = spriteKey(def.sprite) ?? `block/${def.name}`;
+    const textures: Texture[] = [];
+    for (let i = 0; i < count; i++) {
+      const sprite = SPRITE_OVERRIDES.get(`${key}_${i}`);
+      textures.push(sprite ?? (style ? makeBlockTexture(def.id, style, i) : base.get(def.id)!));
+    }
+    variants.set(def.id, textures);
+  }
+  return variants;
+}
+
+/** The texture for one specific tile: a deterministic variant pick when
+ * the block id has any (every client computes the same index from the
+ * same world position, no sync needed), else the block's single base
+ * texture - identical behavior to before variants existed. */
+export function pickBlockTexture(
+  base: Map<BlockId, Texture>,
+  variants: Map<BlockId, Texture[]>,
+  id: BlockId,
+  worldX: number,
+  worldY: number,
+): Texture | undefined {
+  const textures = variants.get(id);
+  if (!textures || textures.length <= 1) return base.get(id);
+  const index = Math.floor(hash01(id, worldX, worldY, VARIANT_SALT) * textures.length);
+  return textures[index];
 }

@@ -1,7 +1,10 @@
 import { GameServer, createLoopbackPair, INFO_PATH, type ClientConnection, type ServerInfo } from "@flatcraft/server";
 import {
   addToInventory,
+  blockByName,
   buildPortal,
+  CHUNK_HEIGHT,
+  CHUNK_WIDTH,
   chunkKey,
   findSpawnX,
   itemDef,
@@ -327,6 +330,24 @@ async function startSingleplayer(): Promise<void> {
     const sy = surfaceHeight(sim.world.seed, sx) - 1;
     buildPortal(sim.world, sx + 3, sy);
     sim.portals.overworld.set(`${sx + 3},${sy}`, { x: sx + 3, y: sy });
+  }
+  // Debug: ?fillblock=name:count places a horizontal strip below spawn
+  // (e.g. to eyeball sprite-variant variety across many tiles of one id).
+  const fillBlock = params.get("fillblock");
+  if (fillBlock) {
+    const [name, countStr] = fillBlock.split(":");
+    const blockId = name ? blockByName(name) : undefined;
+    if (blockId !== undefined) {
+      const sim = server.simulation;
+      const sx = findSpawnX(sim.world.seed);
+      const sy = surfaceHeight(sim.world.seed, sx);
+      const count = Number(countStr ?? "20");
+      for (let i = 0; i < count; i++) {
+        const x = sx + i;
+        sim.world.ensureChunk(Math.floor(x / CHUNK_WIDTH), Math.floor((sy + 2) / CHUNK_HEIGHT));
+        sim.world.setBlock(x, sy + 2, blockId);
+      }
+    }
   }
 
   const playerId = server.simulation.allocatePlayerId();

@@ -20,7 +20,7 @@ import { Camera } from "./camera.js";
 import { FogOfWar } from "./fog.js";
 import { itemTexture } from "./icons.js";
 import { entityTexture } from "./entitySprites.js";
-import { createBlockTextures, TILE_PX } from "./textures.js";
+import { createBlockTextures, createBlockTextureVariants, TILE_PX } from "./textures.js";
 import {
   AirUI,
   ContainerPanelUI,
@@ -166,7 +166,8 @@ export class Renderer {
 
     const blockTextures = createBlockTextures();
     this.blockTextures = blockTextures;
-    this.worldView = new WorldView(this.app.renderer, blockTextures);
+    const blockTextureVariants = createBlockTextureVariants(blockTextures);
+    this.worldView = new WorldView(this.app.renderer, blockTextures, blockTextureVariants);
     this.worldContainer.addChild(this.worldView.container);
     this.app.stage.addChild(this.worldContainer);
     this.fog = new FogOfWar(blockTextures);

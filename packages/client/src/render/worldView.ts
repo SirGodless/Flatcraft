@@ -1,11 +1,13 @@
 import { Container, RenderTexture, Sprite, type Renderer as PixiRenderer, type Texture } from "pixi.js";
 import { BlockId, CHUNK_HEIGHT, CHUNK_WIDTH, chunkKey } from "@flatcraft/sim";
-import { TILE_PX } from "./textures.js";
+import { pickBlockTexture, TILE_PX } from "./textures.js";
 
 export const CHUNK_PX_W = CHUNK_WIDTH * TILE_PX;
 export const CHUNK_PX_H = CHUNK_HEIGHT * TILE_PX;
 
 interface ChunkView {
+  cx: number;
+  cy: number;
   tiles: Uint16Array;
   walls: Uint16Array;
   sprite: Sprite;
@@ -28,6 +30,7 @@ export class WorldView {
   constructor(
     private readonly renderer: PixiRenderer,
     private readonly blockTextures: Map<BlockId, Texture>,
+    private readonly blockTextureVariants: Map<BlockId, Texture[]>,
   ) {}
 
   hasChunk(cx: number, cy: number): boolean {
@@ -65,6 +68,8 @@ export class WorldView {
       sprite.position.set(cx * CHUNK_PX_W, cy * CHUNK_PX_H);
       this.container.addChild(sprite);
       view = {
+        cx,
+        cy,
         tiles: new Uint16Array(tiles),
         walls: walls ? new Uint16Array(walls) : new Uint16Array(tiles.length),
         sprite,
@@ -119,7 +124,9 @@ export class WorldView {
       for (let lx = 0; lx < CHUNK_WIDTH; lx++) {
         const wall = (view.walls[ly * CHUNK_WIDTH + lx] ?? 0) as BlockId;
         if (wall === BlockId.Air) continue;
-        const texture = this.blockTextures.get(wall);
+        const worldX = view.cx * CHUNK_WIDTH + lx;
+        const worldY = view.cy * CHUNK_HEIGHT + ly;
+        const texture = pickBlockTexture(this.blockTextures, this.blockTextureVariants, wall, worldX, worldY);
         if (!texture) continue;
         const sprite = new Sprite(texture);
         sprite.tint = 0x5a5a66;
@@ -131,7 +138,9 @@ export class WorldView {
       for (let lx = 0; lx < CHUNK_WIDTH; lx++) {
         const id = (view.tiles[ly * CHUNK_WIDTH + lx] ?? 0) as BlockId;
         if (id === BlockId.Air) continue;
-        const texture = this.blockTextures.get(id);
+        const worldX = view.cx * CHUNK_WIDTH + lx;
+        const worldY = view.cy * CHUNK_HEIGHT + ly;
+        const texture = pickBlockTexture(this.blockTextures, this.blockTextureVariants, id, worldX, worldY);
         if (!texture) continue;
         const sprite = new Sprite(texture);
         sprite.position.set(lx * TILE_PX, ly * TILE_PX);
