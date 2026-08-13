@@ -45,10 +45,20 @@ function prettyName(id: string): string {
 function tooltipFor(stack: ItemStack): string {
   // The datapack display name, falling back to the prettified id.
   const lines = [itemDef(stack.item)?.name ?? prettyName(stack.item)];
+  if (stack.data?.liquid !== undefined) {
+    const capacity = itemDef(stack.item)?.bucket ?? stack.data.amount ?? 0;
+    lines.push(`${prettyName(stack.data.liquid)} ${stack.data.amount ?? 0}/${capacity}`);
+  }
   for (const ench of stack.ench ?? []) {
     lines.push(`${prettyName(ench.id)} ${ench.level}`);
   }
   return lines.join("\n");
+}
+
+/** Tints a bucket icon to show what it's carrying (undefined = empty). */
+const LIQUID_TINT: Record<string, number> = { water: 0x6fb0ff, lava: 0xff8a3c };
+export function liquidTint(stack: ItemStack): number | undefined {
+  return stack.data?.liquid !== undefined ? LIQUID_TINT[stack.data.liquid] : undefined;
 }
 
 function buttonOf(e: FederatedPointerEvent): "left" | "right" | null {
@@ -82,7 +92,9 @@ function slotWidget(
       sprite.width = ICON;
       sprite.height = ICON;
       sprite.position.set((SLOT - ICON) / 2, (SLOT - ICON) / 2);
-      if (stack.ench?.length) sprite.tint = 0xccaaff; // enchanted shimmer
+      const tint = liquidTint(stack);
+      if (tint !== undefined) sprite.tint = tint;
+      else if (stack.ench?.length) sprite.tint = 0xccaaff; // enchanted shimmer
       cell.addChild(sprite);
     }
     if (stack.count > 1) {
@@ -127,6 +139,8 @@ export function cursorWidget(stack: ItemStack, blockTextures: Map<BlockId, Textu
     const sprite = new Sprite(texture);
     sprite.width = ICON;
     sprite.height = ICON;
+    const tint = liquidTint(stack);
+    if (tint !== undefined) sprite.tint = tint;
     cell.addChild(sprite);
   }
   if (stack.count > 1) {
@@ -630,8 +644,8 @@ export class ContainerPanelUI {
   constructor(
     private readonly blockTextures: Map<BlockId, Texture>,
     private readonly title: string,
-    private readonly cols: number,
-    private readonly count: number,
+    private cols: number,
+    private count: number,
   ) {
     this.container.visible = false;
   }
@@ -644,8 +658,16 @@ export class ContainerPanelUI {
     return this.cols * (SLOT + PAD) + 3 * PAD;
   }
 
-  open(makeRef: (index: number) => SlotRef): void {
+  /** `singleRowCount` resizes this opening to one row of that many slots
+   * (variable-capacity containers, e.g. a backpack whose datapack item
+   * declares a different size than the default). Omit it for panels
+   * with a fixed layout (the chest's 3 rows of 9). */
+  open(makeRef: (index: number) => SlotRef, singleRowCount?: number): void {
     this.makeRef = makeRef;
+    if (singleRowCount !== undefined) {
+      this.count = singleRowCount;
+      this.cols = singleRowCount;
+    }
     this.slots = new Array<ItemStack | null>(this.count).fill(null);
     this.container.visible = true;
     this.rebuild();

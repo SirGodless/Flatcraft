@@ -11,8 +11,17 @@ export const HOTBAR_SIZE = 9;
 export interface ItemStack {
   item: string;
   count: number;
-  /** Nested inventory for container items (backpacks). */
-  data?: { slots: (ItemStack | null)[] };
+  /** Per-instance state for stateful items (max_stack 1). */
+  data?:
+    | {
+        /** Nested inventory for container items (backpacks). */
+        slots?: (ItemStack | null)[];
+        /** Stored liquid kind for a filled bucket. */
+        liquid?: "water" | "lava";
+        /** Fill amount in whole blocks, 1..capacity, for a filled bucket. */
+        amount?: number;
+      }
+    | undefined;
   /** Enchantments on tools (efficiency, sharpness), by level. */
   ench?: Array<{ id: string; level: number }>;
 }

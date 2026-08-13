@@ -36,6 +36,9 @@ export type Command =
   | { type: "place_block"; x: number; y: number; layer?: "fg" | "bg" }
   /** Right-click interaction with a block (doors, trapdoors). */
   | { type: "use_block"; x: number; y: number }
+  /** Right-click with a bucket: scoop a full liquid source at (x, y),
+   * or pour a carried charge into it. */
+  | { type: "use_bucket"; x: number; y: number }
   /** Fire the held grappling hook toward the given direction. */
   | { type: "grapple"; dx: number; dy: number }
   /** Toggle creative mode (no damage, flight, instant break). */

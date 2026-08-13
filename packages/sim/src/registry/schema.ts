@@ -43,6 +43,10 @@ export interface ItemJson {
   shield?: { block: number };
   grapple?: { range: number };
   effect?: { id: string; ticks: number; returns?: string };
+  /** Container for scooping/pouring liquids; capacity in whole blocks. */
+  bucket?: { capacity: number };
+  /** Nested inventory this item carries (backpacks); slot count. */
+  container?: { slots: number };
   fuel_ticks?: number;
   enchants?: string[];
   recipes?: RecipeJson[];
@@ -176,7 +180,7 @@ export function validateItemJson(raw: unknown, source: string): ItemJson {
   const value = need<Record<string, unknown>>(source, "(root)", raw, "object");
   checkKeys(source, "", value, [
     "id", "name", "max_stack", "sprite", "places_block", "tool", "weapon", "food",
-    "armor", "shield", "grapple", "effect", "fuel_ticks", "enchants", "recipes",
+    "armor", "shield", "grapple", "effect", "bucket", "container", "fuel_ticks", "enchants", "recipes",
   ]);
   const out: ItemJson = { id: needId(source, "id", value["id"]) };
   if (value["name"] !== undefined) out.name = need<string>(source, "name", value["name"], "string");
@@ -231,6 +235,16 @@ export function validateItemJson(raw: unknown, source: string): ItemJson {
       ticks: needNumber(source, "effect.ticks", effect["ticks"], 1, 1_000_000),
     };
     if (effect["returns"] !== undefined) out.effect.returns = needId(source, "effect.returns", effect["returns"]);
+  }
+  if (value["bucket"] !== undefined) {
+    const bucket = need<Record<string, unknown>>(source, "bucket", value["bucket"], "object");
+    checkKeys(source, "bucket.", bucket, ["capacity"]);
+    out.bucket = { capacity: needNumber(source, "bucket.capacity", bucket["capacity"], 1, 64) };
+  }
+  if (value["container"] !== undefined) {
+    const container = need<Record<string, unknown>>(source, "container", value["container"], "object");
+    checkKeys(source, "container.", container, ["slots"]);
+    out.container = { slots: needNumber(source, "container.slots", container["slots"], 1, 54) };
   }
   if (value["fuel_ticks"] !== undefined) out.fuel_ticks = needNumber(source, "fuel_ticks", value["fuel_ticks"], 1, 100_000);
   if (value["enchants"] !== undefined) {

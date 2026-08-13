@@ -1,0 +1,21 @@
+{
+  "id": "clay_bucket",
+  "name": "Clay Bucket",
+  "max_stack": 1,
+  "bucket": {
+    "capacity": 1
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a a",
+        " a "
+      ],
+      "key": {
+        "a": "item:fired_clay"
+      }
+    }
+  ]
+}

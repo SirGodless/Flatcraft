@@ -2185,6 +2185,73 @@ export class Simulation {
         }
         break;
       }
+      case "use_bucket": {
+        const p = this.players.get(player);
+        if (!p) {
+          reject("not joined");
+          break;
+        }
+        const { x, y } = command;
+        if (!Number.isInteger(x) || !Number.isInteger(y) || !this.withinReach(player, x, y)) {
+          reject("out of reach");
+          break;
+        }
+        const stack = p.inventory[p.selected];
+        const capacity = stack ? itemDef(stack.item)?.bucket : undefined;
+        if (!stack || capacity === undefined) {
+          reject("no bucket");
+          break;
+        }
+        const world = this.worldOf(p.dimension);
+        const targetDef = blockDef(world.getBlockGenerating(x, y));
+        const heldLiquid = stack.data?.liquid;
+        const heldAmount = stack.data?.amount ?? 0;
+
+        // Scoop: only full source tiles can be bucketed (matches the
+        // liquid model's own source/flowing distinction), and only
+        // into an empty bucket or one already carrying the same kind.
+        if (
+          targetDef.liquid?.level === 8 &&
+          (heldLiquid === undefined || heldLiquid === targetDef.liquid.kind) &&
+          heldAmount < capacity
+        ) {
+          world.setBlock(x, y, BlockId.Air);
+          broadcast({ type: "block_changed", dim: p.dimension, x, y, block: BlockId.Air });
+          this.wakeLiquids(p.dimension, x, y);
+          stack.data = { ...stack.data, liquid: targetDef.liquid.kind, amount: heldAmount + 1 };
+          syncInventory(p);
+          break;
+        }
+
+        // Pour: onto open space, or topping up a non-full pool of the
+        // same kind - always leaves a full source block, like a real
+        // bucket, consuming exactly one charge.
+        if (heldLiquid !== undefined && heldAmount > 0) {
+          const isOpen = !targetDef.solid && targetDef.liquid === undefined && !targetDef.slab;
+          const canPourInto = isOpen || (targetDef.liquid?.kind === heldLiquid && targetDef.liquid.level < 8);
+          if (!canPourInto) {
+            reject("cannot pour here");
+            break;
+          }
+          const sourceBlock = liquidBlock(heldLiquid, 8);
+          world.setBlock(x, y, sourceBlock);
+          broadcast({ type: "block_changed", dim: p.dimension, x, y, block: sourceBlock });
+          this.wakeLiquids(p.dimension, x, y);
+          // Clay dissolves the moment it pours lava - every other tier
+          // survives (copper and up don't melt).
+          if (!p.creative && stack.item === "clay_bucket" && heldLiquid === "lava") {
+            p.inventory[p.selected] = null;
+          } else {
+            const remaining = heldAmount - 1;
+            stack.data = remaining > 0 ? { ...stack.data, amount: remaining } : undefined;
+          }
+          syncInventory(p);
+          break;
+        }
+
+        reject("nothing to do");
+        break;
+      }
       case "grapple": {
         const p = this.players.get(player);
         if (!p) {
@@ -2366,23 +2433,26 @@ export class Simulation {
       }
       case "backpack": {
         const held = p.inventory[p.selected];
-        if (!held || held.item !== "backpack") {
-          reject("no backpack in hand");
+        const capacity = held ? itemDef(held.item)?.container : undefined;
+        if (!held || capacity === undefined) {
+          reject("no container in hand");
           return;
         }
-        if (!Number.isInteger(slot.index) || slot.index < 0 || slot.index >= 9) {
+        if (!Number.isInteger(slot.index) || slot.index < 0 || slot.index >= capacity) {
           reject("invalid slot");
           return;
         }
-        // No backpacks inside backpacks.
-        if (p.cursor?.item === "backpack") {
-          reject("backpack in backpack");
+        // No containers inside containers.
+        if (p.cursor && itemDef(p.cursor.item)?.container !== undefined) {
+          reject("container in container");
           return;
         }
-        held.data ??= { slots: new Array<ItemStack | null>(9).fill(null) };
-        const result = clickStack(p.cursor, held.data.slots[slot.index] ?? null, button);
+        const makeSlots = (): (ItemStack | null)[] => new Array<ItemStack | null>(capacity).fill(null);
+        held.data ??= { slots: makeSlots() };
+        const containerSlots = (held.data.slots ??= makeSlots());
+        const result = clickStack(p.cursor, containerSlots[slot.index] ?? null, button);
         p.cursor = result.cursor;
-        held.data.slots[slot.index] = result.slot;
+        containerSlots[slot.index] = result.slot;
         return;
       }
       case "furnace": {

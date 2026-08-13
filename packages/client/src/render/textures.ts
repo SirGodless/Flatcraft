@@ -60,6 +60,7 @@ const STYLES: Partial<Record<BlockId, BlockStyle>> = {
   [BlockId.Sand]: { base: [218, 203, 152], noise: 0.08 },
   [BlockId.Sandstone]: { base: [206, 189, 136], top: { color: [214, 198, 146], rows: 3 }, noise: 0.06 },
   [BlockId.Gravel]: { base: [127, 124, 122], noise: 0.3 },
+  [BlockId.Clay]: { base: [156, 160, 172], noise: 0.06 },
   [BlockId.Water]: { base: [58, 118, 196], noise: 0.05, alpha: 0.65 },
   [BlockId.OakLog]: { base: [104, 80, 48], noise: 0.1, stripe: true },
   [BlockId.OakLeaves]: { base: [64, 138, 52], noise: 0.22, holes: 0.16 },

@@ -91,7 +91,7 @@ describe("backpacks", () => {
       { player, command: { type: "slot_click", slot: { container: "backpack", index: 2 }, button: "left" } },
     ]);
     expect(state.cursor).toBeNull();
-    expect(state.inventory[0]?.data?.slots[2]).toEqual({ item: "coal", count: 9 });
+    expect(state.inventory[0]?.data?.slots?.[2]).toEqual({ item: "coal", count: 9 });
   });
 
   it("rejects backpack clicks without one in hand and forbids nesting", () => {
@@ -102,7 +102,7 @@ describe("backpacks", () => {
     ]);
     expect(noBag).toContainEqual({
       to: player,
-      event: { type: "command_rejected", player, reason: "no backpack in hand" },
+      event: { type: "command_rejected", player, reason: "no container in hand" },
     });
 
     state.inventory[0] = { item: "backpack", count: 1 };
@@ -112,7 +112,7 @@ describe("backpacks", () => {
     ]);
     expect(nested).toContainEqual({
       to: player,
-      event: { type: "command_rejected", player, reason: "backpack in backpack" },
+      event: { type: "command_rejected", player, reason: "container in container" },
     });
   });
 
@@ -129,7 +129,7 @@ describe("backpacks", () => {
     const rejoinId = restored.allocatePlayerId();
     restored.tick([{ player: rejoinId, command: { type: "join", name: "T" } }]);
     const rejoined = restored.players.get(rejoinId)!;
-    expect(rejoined.inventory[0]?.data?.slots[8]).toEqual({ item: "diamond", count: 3 });
+    expect(rejoined.inventory[0]?.data?.slots?.[8]).toEqual({ item: "diamond", count: 3 });
   });
 
   it("chest contents survive save/load", () => {

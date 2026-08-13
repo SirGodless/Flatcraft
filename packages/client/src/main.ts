@@ -130,8 +130,12 @@ async function runGame(options: GameOptions): Promise<Renderer> {
     },
     onUseItem: (x, y) => {
       const item = renderer.selectedItem();
-      if (item === "backpack") {
+      if (item !== null && itemDef(item)?.container !== undefined) {
         renderer.openBackpack();
+        return true;
+      }
+      if (item !== null && itemDef(item)?.bucket !== undefined) {
+        connection.send({ type: "use_bucket", x: Math.floor(x), y: Math.floor(y) });
         return true;
       }
       if (item === "bow") {

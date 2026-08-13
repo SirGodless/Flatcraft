@@ -2,6 +2,9 @@
   "id": "backpack",
   "name": "Backpack",
   "max_stack": 1,
+  "container": {
+    "slots": 9
+  },
   "recipes": [
     {
       "station": "crafting_table",

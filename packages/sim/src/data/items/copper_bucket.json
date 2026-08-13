@@ -1,0 +1,21 @@
+{
+  "id": "copper_bucket",
+  "name": "Copper Bucket",
+  "max_stack": 1,
+  "bucket": {
+    "capacity": 2
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a a",
+        " a "
+      ],
+      "key": {
+        "a": "item:copper_ingot"
+      }
+    }
+  ]
+}

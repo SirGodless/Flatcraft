@@ -58,6 +58,10 @@ export interface ItemDef {
   /** Grappling hook: max anchor distance in tiles. */
   readonly grapple?: number | undefined;
   readonly effect?: EffectDef | undefined;
+  /** Bucket: capacity in whole blocks of liquid it can carry. */
+  readonly bucket?: number | undefined;
+  /** Nested inventory this item carries (backpacks): slot count. */
+  readonly container?: number | undefined;
   /** Furnace burn duration when used as fuel. */
   readonly fuelTicks?: number | undefined;
   /** Enchantment ids this item can receive. */
@@ -149,6 +153,8 @@ export function registerItemJson(raw: unknown, source = "datapack"): ItemDef {
     ...(json.armor !== undefined ? { armor: json.armor.absorb } : {}),
     ...(json.shield !== undefined ? { shieldBlock: json.shield.block } : {}),
     ...(json.grapple !== undefined ? { grapple: json.grapple.range } : {}),
+    ...(json.bucket !== undefined ? { bucket: json.bucket.capacity } : {}),
+    ...(json.container !== undefined ? { container: json.container.slots } : {}),
     ...(json.effect !== undefined
       ? {
           effect: {

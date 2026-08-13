@@ -1,0 +1,22 @@
+{
+  "id": "emerald_bucket",
+  "name": "Emerald Bucket",
+  "max_stack": 1,
+  "bucket": {
+    "capacity": 6
+  },
+  "recipes": [
+    {
+      "station": "crafting_table",
+      "style": "shaped",
+      "recipe": [
+        "a a",
+        " b "
+      ],
+      "key": {
+        "a": "item:emerald",
+        "b": "item:iron_bucket"
+      }
+    }
+  ]
+}
