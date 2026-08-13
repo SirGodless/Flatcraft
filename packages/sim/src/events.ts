@@ -33,6 +33,8 @@ export type SimEvent =
   | { type: "player_moved"; player: PlayerId; x: number; y: number }
   /** A player switched dimension (portal); position is the arrival spot. */
   | { type: "player_dimension"; player: PlayerId; dim: Dimension; x: number; y: number }
+  /** Health bar sync (sent to its owner - nothing renders another
+   * player's health today, unlike position/gear which are public). */
   | { type: "player_health"; player: PlayerId; health: number; max: number }
   /** Hunger bar sync (sent to its owner). */
   | { type: "player_hunger"; player: PlayerId; hunger: number; max: number }

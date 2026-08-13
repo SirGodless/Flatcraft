@@ -259,6 +259,33 @@ describe("two players", () => {
     await alice.close();
     await bob.close();
   });
+
+  it("keeps a player's health private - a fight isn't broadcast to bystanders", async () => {
+    const ded = await startServer();
+    const alice = await connectAs(ded, "Alice");
+    alice.join();
+    await alice.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
+    const bob = await connectAs(ded, "Bob");
+    bob.join();
+    await bob.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
+    await alice.waitFor((e) => e.type === "player_joined" && e.player === bob.playerId);
+
+    const sim = ded.gameServer.simulation;
+    const aliceState = sim.players.get(alice.playerId)!;
+    sim.spawnMob("zombie", aliceState.x, aliceState.y, []);
+
+    // Alice sees her own health drop...
+    await alice.waitFor((e) => e.type === "player_health");
+    // ...but Bob, watching the same fight over the wire, never learns
+    // Alice's health (he may get his own private player_health events
+    // too - the zombie can tag him as well since both spawned at the
+    // same default point - so the check is specifically about whose
+    // health event reaches him, not whether he gets any at all).
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(bob.events.some((e) => e.type === "player_health" && e.player === alice.playerId)).toBe(false);
+    await alice.close();
+    await bob.close();
+  });
 });
 
 describe("persistence", () => {

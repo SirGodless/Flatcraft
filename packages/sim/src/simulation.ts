@@ -1033,7 +1033,7 @@ export class Simulation {
       }
       if (p.effects["regeneration"] !== undefined && this.tickCount % REGEN_EFFECT_INTERVAL === 0 && p.health < PLAYER_MAX_HEALTH) {
         p.health++;
-        out.push({ event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
+        out.push({ to: p.id, event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
       }
 
       const feetBlock = blockDef(world.getBlockGenerating(Math.floor(p.x), Math.floor(p.y - 0.1)));
@@ -1208,7 +1208,7 @@ export class Simulation {
       ) {
         p.health++;
         p.exhaustion += EXHAUST_REGEN;
-        out.push({ event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
+        out.push({ to: p.id, event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
       }
 
       // Starving: an empty bar wears you down to 1 HP (never kills).
@@ -1502,7 +1502,7 @@ export class Simulation {
       }
       this.syncInventory(p, out);
     }
-    out.push({ event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
+    out.push({ to: p.id, event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
   }
 
   private syncInventory(p: PlayerState, out: OutboundEvent[]): void {
