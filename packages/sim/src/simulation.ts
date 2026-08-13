@@ -1298,15 +1298,34 @@ export class Simulation {
     out.push({ event: { type: "player_dimension", player: p.id, dim: targetDim, x: p.x, y: p.y } });
   }
 
+  /**
+   * Shared health/cooldown bookkeeping for anything hurtable. PlayerState
+   * and MobEntity both structurally carry {health, hurtCooldown}, so this
+   * works for either without needing them to be the same type (that
+   * unification is a later stage - this just kills the duplicated
+   * cooldown/health math in the meantime). Knockback and death handling
+   * stay in each caller: players and mobs apply knockback through
+   * different mechanisms (a decaying kbX overlay vs a direct vx nudge)
+   * and diverge completely on death (respawn vs loot-and-despawn).
+   */
+  private applyDamageCore(
+    target: { health: number; hurtCooldown: number },
+    amount: number,
+  ): { applied: boolean; lethal: boolean } {
+    if (amount <= 0 || target.hurtCooldown > 0) return { applied: false, lethal: false };
+    target.hurtCooldown = HURT_COOLDOWN_TICKS;
+    target.health -= amount;
+    return { applied: true, lethal: target.health <= 0 };
+  }
+
   private hurtMob(entity: MobEntity, amount: number, out: OutboundEvent[], fromX?: number, knockback = 0.3): void {
-    if (amount <= 0 || entity.hurtCooldown > 0) return;
-    entity.hurtCooldown = HURT_COOLDOWN_TICKS;
-    entity.health -= amount;
+    const hit = this.applyDamageCore(entity, amount);
+    if (!hit.applied) return;
     if (fromX !== undefined) {
       entity.vx += (entity.x >= fromX ? 1 : -1) * knockback;
       entity.vy = Math.min(entity.vy, -0.2);
     }
-    if (entity.health > 0) {
+    if (!hit.lethal) {
       out.push({ event: { type: "entity_hurt", id: entity.id, health: entity.health } });
       return;
     }
@@ -1427,18 +1446,18 @@ export class Simulation {
 
   private hurtPlayer(p: PlayerState, amount: number, out: OutboundEvent[], fromX?: number): void {
     if (p.creative) return;
-    if (amount <= 0 || p.hurtCooldown > 0) return;
+    if (amount <= 0) return;
     // Armor absorbs a fraction; an offhand shield blocks another share.
     const armorAbsorb = p.armor ? (itemDef(p.armor.item)?.armor ?? 0) : 0;
     const shieldBlock = p.offhand ? (itemDef(p.offhand.item)?.shieldBlock ?? 0) : 0;
-    amount = Math.max(1, Math.round(amount * (1 - armorAbsorb) * (1 - shieldBlock)));
-    p.hurtCooldown = HURT_COOLDOWN_TICKS;
-    p.health -= amount;
+    const reduced = Math.max(1, Math.round(amount * (1 - armorAbsorb) * (1 - shieldBlock)));
+    const hit = this.applyDamageCore(p, reduced);
+    if (!hit.applied) return;
     if (fromX !== undefined) {
       p.kbX = (p.x >= fromX ? 1 : -1) * 0.35;
       p.vy = Math.min(p.vy, -0.2);
     }
-    if (p.health <= 0) {
+    if (hit.lethal) {
       // Death: drop the inventory (and grid/cursor/armor/offhand) as
       // item entities, respawn at the overworld spawn.
       this.dumpGridAndCursor(p);
