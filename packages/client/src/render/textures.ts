@@ -1,5 +1,5 @@
 import { Texture } from "pixi.js";
-import { allBlocks, BlockId, hash01 } from "@flatcraft/sim";
+import { allBlocks, blockDef, BlockId, hash01 } from "@flatcraft/sim";
 import { spriteKey, SPRITE_OVERRIDES } from "./sprites.js";
 
 /** On-screen size of one tile at zoom 1, and texture resolution per block. */
@@ -296,6 +296,35 @@ export function createBlockTextureVariants(base: Map<BlockId, Texture>): Map<Blo
  * the block id has any (every client computes the same index from the
  * same world position, no sync needed), else the block's single base
  * texture - identical behavior to before variants existed. */
+/** A block's single continuously-looping ambient clip - unlike mobs, blocks
+ * have no event-driven states (hurt/death/attack), just idle motion, so
+ * there's no state machine here, only the frame set to play. */
+export interface BlockAnimationClip {
+  frames: number;
+  frameWidth: number;
+  fps: number;
+  loop: boolean;
+  sheet: Texture;
+}
+
+/** The block's default animation clip (preferring a state named "idle",
+ * else whichever comes first in visual.animation.states), if its sprite
+ * sheet file (block/<name>_<state>.png) is actually present - missing file
+ * or no declared animation both simply mean: no clip, caller falls back to
+ * the plain per-tile texture from pickBlockTexture(). */
+export function blockAnimationClip(id: BlockId): BlockAnimationClip | undefined {
+  const def = blockDef(id);
+  const states = def?.visual?.animation?.states;
+  if (!states) return undefined;
+  const baseKey = spriteKey(def!.sprite) ?? `block/${def!.name}`;
+  const preferred = states["idle"] ? "idle" : Object.keys(states)[0];
+  if (preferred === undefined) return undefined;
+  const clip = states[preferred]!;
+  const sheet = SPRITE_OVERRIDES.get(`${baseKey}_${preferred}`);
+  if (!sheet) return undefined;
+  return { frames: clip.frames, frameWidth: clip.frame_width, fps: clip.fps, loop: clip.loop ?? true, sheet };
+}
+
 export function pickBlockTexture(
   base: Map<BlockId, Texture>,
   variants: Map<BlockId, Texture[]>,

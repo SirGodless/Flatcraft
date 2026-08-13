@@ -2,6 +2,8 @@ import { Application, Container, Graphics, Rectangle, Sprite, Texture, Text } fr
 import {
   blockDef,
   BlockId,
+  CHUNK_HEIGHT,
+  CHUNK_WIDTH,
   daylightFactor,
   itemDef,
   mobDef,
@@ -22,7 +24,7 @@ import { FogOfWar } from "./fog.js";
 import { itemTexture } from "./icons.js";
 import { entityAnimationStates, entityTexture } from "./entitySprites.js";
 import { createShaderEffect, type ShaderEffect } from "./shaders.js";
-import { createBlockTextures, createBlockTextureVariants, TILE_PX } from "./textures.js";
+import { blockAnimationClip, createBlockTextures, createBlockTextureVariants, type BlockAnimationClip, TILE_PX } from "./textures.js";
 import {
   AirUI,
   ContainerPanelUI,
@@ -38,7 +40,7 @@ import {
   liquidTint,
   TradePanelUI,
 } from "./ui.js";
-import { CHUNK_PX_H, CHUNK_PX_W, WorldView } from "./worldView.js";
+import { CHUNK_PX_H, CHUNK_PX_W, type OverlayTile, WorldView } from "./worldView.js";
 
 export interface ChunkRange {
   minCx: number;
@@ -111,6 +113,18 @@ interface EntityView {
   removeRequested: boolean;
 }
 
+/** One always-live overlay sprite sitting on top of a baked tile - a
+ * single continuously-looping clip (if the block declares one) and/or a
+ * shader effect, no state machine (blocks have no hurt/death/attack). */
+interface BlockOverlayView {
+  id: BlockId;
+  container: Container;
+  sprite: Sprite;
+  frames?: Texture[];
+  fps?: number;
+  shaderFx?: ShaderEffect;
+}
+
 /** Continuous states (idle/walk) are mutually exclusive and always
  * overridable; one-shots (attack/hurt/death) play to completion before
  * anything at their priority or below can take over. Mob/remote-player
@@ -144,6 +158,11 @@ export class Renderer {
   private readonly players = new Map<PlayerId, PlayerMarker>();
   private readonly entities = new Map<EntityId, EntityView>();
   private readonly miningOverlays = new Map<PlayerId, Graphics>();
+  /** Live sprites for animated/shaded blocks, on top of their baked static
+   * base (see worldView.ts's OverlayTile) - keyed by "worldX,worldY",
+   * reconciled against the visible tile range once per frame. */
+  private readonly blockOverlayContainer = new Container();
+  private readonly blockOverlays = new Map<string, BlockOverlayView>();
   private hearts!: HeartsUI;
   private hungerBar!: HungerUI;
   private airBar!: AirUI;
@@ -215,6 +234,7 @@ export class Renderer {
     const blockTextureVariants = createBlockTextureVariants(blockTextures);
     this.worldView = new WorldView(this.app.renderer, blockTextures, blockTextureVariants);
     this.worldContainer.addChild(this.worldView.container);
+    this.worldContainer.addChild(this.blockOverlayContainer);
     this.app.stage.addChild(this.worldContainer);
     this.fog = new FogOfWar(blockTextures);
 
@@ -590,6 +610,7 @@ export class Renderer {
           // Reset the world view for the new dimension.
           this.localDim = event.dim;
           this.worldView.clear();
+          this.clearBlockOverlays();
           this.closeUI();
           this.camera.centerOnTile(event.x, event.y);
           for (const [id, view] of this.entities) {
@@ -1022,11 +1043,97 @@ export class Renderer {
     };
   }
 
+  /** Creates/destroys block overlay sprites so the live set matches
+   * exactly the animated/shaded tiles currently in view (plus the same
+   * one-chunk prefetch padding chunk loading already uses) - chunks are
+   * never unloaded as the player explores, so without this cull the
+   * overlay count would only ever grow. Also advances each surviving
+   * overlay's animation frame / shader time for this frame. */
+  private reconcileBlockOverlays(now: number): void {
+    const range = this.visibleChunkRange();
+    const minX = range.minCx * CHUNK_WIDTH;
+    const maxX = (range.maxCx + 1) * CHUNK_WIDTH - 1;
+    const minY = range.minCy * CHUNK_HEIGHT;
+    const maxY = (range.maxCy + 1) * CHUNK_HEIGHT - 1;
+    const visible = this.worldView.overlaysInView(minX, minY, maxX, maxY);
+
+    const seen = new Set<string>();
+    for (const tile of visible) {
+      const key = `${tile.worldX},${tile.worldY}`;
+      seen.add(key);
+      const existing = this.blockOverlays.get(key);
+      if (existing && existing.id === tile.id) continue;
+      if (existing) {
+        existing.container.destroy({ children: true });
+        existing.shaderFx?.destroy();
+      }
+      const overlay = this.buildBlockOverlay(tile);
+      this.blockOverlayContainer.addChild(overlay.container);
+      this.blockOverlays.set(key, overlay);
+    }
+    for (const [key, overlay] of this.blockOverlays) {
+      if (seen.has(key)) continue;
+      overlay.container.destroy({ children: true });
+      overlay.shaderFx?.destroy();
+      this.blockOverlays.delete(key);
+    }
+
+    for (const overlay of this.blockOverlays.values()) {
+      overlay.shaderFx?.setTime(now);
+      if (overlay.frames && overlay.fps) {
+        const frameIndex = Math.floor((now / 1000) * overlay.fps) % overlay.frames.length;
+        overlay.sprite.texture = overlay.frames[frameIndex]!;
+      }
+    }
+  }
+
+  private buildBlockOverlay(tile: OverlayTile): BlockOverlayView {
+    const container = new Container();
+    container.position.set(tile.worldX * TILE_PX, tile.worldY * TILE_PX);
+    const sprite = new Sprite(tile.texture);
+    sprite.width = TILE_PX;
+    sprite.height = TILE_PX;
+    container.addChild(sprite);
+
+    const overlay: BlockOverlayView = { id: tile.id, container, sprite };
+    const clip: BlockAnimationClip | undefined = blockAnimationClip(tile.id);
+    if (clip) {
+      const frameCount = Math.min(clip.frames, Math.floor(clip.sheet.width / clip.frameWidth));
+      const frames: Texture[] = [];
+      for (let i = 0; i < frameCount; i++) {
+        frames.push(
+          new Texture({ source: clip.sheet.source, frame: new Rectangle(i * clip.frameWidth, 0, clip.frameWidth, clip.sheet.height) }),
+        );
+      }
+      if (frames.length > 0) {
+        overlay.frames = frames;
+        overlay.fps = clip.fps;
+        sprite.texture = frames[0]!;
+      }
+    }
+    const shaderDef = blockDef(tile.id)?.visual?.shader;
+    const shaderFx = shaderDef ? createShaderEffect(shaderDef.id, shaderDef.params) : undefined;
+    if (shaderFx) {
+      overlay.shaderFx = shaderFx;
+      container.filters = [shaderFx];
+    }
+    return overlay;
+  }
+
+  private clearBlockOverlays(): void {
+    for (const overlay of this.blockOverlays.values()) {
+      overlay.container.destroy({ children: true });
+      overlay.shaderFx?.destroy();
+    }
+    this.blockOverlays.clear();
+  }
+
   draw(dtMs: number): void {
     const now = performance.now();
 
     // Bake chunks touched since the last frame (at most once each).
     this.worldView.flush();
+    this.reconcileBlockOverlays(now);
 
     // Advance local time between server syncs (1 tick per 50 ms) and
     // shade the world: sky color blends toward night, plus a veil.
