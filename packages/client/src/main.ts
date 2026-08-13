@@ -13,6 +13,7 @@ import {
   Simulation,
   surfaceHeight,
   syncItemRecipes,
+  type OutboundEvent,
   type PlayerId,
 } from "@flatcraft/sim";
 import { attachInput } from "./input/input.js";
@@ -364,6 +365,20 @@ async function startSingleplayer(): Promise<void> {
             if (item) addToInventory(p.inventory, item, Number(count ?? "1"));
           }
           connection.send({ type: "select_slot", index: 0 }); // force a sync
+        }, 500);
+      }
+
+      // Debug: ?spawn=kind,kind,... spawns mobs in a line beside the player.
+      const spawn = params.get("spawn");
+      if (spawn) {
+        setTimeout(() => {
+          const p = server.simulation.players.get(playerId);
+          if (!p) return;
+          const out: OutboundEvent[] = [];
+          spawn.split(",").forEach((kind, i) => {
+            server.simulation.spawnMob(kind, p.x + 3 + i * 1.5, p.y, out);
+          });
+          serverEnd.send(out.map((o) => o.event));
         }, 500);
       }
     },

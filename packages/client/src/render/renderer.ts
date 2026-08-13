@@ -19,6 +19,7 @@ import {
 import { Camera } from "./camera.js";
 import { FogOfWar } from "./fog.js";
 import { itemTexture } from "./icons.js";
+import { mobTexture } from "./mobs.js";
 import { createBlockTextures, TILE_PX } from "./textures.js";
 import {
   AirUI,
@@ -757,6 +758,18 @@ export class Renderer {
       }
       return container;
     }
+    if (kind !== "arrow") {
+      const texture = mobTexture(kind);
+      if (texture) {
+        const container = new Container();
+        const size = sizeOf(kind);
+        const sprite = new Sprite(texture);
+        sprite.width = size.width * TILE_PX;
+        sprite.height = size.height * TILE_PX;
+        container.addChild(sprite);
+        return container;
+      }
+    }
     const gfx = new Graphics();
     const humanoid = (body: number, head: number): void => {
       gfx.rect(0, 0, 0.6 * TILE_PX, 1.8 * TILE_PX).fill({ color: body });
@@ -800,7 +813,10 @@ export class Renderer {
         gfx.rect(0.22 * TILE_PX, 0.3 * TILE_PX, 0.16 * TILE_PX, 0.25 * TILE_PX).fill({ color: 0xb08858 });
         break;
       case "arrow":
-        gfx.rect(0, 0, 0.3 * TILE_PX, 0.12 * TILE_PX).fill({ color: 0x9a9a9a });
+        // Centered on the local origin (not top-left, like everything
+        // else here) so it can rotate in place to face its flight
+        // direction - see the per-frame update loop.
+        gfx.rect(-0.15 * TILE_PX, -0.06 * TILE_PX, 0.3 * TILE_PX, 0.12 * TILE_PX).fill({ color: 0x9a9a9a });
         break;
       default:
         gfx.rect(0, 0, TILE_PX, TILE_PX).fill({ color: 0xff00ff });
@@ -907,9 +923,18 @@ export class Renderer {
       const x = view.prevX + (view.x - view.prevX) * alpha;
       const y = view.prevY + (view.y - view.prevY) * alpha;
       const size = sizeOf(view.kind);
-      // Items bob gently so they read as pickups.
-      const bob = view.kind === "item" ? Math.sin(now / 300 + view.x) * 1.5 : 0;
-      view.gfx.position.set((x - size.width / 2) * TILE_PX, (y - size.height) * TILE_PX + bob);
+      if (view.kind === "arrow") {
+        // Centered anchor (see buildEntityGfx) so it can rotate in place
+        // to face the direction it actually traveled last tick.
+        const dx = view.x - view.prevX;
+        const dy = view.y - view.prevY;
+        if (dx !== 0 || dy !== 0) view.gfx.rotation = Math.atan2(dy, dx);
+        view.gfx.position.set(x * TILE_PX, (y - size.height / 2) * TILE_PX);
+      } else {
+        // Items bob gently so they read as pickups.
+        const bob = view.kind === "item" ? Math.sin(now / 300 + view.x) * 1.5 : 0;
+        view.gfx.position.set((x - size.width / 2) * TILE_PX, (y - size.height) * TILE_PX + bob);
+      }
       view.gfx.tint = now - view.hurtAt < 150 ? 0xff6060 : 0xffffff;
     }
 

@@ -1,6 +1,6 @@
 import { Texture } from "pixi.js";
 import { BlockId, itemDef } from "@flatcraft/sim";
-import { SPRITE_OVERRIDES } from "./sprites.js";
+import { spriteKey, SPRITE_OVERRIDES } from "./sprites.js";
 import { TILE_PX } from "./textures.js";
 
 /**
@@ -424,10 +424,4 @@ export function itemTexture(item: string, blockTextures: Map<BlockId, Texture>):
   }
   if (texture) cache.set(item, texture);
   return texture;
-}
-
-/** "sprites/item/x.png" -> override key "item/x". */
-function spriteKey(path: string | undefined): string | undefined {
-  if (path === undefined) return undefined;
-  return path.replace(/^sprites\//, "").replace(/\.[a-z0-9]+$/i, "");
 }

@@ -11,6 +11,12 @@ import { Texture } from "pixi.js";
  */
 export const SPRITE_OVERRIDES = new Map<string, Texture>();
 
+/** "sprites/item/x.png" -> override key "item/x". */
+export function spriteKey(path: string | undefined): string | undefined {
+  if (path === undefined) return undefined;
+  return path.replace(/^sprites\//, "").replace(/\.[a-z0-9]+$/i, "");
+}
+
 export async function loadSpriteOverrides(): Promise<void> {
   let entries: string[];
   try {
