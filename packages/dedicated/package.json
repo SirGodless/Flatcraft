@@ -13,6 +13,7 @@
   "dependencies": {
     "@flatcraft/server": "*",
     "@flatcraft/sim": "*",
+    "openid-client": "^6.8.5",
     "ws": "^8.18.0"
   },
   "devDependencies": {

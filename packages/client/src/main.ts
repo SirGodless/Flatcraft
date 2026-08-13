@@ -21,7 +21,7 @@ import { loadSpriteOverrides } from "./render/sprites.js";
 import { deleteWorld, loadExplored, loadWorld, saveExplored, saveWorld } from "./save.js";
 import {
   disconnectOverlay,
-  loginOverlay,
+  notLoggedInOverlay,
   PLAYER_COLORS,
   storedPlayerColor,
   storePlayerColor,
@@ -251,7 +251,26 @@ async function startOnline(info: ServerInfo): Promise<void> {
 const LOGIN_STORAGE_KEY = "flatcraft.login";
 
 async function login(info: ServerInfo): Promise<OnlineSession> {
-  // Auto-login with a stored session token first.
+  const params = new URLSearchParams(location.search);
+
+  // Returning from the anfall-auth redirect: exchange the one-time code
+  // for a session (never sits in the URL/history - see /auth/session).
+  const loginCode = params.get("login_code");
+  if (loginCode) {
+    history.replaceState(null, "", location.pathname);
+    try {
+      const response = await fetch(`/auth/session?code=${encodeURIComponent(loginCode)}`);
+      if (response.ok) {
+        const session = (await response.json()) as { name: string; token: string };
+        localStorage.setItem(LOGIN_STORAGE_KEY, JSON.stringify(session));
+        return await connectWebSocket(session);
+      }
+    } catch {
+      // Session exchange failed - fall through to the not-logged-in screen.
+    }
+  }
+
+  // Auto-login with a stored session token.
   try {
     const stored = JSON.parse(localStorage.getItem(LOGIN_STORAGE_KEY) ?? "null") as {
       name?: string;
@@ -268,11 +287,12 @@ async function login(info: ServerInfo): Promise<OnlineSession> {
     localStorage.removeItem(LOGIN_STORAGE_KEY);
   }
 
-  const session = await loginOverlay(info, (name, password) =>
-    connectWebSocket({ name, password }),
-  );
-  localStorage.setItem(LOGIN_STORAGE_KEY, JSON.stringify({ name: session.name, token: session.token }));
-  return session;
+  const loginError = params.get("login_error");
+  if (loginError) history.replaceState(null, "", location.pathname);
+  notLoggedInOverlay(info, loginError ?? undefined);
+  // Clicking "Login with anfall-auth" navigates the page away - this
+  // promise deliberately never settles.
+  return new Promise<OnlineSession>(() => {});
 }
 
 /** Singleplayer: embedded server, loopback transport, IndexedDB saves. */

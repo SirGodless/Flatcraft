@@ -15,6 +15,7 @@ import {
 } from "@flatcraft/sim";
 import { WebSocketServer, type WebSocket } from "ws";
 import { Accounts } from "./accounts.js";
+import { OidcLogin, type OidcConfig } from "./oidc.js";
 
 /**
  * The dedicated server: one Node process, one port.
@@ -37,6 +38,9 @@ export interface DedicatedOptions {
   serverName?: string | undefined;
   saveIntervalMs?: number | undefined;
   log?: ((message: string) => void) | undefined;
+  /** anfall-auth login (see oidc.ts); omit to run /auth/* as 501s (tests
+   * bootstrap sessions directly via DedicatedServer.issueSession instead). */
+  oidc?: OidcConfig | undefined;
 }
 
 export interface DedicatedServer {
@@ -45,6 +49,10 @@ export interface DedicatedServer {
   gameServer: GameServer;
   save(): void;
   close(): Promise<void>;
+  /** Issues a session the same way a successful anfall-auth login would -
+   * for tests, and any other trusted bootstrap need. Not reachable over the
+   * wire or HTTP. */
+  issueSession(name: string): { name: string; token: string };
 }
 
 const MIME_TYPES: Record<string, string> = {
@@ -66,6 +74,7 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   mkdirSync(dataDir, { recursive: true });
   const worldFile = join(dataDir, "world.json");
   const accounts = new Accounts(join(dataDir, "accounts.json"));
+  const oidcLogin = options.oidc ? new OidcLogin(options.oidc) : null;
   const serverName = options.serverName ?? "FlatCraft";
   const clientDir = options.clientDir ? resolve(options.clientDir) : null;
 
@@ -186,6 +195,10 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
       }
       return;
     }
+    if (urlPath === "/auth/login" || urlPath === "/auth/callback" || urlPath === "/auth/session") {
+      handleAuthRoute(urlPath, oidcLogin, accounts, request, response);
+      return;
+    }
     serveStatic(clientDir, request, response);
   });
 
@@ -299,6 +312,7 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
     port,
     gameServer,
     save,
+    issueSession: (name: string) => accounts.establishSession(name),
     async close(): Promise<void> {
       clearInterval(tickTimer);
       clearInterval(saveTimer);
@@ -346,6 +360,63 @@ function serveStatic(
   }
   const urlPath = (request.url ?? "/").split("?")[0] ?? "/";
   serveFile(clientDir, urlPath === "/" ? "index.html" : urlPath.slice(1), response);
+}
+
+/** /auth/login, /auth/callback, /auth/session - see oidc.ts. */
+function handleAuthRoute(
+  urlPath: string,
+  oidcLogin: OidcLogin | null,
+  accounts: Accounts,
+  request: IncomingMessage,
+  response: ServerResponse,
+): void {
+  if (!oidcLogin) {
+    response.writeHead(501, { "content-type": "text/plain; charset=utf-8" });
+    response.end("OIDC login is not configured on this server");
+    return;
+  }
+
+  if (urlPath === "/auth/login") {
+    void oidcLogin
+      .buildAuthorizationRedirect()
+      .then((redirectTo) => {
+        response.writeHead(302, { location: redirectTo.href });
+        response.end();
+      })
+      .catch((error: unknown) => {
+        response.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
+        response.end(`oidc error: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    return;
+  }
+
+  if (urlPath === "/auth/callback") {
+    void oidcLogin
+      .handleCallback(request)
+      .then(({ name }) => {
+        const session = accounts.establishSession(name);
+        const code = oidcLogin.issuePendingSession(session.name, session.token);
+        response.writeHead(302, { location: `/?login_code=${encodeURIComponent(code)}` });
+        response.end();
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        response.writeHead(302, { location: `/?login_error=${encodeURIComponent(message)}` });
+        response.end();
+      });
+    return;
+  }
+
+  // /auth/session
+  const code = new URL(request.url ?? "/", "http://internal").searchParams.get("code");
+  const session = code ? oidcLogin.claimPendingSession(code) : null;
+  if (!session) {
+    response.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+    response.end(JSON.stringify({ error: "not found" }));
+    return;
+  }
+  response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+  response.end(JSON.stringify(session));
 }
 
 export type { Server };

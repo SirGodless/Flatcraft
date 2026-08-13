@@ -21,11 +21,7 @@ export interface OnlineSession {
   onDisconnect(handler: () => void): void;
 }
 
-export function connectWebSocket(auth: {
-  name: string;
-  password?: string;
-  token?: string;
-}): Promise<OnlineSession> {
+export function connectWebSocket(auth: { name: string; token: string }): Promise<OnlineSession> {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const socket = new WebSocket(`${proto}://${location.host}${WS_PATH}`);
 

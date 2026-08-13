@@ -10,6 +10,10 @@ services:
     environment:
       SERVER_NAME: "FlatCraft"
       # SEED: "1337"        # seed for freshly generated worlds
+      OIDC_ISSUER: "${OIDC_ISSUER}"
+      OIDC_CLIENT_ID: "${OIDC_CLIENT_ID}"
+      OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET}"
+      PUBLIC_URL: "${PUBLIC_URL}"
     restart: unless-stopped
     networks:
       - default

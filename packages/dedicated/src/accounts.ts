@@ -1,28 +1,23 @@
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { AuthRequest } from "@flatcraft/server";
 
 /**
- * Flat-file account store: name -> scrypt password hash + session token.
- * First login with an unknown name registers the account ("register or
- * login", like most private game servers). Tokens let the browser
- * re-login without retyping the password; they stay valid until the
- * password changes (which we don't support yet) or the file is wiped.
+ * Flat-file account store: name -> session token. Accounts are only ever
+ * created by establishSession(), which is called after a verified
+ * anfall-auth login (see oidc.ts) - identity lives at anfall-auth, this is
+ * just the token that lets a WebSocket connection prove it. The wire
+ * protocol's `authenticate` never creates an account, only checks one.
  */
 
 const NAME_PATTERN = /^[A-Za-z0-9_]{2,16}$/;
-const MIN_PASSWORD_LENGTH = 4;
 
 interface AccountRecord {
-  salt: string;
-  hash: string;
   token: string;
 }
 
-export type AuthResult =
-  | { ok: true; name: string; token: string }
-  | { ok: false; reason: string };
+export type AuthResult = { ok: true; name: string; token: string } | { ok: false; reason: string };
 
 export class Accounts {
   private readonly accounts = new Map<string, AccountRecord>();
@@ -45,37 +40,31 @@ export class Accounts {
     if (typeof name !== "string" || !NAME_PATTERN.test(name)) {
       return { ok: false, reason: "invalid name (2-16 letters, digits, _)" };
     }
+    const token = request.token;
+    if (typeof token !== "string" || token.length === 0) {
+      return { ok: false, reason: "no session - log in at /auth/login" };
+    }
     const account = this.accounts.get(name);
-
-    if (typeof request.token === "string" && request.token.length > 0) {
-      if (account && safeEqual(account.token, request.token)) {
-        return { ok: true, name, token: account.token };
-      }
+    if (!account || !safeEqual(account.token, token)) {
       return { ok: false, reason: "invalid session, log in again" };
     }
-
-    const password = request.password;
-    if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
-      return { ok: false, reason: `password too short (min ${MIN_PASSWORD_LENGTH})` };
-    }
-
-    if (!account) {
-      // Unknown name: register it with this password.
-      const salt = randomBytes(16).toString("hex");
-      const record: AccountRecord = {
-        salt,
-        hash: hashPassword(password, salt),
-        token: randomBytes(24).toString("hex"),
-      };
-      this.accounts.set(name, record);
-      this.save();
-      return { ok: true, name, token: record.token };
-    }
-
-    if (!safeEqual(account.hash, hashPassword(password, account.salt))) {
-      return { ok: false, reason: "wrong password" };
-    }
     return { ok: true, name, token: account.token };
+  }
+
+  /**
+   * Issues a fresh session token for `name`, creating the account if it's
+   * new. Called only after a verified anfall-auth login (oidc.ts) - never
+   * reachable from the wire protocol. Tests use this directly to bootstrap
+   * a session without going through a real OIDC round trip.
+   */
+  establishSession(name: string): { name: string; token: string } {
+    if (!NAME_PATTERN.test(name)) {
+      throw new Error(`invalid account name: ${name}`);
+    }
+    const token = randomBytes(24).toString("hex");
+    this.accounts.set(name, { token });
+    this.save();
+    return { name, token };
   }
 
   private save(): void {
@@ -85,10 +74,6 @@ export class Accounts {
     writeFileSync(tmp, data);
     renameSync(tmp, this.file);
   }
-}
-
-function hashPassword(password: string, salt: string): string {
-  return scryptSync(password, salt, 32).toString("hex");
 }
 
 function safeEqual(a: string, b: string): boolean {
