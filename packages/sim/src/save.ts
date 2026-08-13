@@ -9,7 +9,7 @@ import type { Dimension } from "./world/world.js";
  * safe, so it can go to IndexedDB (client) or a file (dedicated server).
  */
 export interface SimSave {
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   /**
    * Numeric block id -> canonical string id at save time. On load,
    * chunks are remapped by name, so the numbers in `worlds` are never
@@ -21,8 +21,8 @@ export interface SimSave {
   tickCount: number;
   timeOfDay: number;
   rng: number;
-  nextPlayerId: number;
-  nextEntityId: number;
+  /** Single allocator for both player and entity ids (one shared id space). */
+  nextId: number;
   worlds: {
     overworld: Array<{ cx: number; cy: number; tiles: number[]; walls?: number[] }>;
     nether: Array<{ cx: number; cy: number; tiles: number[]; walls?: number[] }>;

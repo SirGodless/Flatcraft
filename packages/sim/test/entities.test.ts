@@ -168,3 +168,19 @@ describe("entity determinism and spawning", () => {
     expect(sim.entities.size).toBeGreaterThan(0);
   });
 });
+
+describe("id allocation", () => {
+  it("never hands a mob and a player the same id, whichever comes first", () => {
+    const sim = new Simulation(SEED);
+    const out: OutboundEvent[] = [];
+    // A mob spawned before anyone joins...
+    const early = sim.spawnMob("pig", 0, 0, out);
+    const { player, state } = joinPlayer(sim);
+    // ...and one spawned after both draw from the same allocator.
+    const late = sim.spawnMob("pig", state.x + 5, state.y, out);
+    const item = sim.spawnItem("overworld", state.x - 5, state.y, { item: "coal", count: 1 }, out);
+
+    const ids = [early.id, late.id, item.id, player];
+    expect(new Set(ids).size).toBe(ids.length); // all pairwise distinct
+  });
+});

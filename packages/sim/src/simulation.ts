@@ -249,8 +249,9 @@ export class Simulation {
 
   private readonly rng: Rng;
   private readonly rngState: RngState;
-  private nextPlayerId: PlayerId = 1;
-  private nextEntityId: EntityId = 1;
+  /** Single allocator for both player and entity ids - they share one
+   * id space, so a player and a mob can never collide. */
+  private nextId: EntityId = 1;
   /** Disconnected players' state, by name, adopted on rejoin. */
   private readonly savedPlayers = new Map<string, PlayerState>();
   /** Last facing/held-item state broadcast per player, to detect changes
@@ -273,14 +274,13 @@ export class Simulation {
       blockPalette[def.id] = def.name;
     }
     return {
-      version: 2,
+      version: 3,
       blockPalette,
       seed: this.world.seed,
       tickCount: this.tickCount,
       timeOfDay: this.timeOfDay,
       rng: this.rngState.s,
-      nextPlayerId: this.nextPlayerId,
-      nextEntityId: this.nextEntityId,
+      nextId: this.nextId,
       worlds: {
         overworld: this.worlds.overworld.serializeChunks(),
         nether: this.worlds.nether.serializeChunks(),
@@ -306,8 +306,7 @@ export class Simulation {
     sim.tickCount = save.tickCount;
     sim.timeOfDay = save.timeOfDay;
     sim.rngState.s = save.rng;
-    sim.nextPlayerId = save.nextPlayerId;
-    sim.nextEntityId = save.nextEntityId;
+    sim.nextId = save.nextId;
     // Saved block numbers are remapped by their palette names, so a
     // renumbered registry (or removed mod blocks -> air) loads cleanly.
     const remap = buildBlockRemap(save.blockPalette);
@@ -352,9 +351,11 @@ export class Simulation {
     return this.worlds[dimension];
   }
 
-  /** Reserve a player id for a new connection (embedded or remote). */
+  /** Reserve a player id for a new connection (embedded or remote). Draws
+   * from the same id space as spawned entities, so a player and a mob
+   * can never end up sharing an id. */
   allocatePlayerId(): PlayerId {
-    return this.nextPlayerId++;
+    return this.nextId++;
   }
 
   tick(commands: readonly PlayerCommand[]): OutboundEvent[] {
@@ -380,7 +381,7 @@ export class Simulation {
   /** Spawn an item lying in the world (block drops, mob loot, death drops). */
   spawnItem(dimension: Dimension, x: number, y: number, stack: ItemStack, out: OutboundEvent[]): ItemEntity {
     const entity: ItemEntity = {
-      id: this.nextEntityId++,
+      id: this.nextId++,
       kind: "item",
       dimension,
       x,
@@ -401,7 +402,7 @@ export class Simulation {
 
   spawnMob(kind: MobKind, x: number, y: number, out: OutboundEvent[], dimension: Dimension = "overworld"): MobEntity {
     const entity: MobEntity = {
-      id: this.nextEntityId++,
+      id: this.nextId++,
       kind,
       dimension,
       x,
@@ -1326,7 +1327,7 @@ export class Simulation {
     const dy = target.y - PLAYER_HEIGHT / 2 - originY;
     const dist = Math.max(1, Math.hypot(dx, dy));
     const arrow: ArrowEntity = {
-      id: this.nextEntityId++,
+      id: this.nextId++,
       kind: "arrow",
       dimension: from.dimension,
       x: from.x + Math.sign(dx) * 0.5,
@@ -2024,7 +2025,7 @@ export class Simulation {
         p.attackCooldown = BOW_COOLDOWN;
         const originY = p.y - PLAYER_HEIGHT * 0.6;
         const arrow: ArrowEntity = {
-          id: this.nextEntityId++,
+          id: this.nextId++,
           kind: "arrow",
           dimension: p.dimension,
           x: p.x + (dx / len) * 0.8,

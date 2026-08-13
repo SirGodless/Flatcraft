@@ -43,6 +43,22 @@ describe("save/load", () => {
     expect(restored.portals.nether.get("9,40")).toEqual({ x: 9, y: 40 });
   });
 
+  it("carries the id allocator over the round-trip, still collision-free after load", () => {
+    const sim = new Simulation(SEED);
+    const { state } = joinPlayer(sim);
+    const out: OutboundEvent[] = [];
+    sim.spawnMob("pig", state.x + 5, state.y, out);
+
+    const restored = Simulation.deserialize(sim.serialize());
+    const newPlayer = restored.allocatePlayerId();
+    const newMob = restored.spawnMob("pig", state.x - 5, state.y, out);
+    expect(newPlayer).not.toBe(newMob.id);
+    // Neither collides with anything that already existed before the save.
+    const priorIds = [...sim.entities.values()].map((e) => e.id);
+    expect(priorIds).not.toContain(newPlayer);
+    expect(priorIds).not.toContain(newMob.id);
+  });
+
   it("a rejoining player adopts their saved position and inventory", () => {
     const sim = new Simulation(SEED);
     const { state } = joinPlayer(sim, "Alice");
@@ -104,7 +120,7 @@ describe("save/load", () => {
     const surface = surfaceHeight(SEED, spawnX);
     sim.world.setBlock(spawnX + 3, surface - 2, BlockId.Glowstone);
     const save = sim.serialize();
-    expect(save.version).toBe(2);
+    expect(save.version).toBe(3);
     expect(save.blockPalette![BlockId.Glowstone]).toBe("glowstone");
 
     // Simulate a registry that renumbered glowstone: the save's chunks
