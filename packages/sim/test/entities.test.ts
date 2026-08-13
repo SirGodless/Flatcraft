@@ -9,14 +9,14 @@ import {
   type MobEntity,
   type OutboundEvent,
   type PlayerId,
-  type PlayerState,
+  type PlayerEntity,
 } from "../src/index.js";
 
 const SEED = 1337;
 const SPAWN_X = findSpawnX(SEED);
 const SURFACE = surfaceHeight(SEED, SPAWN_X);
 
-function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerState } {
+function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerEntity } {
   const player = sim.allocatePlayerId();
   sim.tick([{ player, command: { type: "join", name: "T" } }]);
   for (let i = 0; i < 10; i++) sim.tick([]);
@@ -64,7 +64,7 @@ describe("item entities", () => {
 });
 
 describe("combat", () => {
-  function spawnZombieNear(sim: Simulation, state: PlayerState, dx: number): MobEntity {
+  function spawnZombieNear(sim: Simulation, state: PlayerEntity, dx: number): MobEntity {
     const out: OutboundEvent[] = [];
     return sim.spawnMob("zombie", state.x + dx, state.y, out);
   }

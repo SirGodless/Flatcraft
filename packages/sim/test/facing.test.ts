@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Simulation, type PlayerId, type PlayerState } from "../src/index.js";
+import { Simulation, type PlayerId, type PlayerEntity } from "../src/index.js";
 
 /**
  * Other players (and the client's own local marker) need to know which
@@ -9,7 +9,7 @@ import { Simulation, type PlayerId, type PlayerState } from "../src/index.js";
  * selected hotbar slot and the offhand.
  */
 
-function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerState } {
+function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerEntity } {
   const player = sim.allocatePlayerId();
   sim.tick([{ player, command: { type: "join", name: "T" } }]);
   for (let i = 0; i < 10; i++) sim.tick([]);

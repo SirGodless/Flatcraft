@@ -16,6 +16,8 @@ import {
   ITEM_PICKUP_RADIUS,
   isArrowEntity,
   isItemEntity,
+  isMobEntity,
+  isPlayerEntity,
   MOB_CAP,
   MOB_DESPAWN_RANGE,
   type ArrowEntity,
@@ -24,6 +26,7 @@ import {
   type ItemEntity,
   type MobEntity,
   type MobKind,
+  type PlayerEntity,
 } from "./entities.js";
 import { mobDef, mobsNearStructure, sizeOf, spawnPool, type ExplodesDef } from "./mobs.js";
 import {
@@ -118,14 +121,6 @@ function buildBlockRemap(palette: Record<number, string> | undefined): Map<numbe
   return identical ? null : remap;
 }
 
-/** The player's current movement intent, kept until the next move command. */
-export interface PlayerInput {
-  dx: -1 | 0 | 1;
-  jump: boolean;
-  /** Creative flight: descend. */
-  down?: boolean;
-}
-
 /** Default body color for players who never picked one. */
 export const DEFAULT_PLAYER_COLOR = 0x4868e0;
 
@@ -134,66 +129,6 @@ function sanitizeColor(value: unknown): number | null {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 0xffffff
     ? value
     : null;
-}
-
-export interface PlayerState {
-  id: PlayerId;
-  name: string;
-  /** Body color (0xRRGGBB), chosen at login / via set_color. */
-  color: number;
-  dimension: Dimension;
-  /** Feet-center position in tiles (see physics.ts for the AABB layout). */
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  onGround: boolean;
-  input: PlayerInput;
-  inventory: InventorySlots;
-  /** Selected hotbar slot, 0..8. */
-  selected: number;
-  /** Stack held on the cursor while a UI is open. */
-  cursor: ItemStack | null;
-  /** Personal 3x3 crafting grid (only the 2x2 corner without a table). */
-  craftGrid: (ItemStack | null)[];
-  /** Block currently being mined, with accumulated progress ticks.
-   * `wall` targets the background layer (hammer mining). */
-  mining: { x: number; y: number; progress: number; wall?: boolean } | null;
-  health: number;
-  /** Hunger bar, 0..PLAYER_MAX_HUNGER. */
-  hunger: number;
-  /** Accumulated activity; drains hunger at EXHAUSTION_PER_POINT. */
-  exhaustion: number;
-  /** Invulnerability frames after taking a hit. */
-  hurtCooldown: number;
-  /** Ticks until the next melee attack is allowed. */
-  attackCooldown: number;
-  /** Knockback velocity, decays and adds onto walking. */
-  kbX: number;
-  /** Tiles fallen so far in the current fall. */
-  fallDistance: number;
-  /** Active potion effects, remaining ticks by effect id. */
-  effects: Record<string, number>;
-  /** Consecutive ticks standing inside a nether portal. */
-  portalTicks: number;
-  /** Ticks left before a portal can trigger again after arriving. */
-  portalCooldown: number;
-  /** Saturation buffers hunger drain (eating tops it up). */
-  saturation: number;
-  /** Food currently being eaten (takes the item's eat_ticks). */
-  eating: { item: string; ticks: number } | null;
-  /** Worn armor piece (damage absorption). */
-  armor: ItemStack | null;
-  /** Offhand item (shields block passively from here). */
-  offhand: ItemStack | null;
-  /** Active grappling-hook pull toward an anchor point. */
-  grapple: { x: number; y: number; ticks: number } | null;
-  /** Creative mode: no damage, flight, instant break, free placement. */
-  creative: boolean;
-  /** Remaining diving air in ticks (MAX_AIR_TICKS when surfaced). */
-  air: number;
-  /** Which way this player is visually facing (last nonzero move dx). */
-  facing: "left" | "right";
 }
 
 /** Diving: air supply in ticks, and drowning damage cadence. */
@@ -213,7 +148,6 @@ const MAX_CHUNK_COORD = 1_000_000;
  */
 export class Simulation {
   readonly worlds: Record<Dimension, World>;
-  readonly players = new Map<PlayerId, PlayerState>();
   readonly furnaces = new Map<string, FurnaceState>();
   /** Chest contents, keyed like furnaces: "dim:x,y". */
   readonly chests = new Map<string, { dimension: Dimension; x: number; y: number; slots: (ItemStack | null)[] }>();
@@ -238,7 +172,7 @@ export class Simulation {
    * id space, so a player and a mob can never collide. */
   private nextId: EntityId = 1;
   /** Disconnected players' state, by name, adopted on rejoin. */
-  private readonly savedPlayers = new Map<string, PlayerState>();
+  private readonly savedPlayers = new Map<string, PlayerEntity>();
   /** Last facing/held-item state broadcast per player, to detect changes
    * without hooking every place inventory/offhand/facing can mutate. */
   private readonly lastGear = new Map<PlayerId, { facing: "left" | "right"; main: string | null; off: string | null }>();
@@ -252,6 +186,33 @@ export class Simulation {
     this.rng = () => rngNext(this.rngState);
   }
 
+  /** Connected players are just entities with kind "player" - this is a
+   * read-only snapshot view for callers that want a player-only map (a
+   * live player is never removed from `entities` except via "leave"; the
+   * returned Map is a fresh snapshot, but its values are the same live
+   * entity objects, so mutating them still mutates the simulation). */
+  get players(): ReadonlyMap<PlayerId, PlayerEntity> {
+    const map = new Map<PlayerId, PlayerEntity>();
+    for (const p of this.playerEntities()) map.set(p.id, p);
+    return map;
+  }
+
+  private getPlayer(id: PlayerId): PlayerEntity | undefined {
+    const e = this.entities.get(id);
+    return e && isPlayerEntity(e) ? e : undefined;
+  }
+
+  private *playerEntities(): IterableIterator<PlayerEntity> {
+    for (const e of this.entities.values()) {
+      if (isPlayerEntity(e)) yield e;
+    }
+  }
+
+  private hasPlayers(): boolean {
+    for (const _ of this.playerEntities()) return true;
+    return false;
+  }
+
   /** Snapshot the complete simulation state as plain serializable data. */
   serialize(): SimSave {
     const blockPalette: Record<number, string> = {};
@@ -259,7 +220,7 @@ export class Simulation {
       blockPalette[def.id] = def.name;
     }
     return {
-      version: 3,
+      version: 4,
       blockPalette,
       seed: this.world.seed,
       tickCount: this.tickCount,
@@ -276,10 +237,11 @@ export class Simulation {
         overworld: [...this.portals.overworld.values()],
         nether: [...this.portals.nether.values()],
       },
-      entities: [...this.entities.values()].map((e) => structuredClone(e)),
+      // Players live in `entities` too, but are saved separately below.
+      entities: [...this.entities.values()].filter((e) => !isPlayerEntity(e)).map((e) => structuredClone(e)),
       // Both connected and previously saved players, by name.
       players: [
-        ...[...this.players.values()].map((p) => structuredClone(p)),
+        ...[...this.playerEntities()].map((p) => structuredClone(p)),
         ...[...this.savedPlayers.values()].map((p) => structuredClone(p)),
       ],
     };
@@ -620,7 +582,7 @@ export class Simulation {
   }
 
   private stepMining(out: OutboundEvent[]): void {
-    for (const p of this.players.values()) {
+    for (const p of this.playerEntities()) {
       const mining = p.mining;
       if (!mining) continue;
       const world = this.worldOf(p.dimension);
@@ -749,6 +711,9 @@ export class Simulation {
 
   private stepEntities(out: OutboundEvent[]): void {
     for (const entity of [...this.entities.values()]) {
+      // Players are stepped separately (stepPlayers) - very different
+      // physics (input-driven, creative flight, ...).
+      if (isPlayerEntity(entity)) continue;
       const prevX = entity.x;
       const prevY = entity.y;
       const size = sizeOf(entity.kind);
@@ -920,14 +885,14 @@ export class Simulation {
   }
 
   private stepSpawning(out: OutboundEvent[]): void {
-    if (this.tickCount % 50 !== 0 || this.players.size === 0) return;
+    if (this.tickCount % 50 !== 0 || !this.hasPlayers()) return;
     let mobCount = 0;
     for (const e of this.entities.values()) {
-      if (e.kind !== "item") mobCount++;
+      if (!isItemEntity(e) && !isPlayerEntity(e)) mobCount++;
     }
     if (mobCount >= MOB_CAP) return;
 
-    const players = [...this.players.values()];
+    const players = [...this.playerEntities()];
     const anchor = players[Math.floor(this.rng() * players.length)]!;
     const world = this.worldOf(anchor.dimension);
     const offset = 12 + Math.floor(this.rng() * 20);
@@ -1007,7 +972,7 @@ export class Simulation {
   }
 
   private stepPlayers(out: OutboundEvent[]): void {
-    for (const p of this.players.values()) {
+    for (const p of this.playerEntities()) {
       const prevX = p.x;
       const prevY = p.y;
       const wasOnGround = p.onGround;
@@ -1228,7 +1193,7 @@ export class Simulation {
    * slot or offhand can change (crafting, mining, eating, drag-and-drop,
    * ...) without hooking each site individually. */
   private stepGearSync(out: OutboundEvent[]): void {
-    for (const p of this.players.values()) {
+    for (const p of this.playerEntities()) {
       const current = {
         facing: p.facing,
         main: p.inventory[p.selected]?.item ?? null,
@@ -1243,7 +1208,7 @@ export class Simulation {
     }
   }
 
-  private teleportThroughPortal(p: PlayerState, out: OutboundEvent[]): void {
+  private teleportThroughPortal(p: PlayerEntity, out: OutboundEvent[]): void {
     const targetDim: Dimension = p.dimension === "overworld" ? "nether" : "overworld";
     const targetWorld = this.worldOf(targetDim);
     const xt = Math.round(p.dimension === "overworld" ? p.x / NETHER_SCALE : p.x * NETHER_SCALE);
@@ -1296,14 +1261,13 @@ export class Simulation {
   }
 
   /**
-   * Shared health/cooldown bookkeeping for anything hurtable. PlayerState
+   * Shared health/cooldown bookkeeping for anything hurtable. PlayerEntity
    * and MobEntity both structurally carry {health, hurtCooldown}, so this
-   * works for either without needing them to be the same type (that
-   * unification is a later stage - this just kills the duplicated
-   * cooldown/health math in the meantime). Knockback and death handling
-   * stay in each caller: players and mobs apply knockback through
-   * different mechanisms (a decaying kbX overlay vs a direct vx nudge)
-   * and diverge completely on death (respawn vs loot-and-despawn).
+   * works for either without needing a common base class - this just
+   * kills the duplicated cooldown/health math. Knockback and death
+   * handling stay in each caller: players and mobs apply knockback
+   * through different mechanisms (a decaying kbX overlay vs a direct vx
+   * nudge) and diverge completely on death (respawn vs loot-and-despawn).
    */
   private applyDamageCore(
     target: { health: number; hurtCooldown: number },
@@ -1315,8 +1279,17 @@ export class Simulation {
     return { applied: true, lethal: target.health <= 0 };
   }
 
+  /** Mob armor/offhand absorb damage exactly like a player's would (see
+   * hurtPlayer); unset for every built-in mob today, but a datapack mob
+   * or Stage-6 equipped spawn can carry them (mobs.ts). */
   private hurtMob(entity: MobEntity, amount: number, out: OutboundEvent[], fromX?: number, knockback = 0.3): void {
-    const hit = this.applyDamageCore(entity, amount);
+    const armorAbsorb = entity.armor ? (itemDef(entity.armor.item)?.armor ?? 0) : 0;
+    const shieldBlock = entity.offhand ? (itemDef(entity.offhand.item)?.shieldBlock ?? 0) : 0;
+    const reduced =
+      armorAbsorb > 0 || shieldBlock > 0
+        ? Math.max(1, Math.round(amount * (1 - armorAbsorb) * (1 - shieldBlock)))
+        : amount;
+    const hit = this.applyDamageCore(entity, reduced);
     if (!hit.applied) return;
     if (fromX !== undefined) {
       entity.vx += (entity.x >= fromX ? 1 : -1) * knockback;
@@ -1334,10 +1307,18 @@ export class Simulation {
         this.spawnItem(entity.dimension, entity.x, entity.y - 0.5, { item: loot.item, count }, out);
       }
     }
+    // Equipped/carrying mobs (Stage 6) drop their gear just like a player.
+    if (entity.inventory) {
+      for (const stack of entity.inventory) {
+        if (stack) this.spawnItem(entity.dimension, entity.x, entity.y - 0.5, stack, out);
+      }
+    }
+    if (entity.armor) this.spawnItem(entity.dimension, entity.x, entity.y - 0.5, entity.armor, out);
+    if (entity.offhand) this.spawnItem(entity.dimension, entity.x, entity.y - 0.5, entity.offhand, out);
     this.removeEntity(entity.id, out);
   }
 
-  private shootArrow(from: MobEntity, target: PlayerState, damage: number, out: OutboundEvent[]): void {
+  private shootArrow(from: MobEntity, target: PlayerEntity, damage: number, out: OutboundEvent[]): void {
     const originY = from.y - sizeOf(from.kind).height * 0.75;
     const dx = target.x - from.x;
     const dy = target.y - PLAYER_HEIGHT / 2 - originY;
@@ -1381,7 +1362,7 @@ export class Simulation {
     }
 
     // Hurt anything nearby, scaled by distance.
-    for (const p of this.players.values()) {
+    for (const p of this.playerEntities()) {
       if (p.dimension !== creeper.dimension) continue;
       const dist = Math.hypot(p.x - cx, p.y - PLAYER_HEIGHT / 2 - cy);
       if (dist > def.damageRadius) continue;
@@ -1389,7 +1370,7 @@ export class Simulation {
       this.hurtPlayer(p, Math.round(def.maxDamage * (1 - dist / def.damageRadius)), out, cx);
     }
     for (const other of this.entities.values()) {
-      if (isItemEntity(other) || isArrowEntity(other)) continue;
+      if (!isMobEntity(other)) continue;
       if (other.dimension !== creeper.dimension) continue;
       const dist = Math.hypot(other.x - cx, other.y - cy);
       if (dist > def.damageRadius) continue;
@@ -1398,9 +1379,9 @@ export class Simulation {
     }
   }
 
-  private nearestPlayer(dimension: Dimension, x: number, y: number): { p: PlayerState; dist: number } | null {
-    let best: { p: PlayerState; dist: number } | null = null;
-    for (const p of this.players.values()) {
+  private nearestPlayer(dimension: Dimension, x: number, y: number): { p: PlayerEntity; dist: number } | null {
+    let best: { p: PlayerEntity; dist: number } | null = null;
+    for (const p of this.playerEntities()) {
       if (p.dimension !== dimension) continue;
       const dist = Math.hypot(p.x - x, p.y - PLAYER_HEIGHT / 2 - y);
       if (!best || dist < best.dist) best = { p, dist };
@@ -1411,7 +1392,7 @@ export class Simulation {
   /** Mob whose AABB (expanded by radius) contains the point. */
   private mobNear(dimension: Dimension, x: number, y: number, radius: number): MobEntity | null {
     for (const entity of this.entities.values()) {
-      if (isItemEntity(entity) || isArrowEntity(entity)) continue;
+      if (!isMobEntity(entity)) continue;
       if (entity.dimension !== dimension) continue;
       const size = sizeOf(entity.kind);
       const dx = Math.max(0, Math.abs(x - entity.x) - size.width / 2);
@@ -1423,8 +1404,8 @@ export class Simulation {
   }
 
   /** Player whose AABB (expanded by radius) contains the point. */
-  private playerNearBox(dimension: Dimension, x: number, y: number, radius: number): PlayerState | null {
-    for (const p of this.players.values()) {
+  private playerNearBox(dimension: Dimension, x: number, y: number, radius: number): PlayerEntity | null {
+    for (const p of this.playerEntities()) {
       if (p.dimension !== dimension) continue;
       const dx = Math.max(0, Math.abs(x - p.x) - PLAYER_WIDTH / 2);
       const top = p.y - PLAYER_HEIGHT;
@@ -1434,14 +1415,14 @@ export class Simulation {
     return null;
   }
 
-  private entityTouchesPlayer(entity: MobEntity, p: PlayerState): boolean {
+  private entityTouchesPlayer(entity: MobEntity, p: PlayerEntity): boolean {
     const size = sizeOf(entity.kind);
     const overlapsX = Math.abs(entity.x - p.x) < (size.width + PLAYER_WIDTH) / 2 + 0.2;
     const overlapsY = entity.y > p.y - PLAYER_HEIGHT - 0.2 && entity.y - size.height < p.y + 0.2;
     return overlapsX && overlapsY;
   }
 
-  private hurtPlayer(p: PlayerState, amount: number, out: OutboundEvent[], fromX?: number): void {
+  private hurtPlayer(p: PlayerEntity, amount: number, out: OutboundEvent[], fromX?: number): void {
     if (p.creative) return;
     if (amount <= 0) return;
     // Armor absorbs a fraction; an offhand shield blocks another share.
@@ -1502,7 +1483,7 @@ export class Simulation {
     out.push({ to: p.id, event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
   }
 
-  private syncInventory(p: PlayerState, out: OutboundEvent[]): void {
+  private syncInventory(p: PlayerEntity, out: OutboundEvent[]): void {
     out.push({
       to: p.id,
       event: {
@@ -1528,20 +1509,20 @@ export class Simulation {
     const reject = (reason: string): void => {
       reply({ type: "command_rejected", player, reason });
     };
-    const syncInventory = (p: PlayerState): void => {
+    const syncInventory = (p: PlayerEntity): void => {
       this.syncInventory(p, out);
     };
 
     switch (command.type) {
       case "join": {
         // One live player per name (names are identity for saves/rejoins).
-        if ([...this.players.values()].some((p) => p.name === command.name)) {
+        if ([...this.playerEntities()].some((p) => p.name === command.name)) {
           reject("name already in use");
           break;
         }
         // Tell the joiner who is already in the world.
         const replayPlayers = (): void => {
-          for (const other of this.players.values()) {
+          for (const other of this.playerEntities()) {
             if (other.id === player) continue;
             reply({
               type: "player_joined",
@@ -1562,7 +1543,7 @@ export class Simulation {
         const saved = this.savedPlayers.get(command.name);
         if (saved) {
           this.savedPlayers.delete(command.name);
-          const state: PlayerState = { ...structuredClone(saved), id: player };
+          const state: PlayerEntity = { ...structuredClone(saved), id: player };
           // Older saves lack newer fields; default them on adoption.
           state.hunger = Number.isFinite(state.hunger) ? state.hunger : PLAYER_MAX_HUNGER;
           state.exhaustion = Number.isFinite(state.exhaustion) ? state.exhaustion : 0;
@@ -1575,7 +1556,7 @@ export class Simulation {
           state.creative = state.creative === true;
           state.air = Number.isFinite(state.air) ? state.air : MAX_AIR_TICKS;
           state.facing = state.facing === "left" ? "left" : "right";
-          this.players.set(player, state);
+          this.entities.set(player, state);
           const rejoinMain = state.inventory[state.selected]?.item ?? null;
           const rejoinOff = state.offhand?.item ?? null;
           this.lastGear.set(player, { facing: state.facing, main: rejoinMain, off: rejoinOff });
@@ -1598,6 +1579,7 @@ export class Simulation {
           reply({ type: "player_dimension", player, dim: state.dimension, x: state.x, y: state.y });
           replayPlayers();
           for (const entity of this.entities.values()) {
+            if (isPlayerEntity(entity)) continue;
             reply({
               type: "entity_spawned",
               id: entity.id,
@@ -1613,8 +1595,9 @@ export class Simulation {
         const spawnX = findSpawnX(this.world.seed);
         const x = spawnX + 0.5;
         const y = surfaceHeight(this.world.seed, spawnX);
-        const state: PlayerState = {
+        const state: PlayerEntity = {
           id: player,
+          kind: "player",
           name: command.name,
           color: chosenColor ?? DEFAULT_PLAYER_COLOR,
           dimension: "overworld",
@@ -1648,7 +1631,7 @@ export class Simulation {
           air: MAX_AIR_TICKS,
           facing: "right",
         };
-        this.players.set(player, state);
+        this.entities.set(player, state);
         this.lastGear.set(player, { facing: state.facing, main: null, off: null });
         broadcast({
           type: "player_joined",
@@ -1668,6 +1651,7 @@ export class Simulation {
         reply({ type: "time_changed", time: this.timeOfDay });
         replayPlayers();
         for (const entity of this.entities.values()) {
+          if (isPlayerEntity(entity)) continue;
           reply({
             type: "entity_spawned",
             id: entity.id,
@@ -1681,8 +1665,8 @@ export class Simulation {
         break;
       }
       case "leave": {
-        const p = this.players.get(player);
-        if (p && this.players.delete(player)) {
+        const p = this.getPlayer(player);
+        if (p && this.entities.delete(player)) {
           // Keep the state for a future rejoin (and for saves).
           this.savedPlayers.set(p.name, p);
           this.lastGear.delete(player);
@@ -1691,7 +1675,7 @@ export class Simulation {
         break;
       }
       case "move": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1705,7 +1689,7 @@ export class Simulation {
         break;
       }
       case "set_color": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1720,7 +1704,7 @@ export class Simulation {
         break;
       }
       case "select_slot": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1734,7 +1718,7 @@ export class Simulation {
         break;
       }
       case "craft": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1776,7 +1760,7 @@ export class Simulation {
         break;
       }
       case "slot_click": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1790,7 +1774,7 @@ export class Simulation {
         break;
       }
       case "return_grid": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1800,7 +1784,7 @@ export class Simulation {
         break;
       }
       case "open_furnace": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1824,7 +1808,7 @@ export class Simulation {
         break;
       }
       case "open_chest": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1844,7 +1828,7 @@ export class Simulation {
         break;
       }
       case "request_chunk": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1871,7 +1855,7 @@ export class Simulation {
         break;
       }
       case "start_mining": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1906,7 +1890,7 @@ export class Simulation {
         break;
       }
       case "stop_mining": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1919,7 +1903,7 @@ export class Simulation {
         break;
       }
       case "attack": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1928,7 +1912,7 @@ export class Simulation {
           break;
         }
         const entity = this.entities.get(command.entity);
-        if (!entity || isItemEntity(entity) || isArrowEntity(entity) || entity.dimension !== p.dimension) {
+        if (!entity || !isMobEntity(entity) || entity.dimension !== p.dimension) {
           reject("no such target");
           break;
         }
@@ -1945,7 +1929,7 @@ export class Simulation {
         break;
       }
       case "trade": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1973,7 +1957,7 @@ export class Simulation {
         break;
       }
       case "use_item": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -2012,7 +1996,7 @@ export class Simulation {
         break;
       }
       case "shoot": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -2066,7 +2050,7 @@ export class Simulation {
         break;
       }
       case "enchant": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -2099,7 +2083,7 @@ export class Simulation {
         break;
       }
       case "place_block": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -2221,7 +2205,7 @@ export class Simulation {
         break;
       }
       case "use_block": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -2257,7 +2241,7 @@ export class Simulation {
         break;
       }
       case "use_bucket": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -2324,7 +2308,7 @@ export class Simulation {
         break;
       }
       case "grapple": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -2368,7 +2352,7 @@ export class Simulation {
         break;
       }
       case "set_creative": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -2379,7 +2363,7 @@ export class Simulation {
         break;
       }
       case "creative_give": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -2402,7 +2386,7 @@ export class Simulation {
   }
 
   private applySlotClick(
-    p: PlayerState,
+    p: PlayerEntity,
     slot: SlotRef,
     button: "left" | "right",
     reject: (reason: string) => void,
@@ -2593,7 +2577,7 @@ export class Simulation {
     return chest;
   }
 
-  private dumpGridAndCursor(p: PlayerState): void {
+  private dumpGridAndCursor(p: PlayerEntity): void {
     for (let i = 0; i < CRAFT_GRID_SIZE; i++) {
       const cell = p.craftGrid[i];
       if (!cell) continue;
@@ -2607,7 +2591,7 @@ export class Simulation {
   }
 
   private withinReach(player: PlayerId, tileX: number, tileY: number): boolean {
-    const p = this.players.get(player);
+    const p = this.getPlayer(player);
     if (!p) return false;
     const dx = tileX + 0.5 - p.x;
     const dy = tileY + 0.5 - (p.y - PLAYER_HEIGHT / 2);
@@ -2615,7 +2599,7 @@ export class Simulation {
   }
 
   private tileIntersectsAnyPlayer(dimension: Dimension, tileX: number, tileY: number): boolean {
-    for (const p of this.players.values()) {
+    for (const p of this.playerEntities()) {
       if (p.dimension !== dimension) continue;
       const overlapsX = tileX + 1 > p.x - PLAYER_WIDTH / 2 && tileX < p.x + PLAYER_WIDTH / 2;
       const overlapsY = tileY + 1 > p.y - PLAYER_HEIGHT && tileY < p.y;
@@ -2624,7 +2608,7 @@ export class Simulation {
     return false;
   }
 
-  private blockNearby(p: PlayerState, block: BlockId): boolean {
+  private blockNearby(p: PlayerEntity, block: BlockId): boolean {
     const world = this.worldOf(p.dimension);
     const centerY = p.y - PLAYER_HEIGHT / 2;
     const minX = Math.floor(p.x - REACH);

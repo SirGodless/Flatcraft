@@ -1,7 +1,6 @@
-import type { Entity } from "./entities.js";
+import type { Entity, PlayerEntity } from "./entities.js";
 import type { FurnaceState } from "./furnace.js";
 import type { ItemStack } from "./inventory.js";
-import type { PlayerState } from "./simulation.js";
 import type { Dimension } from "./world/world.js";
 
 /**
@@ -9,7 +8,7 @@ import type { Dimension } from "./world/world.js";
  * safe, so it can go to IndexedDB (client) or a file (dedicated server).
  */
 export interface SimSave {
-  version: 1 | 2 | 3;
+  version: 1 | 2 | 3 | 4;
   /**
    * Numeric block id -> canonical string id at save time. On load,
    * chunks are remapped by name, so the numbers in `worlds` are never
@@ -33,6 +32,8 @@ export interface SimSave {
     overworld: Array<{ x: number; y: number }>;
     nether: Array<{ x: number; y: number }>;
   };
+  /** Never contains player-kind entities - those are saved separately
+   * below (both connected and disconnected-but-saved players). */
   entities: Entity[];
-  players: PlayerState[];
+  players: PlayerEntity[];
 }

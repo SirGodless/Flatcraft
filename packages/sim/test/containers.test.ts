@@ -5,12 +5,12 @@ import {
   Simulation,
   type OutboundEvent,
   type PlayerId,
-  type PlayerState,
+  type PlayerEntity,
 } from "../src/index.js";
 
 const SEED = 1337;
 
-function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerState } {
+function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerEntity } {
   const player = sim.allocatePlayerId();
   sim.tick([{ player, command: { type: "join", name: "T" } }]);
   for (let i = 0; i < 10; i++) sim.tick([]);
@@ -23,7 +23,7 @@ function setBlock(sim: Simulation, x: number, y: number, id: BlockId): void {
 }
 
 describe("chests", () => {
-  function chestSetup(): { sim: Simulation; player: PlayerId; state: PlayerState; cx: number; cy: number } {
+  function chestSetup(): { sim: Simulation; player: PlayerId; state: PlayerEntity; cx: number; cy: number } {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
     const cx = Math.floor(state.x) + 2;

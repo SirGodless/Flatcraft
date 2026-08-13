@@ -8,7 +8,7 @@ import {
   Simulation,
   surfaceHeight,
   type PlayerId,
-  type PlayerState,
+  type PlayerEntity,
 } from "../src/index.js";
 
 /**
@@ -42,7 +42,7 @@ const SEED = 1337;
 const SPAWN_X = findSpawnX(SEED);
 const SURFACE = surfaceHeight(SEED, SPAWN_X);
 
-function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerState } {
+function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerEntity } {
   const player = sim.allocatePlayerId();
   sim.tick([{ player, command: { type: "join", name: "T" } }]);
   for (let i = 0; i < 10; i++) sim.tick([]);
