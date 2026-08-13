@@ -305,7 +305,7 @@ export class Renderer {
     this.furnacePanel.close();
     this.chestPanel.close();
     this.backpackPanel.setInventory(this.inventory, this.selectedSlot);
-    this.backpackPanel.open((index) => ({ container: "backpack", index }), capacity);
+    this.backpackPanel.open((index) => ({ container: "backpack", index }), capacity, capacity);
     this.refreshBackpack();
   }
 
@@ -337,7 +337,7 @@ export class Renderer {
       this.craftingPanel.open(3);
       return true;
     }
-    if (block === BlockId.Furnace) {
+    if (blockDef(block).furnace !== undefined) {
       this.craftingPanel.close();
       this.chestPanel.close();
       this.furnacePanel.setInventory(this.inventory, this.selectedSlot);
@@ -353,12 +353,13 @@ export class Renderer {
       this.enchantPanel.update(this.inventory, this.selectedSlot);
       return true;
     }
-    if (block === BlockId.Chest) {
+    const containerSlots = blockDef(block).container;
+    if (containerSlots !== undefined) {
       this.craftingPanel.close();
       this.furnacePanel.close();
       this.openChestPos = { x: tileX, y: tileY };
       this.chestPanel.setInventory(this.inventory, this.selectedSlot);
-      this.chestPanel.open((index) => ({ container: "chest", x: tileX, y: tileY, index }));
+      this.chestPanel.open((index) => ({ container: "chest", x: tileX, y: tileY, index }), containerSlots);
       this.onOpenChest?.(tileX, tileY);
       return true;
     }

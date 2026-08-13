@@ -21,10 +21,13 @@ export interface FurnaceState {
   burnTotal: number;
   /** Progress cooking the current input item, in ticks. */
   cookProgress: number;
+  /** Burn/cook rate multiplier from the block that created this (a
+   * datapack "blast furnace" variant might run at 2x). */
+  speed: number;
 }
 
-export function createFurnace(dimension: Dimension, x: number, y: number): FurnaceState {
-  return { dimension, x, y, input: null, fuel: null, output: null, burnLeft: 0, burnTotal: 0, cookProgress: 0 };
+export function createFurnace(dimension: Dimension, x: number, y: number, speed = 1): FurnaceState {
+  return { dimension, x, y, input: null, fuel: null, output: null, burnLeft: 0, burnTotal: 0, cookProgress: 0, speed };
 }
 
 export function furnaceKey(dimension: Dimension, x: number, y: number): string {
@@ -55,7 +58,7 @@ export function stepFurnace(state: FurnaceState, recipes: Iterable<Recipe>): boo
   const canCook = recipe !== null && outputFits;
 
   if (state.burnLeft > 0) {
-    state.burnLeft--;
+    state.burnLeft = Math.max(0, state.burnLeft - state.speed);
     changed = true;
   }
 
@@ -69,7 +72,7 @@ export function stepFurnace(state: FurnaceState, recipes: Iterable<Recipe>): boo
   }
 
   if (canCook && state.burnLeft > 0) {
-    state.cookProgress++;
+    state.cookProgress += state.speed;
     changed = true;
     const needed = recipe.cookingTime ?? DEFAULT_COOK_TICKS;
     if (state.cookProgress >= needed) {

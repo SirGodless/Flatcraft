@@ -67,6 +67,11 @@ export interface BlockJson {
   tall?: boolean;
   toggle_to?: string;
   liquid?: { kind: "water" | "lava"; level: number };
+  /** Opens a chest-style storage screen with this many slots. */
+  container?: { slots: number };
+  /** Opens a furnace-style cook screen. speed scales burn/cook rate
+   * (2 = a blast furnace that burns and cooks twice as fast). */
+  furnace?: { speed?: number };
 }
 
 class SchemaError extends Error {
@@ -262,7 +267,7 @@ export function validateBlockJson(raw: unknown, source: string): BlockJson {
   const value = need<Record<string, unknown>>(source, "(root)", raw, "object");
   checkKeys(source, "", value, [
     "id", "name", "sprite", "solid", "hardness", "tool", "required_tier", "drops",
-    "side_permeable", "slab", "tall", "toggle_to", "liquid",
+    "side_permeable", "slab", "tall", "toggle_to", "liquid", "container", "furnace",
   ]);
   const out: BlockJson = {
     id: needId(source, "id", value["id"]),
@@ -296,6 +301,17 @@ export function validateBlockJson(raw: unknown, source: string): BlockJson {
       kind: needOneOf(source, "liquid.kind", liquid["kind"], ["water", "lava"] as const),
       level: needNumber(source, "liquid.level", liquid["level"], 1, 8),
     };
+  }
+  if (value["container"] !== undefined) {
+    const container = need<Record<string, unknown>>(source, "container", value["container"], "object");
+    checkKeys(source, "container.", container, ["slots"]);
+    out.container = { slots: needNumber(source, "container.slots", container["slots"], 1, 54) };
+  }
+  if (value["furnace"] !== undefined) {
+    const furnace = need<Record<string, unknown>>(source, "furnace", value["furnace"], "object");
+    checkKeys(source, "furnace.", furnace, ["speed"]);
+    out.furnace = {};
+    if (furnace["speed"] !== undefined) out.furnace.speed = needNumber(source, "furnace.speed", furnace["speed"], 0.1, 100);
   }
   return out;
 }

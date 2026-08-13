@@ -317,7 +317,8 @@ export class Simulation {
       sim.worlds[dim].loadChunks(chunks);
     }
     for (const f of save.furnaces) {
-      sim.furnaces.set(furnaceKey(f.dimension, f.x, f.y), structuredClone(f));
+      // Saves from before per-block furnace speed lack the field.
+      sim.furnaces.set(furnaceKey(f.dimension, f.x, f.y), { ...structuredClone(f), speed: f.speed ?? 1 });
     }
     for (const c of save.chests ?? []) {
       sim.chests.set(furnaceKey(c.dimension, c.x, c.y), structuredClone(c));
@@ -716,7 +717,7 @@ export class Simulation {
             }
           }
         }
-        if (block === BlockId.Furnace) {
+        if (blockDef(block).furnace !== undefined) {
           const state = this.furnaces.get(furnaceKey(p.dimension, mining.x, mining.y));
           if (state) {
             for (const stack of [state.input, state.fuel, state.output]) {
@@ -725,9 +726,10 @@ export class Simulation {
             this.furnaces.delete(furnaceKey(p.dimension, mining.x, mining.y));
           }
         }
-        if (block === BlockId.Chest) {
+        const minedContainerSlots = blockDef(block).container;
+        if (minedContainerSlots !== undefined) {
           // Materialize structure loot before spilling.
-          const chest = this.ensureChest(p.dimension, mining.x, mining.y);
+          const chest = this.ensureChest(p.dimension, mining.x, mining.y, minedContainerSlots);
           if (chest) {
             // Contents spill out as item entities, like Minecraft.
             for (const stack of chest.slots) {
@@ -1741,13 +1743,14 @@ export class Simulation {
           reject("out of reach");
           break;
         }
-        if (this.worldOf(p.dimension).getBlockGenerating(x, y) !== BlockId.Furnace) {
+        const furnaceDef = blockDef(this.worldOf(p.dimension).getBlockGenerating(x, y)).furnace;
+        if (furnaceDef === undefined) {
           reject("no furnace there");
           break;
         }
         let state = this.furnaces.get(furnaceKey(p.dimension, x, y));
         if (!state) {
-          state = createFurnace(p.dimension, x, y);
+          state = createFurnace(p.dimension, x, y, furnaceDef.speed);
           this.furnaces.set(furnaceKey(p.dimension, x, y), state);
         }
         reply(this.furnaceEvent(state));
@@ -1764,11 +1767,12 @@ export class Simulation {
           reject("out of reach");
           break;
         }
-        if (this.worldOf(p.dimension).getBlockGenerating(x, y) !== BlockId.Chest) {
+        const slots = blockDef(this.worldOf(p.dimension).getBlockGenerating(x, y)).container;
+        if (slots === undefined) {
           reject("no chest there");
           break;
         }
-        const chest = this.ensureChest(p.dimension, x, y);
+        const chest = this.ensureChest(p.dimension, x, y, slots);
         reply({ type: "chest_changed", dim: p.dimension, x, y, slots: cloneInventory(chest.slots) });
         break;
       }
@@ -2393,15 +2397,16 @@ export class Simulation {
           reject("out of reach");
           return;
         }
-        if (this.worldOf(p.dimension).getBlockGenerating(x, y) !== BlockId.Chest) {
+        const chestSlots = blockDef(this.worldOf(p.dimension).getBlockGenerating(x, y)).container;
+        if (chestSlots === undefined) {
           reject("no chest there");
           return;
         }
-        if (!Number.isInteger(slot.index) || slot.index < 0 || slot.index >= 27) {
+        if (!Number.isInteger(slot.index) || slot.index < 0 || slot.index >= chestSlots) {
           reject("invalid slot");
           return;
         }
-        const chest = this.ensureChest(p.dimension, x, y);
+        const chest = this.ensureChest(p.dimension, x, y, chestSlots);
         const result = clickStack(p.cursor, chest.slots[slot.index] ?? null, button);
         p.cursor = result.cursor;
         chest.slots[slot.index] = result.slot;
@@ -2461,13 +2466,14 @@ export class Simulation {
           reject("out of reach");
           return;
         }
-        if (this.worldOf(p.dimension).getBlockGenerating(x, y) !== BlockId.Furnace) {
+        const clickFurnaceDef = blockDef(this.worldOf(p.dimension).getBlockGenerating(x, y)).furnace;
+        if (clickFurnaceDef === undefined) {
           reject("no furnace there");
           return;
         }
         let state = this.furnaces.get(furnaceKey(p.dimension, x, y));
         if (!state) {
-          state = createFurnace(p.dimension, x, y);
+          state = createFurnace(p.dimension, x, y, clickFurnaceDef.speed);
           this.furnaces.set(furnaceKey(p.dimension, x, y), state);
         }
         if (slot.slot === "output") {
@@ -2502,11 +2508,12 @@ export class Simulation {
     dimension: Dimension,
     x: number,
     y: number,
+    slotCount: number,
   ): { dimension: Dimension; x: number; y: number; slots: (ItemStack | null)[] } {
     const key = furnaceKey(dimension, x, y);
     let chest = this.chests.get(key);
     if (!chest) {
-      chest = { dimension, x, y, slots: new Array<ItemStack | null>(27).fill(null) };
+      chest = { dimension, x, y, slots: new Array<ItemStack | null>(slotCount).fill(null) };
       // Structure chests come pre-filled with their rolled loot.
       const loot = structureLootAt(this.worldOf(dimension).seed, dimension, x, y);
       if (loot) {

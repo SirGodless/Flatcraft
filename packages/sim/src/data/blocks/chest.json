@@ -3,5 +3,8 @@
   "name": "Chest",
   "solid": true,
   "hardness": 25,
-  "tool": "axe"
+  "tool": "axe",
+  "container": {
+    "slots": 27
+  }
 }

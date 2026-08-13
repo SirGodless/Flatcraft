@@ -129,6 +129,10 @@ export interface BlockDef {
   readonly tall?: boolean;
   /** Flowing liquid: kind and fill level 1..8. */
   readonly liquid?: { kind: "water" | "lava"; level: number };
+  /** Opens a chest-style storage screen with this many slots. */
+  readonly container?: number;
+  /** Opens a furnace-style cook screen; speed scales burn/cook rate. */
+  readonly furnace?: { speed: number };
   /** Sprite path override (default sprites/block/<name>.png). */
   readonly sprite?: string;
 }
@@ -179,6 +183,8 @@ export function registerBlockJson(raw: unknown, source = "datapack"): BlockDef {
     ...(json.slab ? { slab: true } : {}),
     ...(json.tall ? { tall: true } : {}),
     ...(json.liquid !== undefined ? { liquid: json.liquid } : {}),
+    ...(json.container !== undefined ? { container: json.container.slots } : {}),
+    ...(json.furnace !== undefined ? { furnace: { speed: json.furnace.speed ?? 1 } } : {}),
     ...(json.sprite !== undefined ? { sprite: json.sprite } : {}),
   };
   defs.set(id, def);

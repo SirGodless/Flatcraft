@@ -658,16 +658,17 @@ export class ContainerPanelUI {
     return this.cols * (SLOT + PAD) + 3 * PAD;
   }
 
-  /** `singleRowCount` resizes this opening to one row of that many slots
-   * (variable-capacity containers, e.g. a backpack whose datapack item
-   * declares a different size than the default). Omit it for panels
-   * with a fixed layout (the chest's 3 rows of 9). */
-  open(makeRef: (index: number) => SlotRef, singleRowCount?: number): void {
+  /**
+   * `slotCount` resizes this opening to a datapack-declared capacity
+   * that differs from the panel's constructed default (rows adjust,
+   * columns stay put - a chest with more slots grows taller, not
+   * wider). `colsOverride` additionally changes the column count
+   * (the backpack wants exactly one row, whatever its capacity).
+   */
+  open(makeRef: (index: number) => SlotRef, slotCount?: number, colsOverride?: number): void {
     this.makeRef = makeRef;
-    if (singleRowCount !== undefined) {
-      this.count = singleRowCount;
-      this.cols = singleRowCount;
-    }
+    if (slotCount !== undefined) this.count = slotCount;
+    if (colsOverride !== undefined) this.cols = colsOverride;
     this.slots = new Array<ItemStack | null>(this.count).fill(null);
     this.container.visible = true;
     this.rebuild();
