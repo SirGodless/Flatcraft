@@ -11,6 +11,14 @@ services:
       SERVER_NAME: "FlatCraft"
       # SEED: "1337"        # seed for freshly generated worlds
     restart: unless-stopped
+    networks:
+      - default
+      - caddy_net
+
+networks:
+  default:
+  caddy_net:
+    external: true
 
 volumes:
   flatcraft-data:
