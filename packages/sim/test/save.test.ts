@@ -63,6 +63,24 @@ describe("save/load", () => {
     expect(priorIds).not.toContain(newMob.id);
   });
 
+  it("recovers a save from before the unified id allocator (missing/corrupt nextId)", () => {
+    const sim = new Simulation(SEED);
+    const { state } = joinPlayer(sim, "Alice");
+    const out: OutboundEvent[] = [];
+    sim.spawnMob("pig", state.x + 5, state.y, out);
+
+    // Simulate an old (version < 3) save, or the NaN->null JSON round-trip
+    // a corrupt nextId produces: the field is unusable, not just absent.
+    const save = sim.serialize();
+    const priorIds = [...sim.entities.values()].map((e) => e.id);
+    for (const bad of [undefined, null, NaN, 0, -1] as unknown[]) {
+      const restored = Simulation.deserialize({ ...save, nextId: bad as number });
+      const newPlayer = restored.allocatePlayerId();
+      expect(Number.isFinite(newPlayer)).toBe(true);
+      expect(priorIds).not.toContain(newPlayer);
+    }
+  });
+
   it("a rejoining player adopts their saved position and inventory", () => {
     const sim = new Simulation(SEED);
     const { state } = joinPlayer(sim, "Alice");

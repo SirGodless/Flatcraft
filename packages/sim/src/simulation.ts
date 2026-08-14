@@ -121,6 +121,17 @@ function buildBlockRemap(palette: Record<number, string> | undefined): Map<numbe
   return identical ? null : remap;
 }
 
+/** One past the highest id already used by any saved entity or player -
+ * the fallback for a save whose own nextId can't be trusted (see
+ * deserialize). Never collides with what's already on disk, unlike just
+ * resuming from 1. */
+function safeNextId(save: SimSave): number {
+  let max = 0;
+  for (const e of save.entities) max = Math.max(max, e.id);
+  for (const p of save.players) max = Math.max(max, p.id);
+  return max + 1;
+}
+
 /** Default body color for players who never picked one. */
 export const DEFAULT_PLAYER_COLOR = 0x4868e0;
 
@@ -253,7 +264,12 @@ export class Simulation {
     sim.tickCount = save.tickCount;
     sim.timeOfDay = save.timeOfDay;
     sim.rngState.s = save.rng;
-    sim.nextId = save.nextId;
+    // Saves from before the unified id allocator (version < 3) carry no
+    // usable nextId - JSON round-trips a corrupt value (NaN) to `null`,
+    // and `null++` happens to land on 1, silently colliding with an id
+    // already in use (the exact bug the unified allocator exists to
+    // prevent). Fall back to one past the highest id already on record.
+    sim.nextId = Number.isFinite(save.nextId) && save.nextId > 0 ? save.nextId : safeNextId(save);
     // Saved block numbers are remapped by their palette names, so a
     // renumbered registry (or removed mod blocks -> air) loads cleanly.
     const remap = buildBlockRemap(save.blockPalette);
