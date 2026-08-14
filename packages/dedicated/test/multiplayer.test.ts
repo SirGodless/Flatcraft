@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -99,13 +99,17 @@ class TestClient {
 let server: DedicatedServer | null = null;
 let dataDir: string | null = null;
 
-async function startServer(existingDataDir?: string): Promise<DedicatedServer> {
+async function startServer(
+  existingDataDir?: string,
+  opts?: { resetWorld?: boolean; resetPlayers?: boolean },
+): Promise<DedicatedServer> {
   dataDir = existingDataDir ?? mkdtempSync(join(tmpdir(), "flatcraft-test-"));
   server = await startDedicatedServer({
     port: 0,
     dataDir,
     seed: SEED,
     log: () => {},
+    ...opts,
   });
   return server;
 }
@@ -336,5 +340,55 @@ describe("persistence", () => {
       inventory.type === "inventory_changed" && countInInventory(inventory.slots, "emerald"),
     ).toBe(7);
     await again.close();
+  });
+
+  it("RESET_PLAYERS keeps the world but drops saved player state", async () => {
+    const ded = await startServer();
+    const dir = dataDir!;
+    const alice = await connectAs(ded, "Alice");
+    alice.join();
+    await alice.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
+    const sim = ded.gameServer.simulation;
+    addToInventory(sim.players.get(alice.playerId)!.inventory, "emerald", 7);
+    sim.world.setBlock(SPAWN_X + 4, SURFACE - 3, BlockId.Glowstone);
+    await alice.close();
+    await new Promise((r) => setTimeout(r, 200));
+    await server!.close();
+    server = null;
+
+    const restarted = await startServer(dir, { resetPlayers: true });
+    // The world survived...
+    expect(
+      restarted.gameServer.simulation.world.getBlockGenerating(SPAWN_X + 4, SURFACE - 3),
+    ).toBe(BlockId.Glowstone);
+    // ...but Alice's saved inventory did not - same name, fresh start.
+    const again = await TestClient.connect(restarted.port, { name: "Alice", token: alice.token });
+    again.join();
+    const inventory = await again.waitFor((e) => e.type === "inventory_changed");
+    expect(
+      inventory.type === "inventory_changed" && countInInventory(inventory.slots, "emerald"),
+    ).toBe(0);
+    await again.close();
+  });
+
+  it("RESET_WORLD starts fresh and backs up the old save instead of deleting it", async () => {
+    const ded = await startServer();
+    const dir = dataDir!;
+    const alice = await connectAs(ded, "Alice");
+    alice.join();
+    await alice.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
+    ded.gameServer.simulation.world.setBlock(SPAWN_X + 4, SURFACE - 3, BlockId.Glowstone);
+    await alice.close();
+    await new Promise((r) => setTimeout(r, 200));
+    await server!.close();
+    server = null;
+
+    const restarted = await startServer(dir, { resetWorld: true });
+    // The old block is gone - it's a brand new world now...
+    expect(
+      restarted.gameServer.simulation.world.getBlockGenerating(SPAWN_X + 4, SURFACE - 3),
+    ).not.toBe(BlockId.Glowstone);
+    // ...but the previous save wasn't deleted, just moved aside.
+    expect(readdirSync(dir).some((f) => f.startsWith("world.json.reset-"))).toBe(true);
   });
 });

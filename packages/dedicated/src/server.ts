@@ -38,6 +38,15 @@ export interface DedicatedOptions {
   seed?: number | undefined;
   serverName?: string | undefined;
   saveIntervalMs?: number | undefined;
+  /** Start from a fresh world instead of loading world.json - the
+   * existing save is kept as a timestamped backup, not deleted, in case
+   * this was set by mistake. Implies resetPlayers (there's no old save
+   * left to load player state from either way). */
+  resetWorld?: boolean | undefined;
+  /** Keep the world (blocks, mobs, dropped items) but drop every
+   * player's saved state, so the next join with any given name starts
+   * fresh - full health, empty inventory, default spawn. */
+  resetPlayers?: boolean | undefined;
   log?: ((message: string) => void) | undefined;
   /** anfall-auth login (see oidc.ts); omit to run /auth/* as 501s (tests
    * bootstrap sessions directly via DedicatedServer.issueSession instead). */
@@ -130,6 +139,14 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   const spriteEntries = [...spriteSet];
 
   // --- World: load from disk or start fresh ---
+  if (options.resetWorld && existsSync(worldFile)) {
+    // Renamed, not deleted - a mistaken RESET_WORLD=true doesn't have to
+    // mean permanent data loss, same philosophy as the corrupt-save backup
+    // below.
+    const backup = `${worldFile}.reset-${Date.now()}`;
+    renameSync(worldFile, backup);
+    log(`RESET_WORLD set: previous world moved to ${backup}`);
+  }
   let simulation: Simulation;
   if (existsSync(worldFile)) {
     try {
@@ -146,6 +163,12 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   } else {
     simulation = new Simulation(options.seed ?? 1337);
     log(`new world (seed ${options.seed ?? 1337})`);
+  }
+  if (options.resetPlayers && !options.resetWorld) {
+    // resetWorld already implies this - there's no old player state left
+    // to load from a freshly generated world anyway.
+    simulation.resetPlayers();
+    log("RESET_PLAYERS set: all saved player state (position/inventory/health) cleared");
   }
   const gameServer = new GameServer(simulation);
 

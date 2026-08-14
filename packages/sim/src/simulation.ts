@@ -305,6 +305,17 @@ export class Simulation {
     return sim;
   }
 
+  /** Drops every player's saved state (position, inventory, health, ...)
+   * so the next join with that name starts fresh, without touching the
+   * world itself (blocks, mobs, dropped items). Intended for server
+   * startup only, right after construction/deserialize and before any
+   * connection has joined - at that point every player is still "saved"
+   * (see deserialize), never a live entity yet, so clearing savedPlayers
+   * alone is enough. */
+  resetPlayers(): void {
+    this.savedPlayers.clear();
+  }
+
   /** The overworld (kept for compatibility; use worldOf for others). */
   get world(): World {
     return this.worlds.overworld;
