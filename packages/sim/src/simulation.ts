@@ -85,15 +85,8 @@ import {
   TERMINAL_VELOCITY,
   WALK_SPEED,
 } from "./physics.js";
-import {
-  buildPortal,
-  convertFrame,
-  findPortalInterior,
-  nearPortal,
-  NETHER_SCALE,
-  PORTAL_COOLDOWN,
-  PORTAL_TICKS,
-} from "./portal.js";
+import { tryActivateMultiblock } from "./multiblock.js";
+import { buildPortal, nearPortal, NETHER_SCALE, PORTAL_COOLDOWN, PORTAL_TICKS } from "./portal.js";
 import type { SimSave } from "./save.js";
 import { clickStack } from "./slots.js";
 import { placementsNear, structureLootAt } from "./structures/place.js";
@@ -2134,27 +2127,17 @@ export class Simulation {
           reject("out of reach");
           break;
         }
-        // Flint and steel lights portals instead of placing a block.
-        if (stack.item === "flint_and_steel") {
-          const interior = findPortalInterior(world, x, y);
-          if (!interior) {
-            reject("no portal frame");
-            break;
-          }
-          for (let ty = interior.top; ty <= interior.bottom; ty++) {
-            for (let tx = interior.left; tx <= interior.right; tx++) {
-              world.setBlock(tx, ty, BlockId.NetherPortal);
-              broadcast({ type: "block_changed", dim: p.dimension, x: tx, y: ty, block: BlockId.NetherPortal });
-            }
-          }
-          // Lit frames turn side-permeable so players can walk in.
-          for (const change of convertFrame(world, interior)) {
-            broadcast({ type: "block_changed", dim: p.dimension, x: change.x, y: change.y, block: change.block });
-          }
-          this.portals[p.dimension].set(`${interior.left},${interior.bottom}`, {
-            x: interior.left,
-            y: interior.bottom,
-          });
+        // A multiblock trigger (e.g. flint and steel lighting a portal)
+        // takes over instead of placing a block; unhandled falls through
+        // to normal placement below.
+        const attempt = tryActivateMultiblock(world, x, y, { type: "place_block", item: stack.item }, {
+          dimension: p.dimension,
+          sim: this,
+          broadcast,
+        });
+        if (attempt.activated) break;
+        if (attempt.attempted) {
+          reject(attempt.failReason);
           break;
         }
         const def = itemDef(stack.item);
