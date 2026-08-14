@@ -4,6 +4,7 @@ import { extname, join, normalize, relative, resolve } from "node:path";
 import { GameServer, INFO_PATH, WS_PATH } from "@flatcraft/server";
 import type { AuthRequest, ClientMessage, ServerConnection, ServerInfo, ServerMessage } from "@flatcraft/server";
 import {
+  buildBlockRemap,
   registerBlockJson,
   registerItemJson,
   registerMobJson,
@@ -12,11 +13,15 @@ import {
   syncItemRecipes,
   TICK_MS,
   type Command,
+  type Dimension,
   type SimSave,
 } from "@flatcraft/sim";
 import { WebSocketServer, type WebSocket } from "ws";
 import { Accounts } from "./accounts.js";
 import { OidcLogin, type OidcConfig } from "./oidc.js";
+import { RegionStore } from "./regions.js";
+
+const DIMENSIONS: readonly Dimension[] = ["overworld", "nether"];
 
 /**
  * The dedicated server: one Node process, one port.
@@ -38,10 +43,10 @@ export interface DedicatedOptions {
   seed?: number | undefined;
   serverName?: string | undefined;
   saveIntervalMs?: number | undefined;
-  /** Start from a fresh world instead of loading world.json - the
-   * existing save is kept as a timestamped backup, not deleted, in case
-   * this was set by mistake. Implies resetPlayers (there's no old save
-   * left to load player state from either way). */
+  /** Start from a fresh world instead of loading world.json + the
+   * world/ region files - both are kept as timestamped backups, not
+   * deleted, in case this was set by mistake. Implies resetPlayers
+   * (there's no old save left to load player state from either way). */
   resetWorld?: boolean | undefined;
   /** Keep the world (blocks, mobs, dropped items) but drop every
    * player's saved state, so the next join with any given name starts
@@ -139,19 +144,40 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   const spriteEntries = [...spriteSet];
 
   // --- World: load from disk or start fresh ---
-  if (options.resetWorld && existsSync(worldFile)) {
+  // world.json holds everything except chunk terrain (entities, players,
+  // furnaces, chests, portals, seed, tick/time/rng, the block palette);
+  // terrain lives in world/<dimension>/r.<rx>.<ry>.bin region files (see
+  // regions.ts) and is loaded lazily, one region at a time, on first
+  // touch - not eagerly parsed here.
+  const worldDir = join(dataDir, "world");
+  if (options.resetWorld) {
     // Renamed, not deleted - a mistaken RESET_WORLD=true doesn't have to
-    // mean permanent data loss, same philosophy as the corrupt-save backup
-    // below.
-    const backup = `${worldFile}.reset-${Date.now()}`;
-    renameSync(worldFile, backup);
-    log(`RESET_WORLD set: previous world moved to ${backup}`);
+    // mean permanent data loss, same philosophy as the corrupt-save
+    // backup below.
+    if (existsSync(worldFile)) {
+      const backup = `${worldFile}.reset-${Date.now()}`;
+      renameSync(worldFile, backup);
+      log(`RESET_WORLD set: previous world meta moved to ${backup}`);
+    }
+    if (existsSync(worldDir)) {
+      const backup = `${worldDir}.reset-${Date.now()}`;
+      renameSync(worldDir, backup);
+      log(`RESET_WORLD set: previous world terrain moved to ${backup}`);
+    }
   }
   let simulation: Simulation;
+  /** The palette a freshly-loaded meta file's chunk remap is based on -
+   * null both when there was no save to load from and when the meta file
+   * was corrupt (see the catch branch below): either way there's no
+   * historical palette to remap lazily-loaded region chunks against, so
+   * the chunk loader is simply left unset for this run - any existing
+   * region files just go unused rather than being loaded unremapped. */
+  let blockPalette: Record<number, string> | undefined;
   if (existsSync(worldFile)) {
     try {
-      const save = JSON.parse(readFileSync(worldFile, "utf8")) as SimSave;
-      simulation = Simulation.deserialize(save);
+      const meta = JSON.parse(readFileSync(worldFile, "utf8")) as Omit<SimSave, "worlds">;
+      blockPalette = meta.blockPalette;
+      simulation = Simulation.deserialize({ ...meta, worlds: { overworld: [], nether: [] } });
       log(`world loaded from ${worldFile} (tick ${simulation.tickCount})`);
     } catch (error) {
       // Never overwrite a corrupt save silently - keep it for inspection.
@@ -170,13 +196,24 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
     simulation.resetPlayers();
     log("RESET_PLAYERS set: all saved player state (position/inventory/health) cleared");
   }
+  const regionStore = new RegionStore(worldDir);
+  if (blockPalette !== undefined) {
+    const remap = buildBlockRemap(blockPalette);
+    for (const dim of DIMENSIONS) {
+      simulation.worldOf(dim).setChunkLoader((cx, cy) => regionStore.load(dim, cx, cy, remap));
+    }
+  }
   const gameServer = new GameServer(simulation);
 
   const save = (): void => {
-    const data = JSON.stringify(gameServer.simulation.serialize());
+    const full = gameServer.simulation.serialize();
+    const { worlds, ...meta } = full;
     const tmp = `${worldFile}.tmp`;
-    writeFileSync(tmp, data);
+    writeFileSync(tmp, JSON.stringify(meta));
     renameSync(tmp, worldFile);
+    for (const dim of DIMENSIONS) {
+      if (worlds[dim].length > 0) regionStore.write(dim, worlds[dim]);
+    }
   };
 
   // --- Game loop + autosave ---

@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -390,5 +390,29 @@ describe("persistence", () => {
     ).not.toBe(BlockId.Glowstone);
     // ...but the previous save wasn't deleted, just moved aside.
     expect(readdirSync(dir).some((f) => f.startsWith("world.json.reset-"))).toBe(true);
+    expect(readdirSync(dir).some((f) => f.startsWith("world.reset-"))).toBe(true);
+  });
+
+  it("terrain lives in region files, not in world.json - and only where actually modified", async () => {
+    const ded = await startServer();
+    const dir = dataDir!;
+    const alice = await connectAs(ded, "Alice");
+    alice.join();
+    await alice.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
+    const sim = ded.gameServer.simulation;
+    // Explore a wide area (forces chunk generation for physics/collision)
+    // but only actually change one block.
+    for (let dx = -60; dx <= 60; dx += 10) sim.world.getBlockGenerating(SPAWN_X + dx, SURFACE);
+    sim.world.setBlock(SPAWN_X + 2, SURFACE - 1, BlockId.Glowstone);
+    ded.save();
+
+    const meta = JSON.parse(readFileSync(join(dir, "world.json"), "utf8")) as Record<string, unknown>;
+    expect(meta["worlds"]).toBeUndefined();
+    expect(existsSync(join(dir, "world", "overworld"))).toBe(true);
+    // Exactly one region file - all the merely-visited chunks generated
+    // nothing worth saving, only the one containing the edited block did.
+    const regionFiles = readdirSync(join(dir, "world", "overworld")).filter((f) => f.endsWith(".bin"));
+    expect(regionFiles).toHaveLength(1);
+    await alice.close();
   });
 });
