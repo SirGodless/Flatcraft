@@ -41,6 +41,18 @@ export class World {
     this.chunks.set(chunkKey(chunk.cx, chunk.cy), chunk);
   }
 
+  /** Marks the chunk at (cx, cy) dirty without touching any tile - for
+   * state that's anchored to this chunk but doesn't live in Chunk itself
+   * (e.g. a chest/furnace's contents, which Simulation tracks
+   * separately). A chunk whose only "edit" is a chest being opened for
+   * the first time is otherwise indistinguishable from an untouched one
+   * and would silently never get saved - see Simulation.ensureChest. A
+   * no-op if the chunk isn't currently resident (nothing to mark). */
+  touchChunk(cx: number, cy: number): void {
+    const chunk = this.getChunk(cx, cy);
+    if (chunk) chunk.dirty = true;
+  }
+
   /** Get the chunk: already resident, else previously-saved (via the
    * chunk loader, if one is set), else generated deterministically from
    * the seed. */

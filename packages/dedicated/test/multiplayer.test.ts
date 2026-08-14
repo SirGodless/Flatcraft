@@ -9,6 +9,7 @@ import {
   BlockId,
   countInInventory,
   findSpawnX,
+  furnaceKey,
   surfaceHeight,
   type Command,
   type SimEvent,
@@ -393,7 +394,7 @@ describe("persistence", () => {
     expect(readdirSync(dir).some((f) => f.startsWith("world.reset-"))).toBe(true);
   });
 
-  it("terrain lives in region files, not in world.json - and only where actually modified", async () => {
+  it("terrain lives in chunk files, not in world.json - and only where actually modified", async () => {
     const ded = await startServer();
     const dir = dataDir!;
     const alice = await connectAs(ded, "Alice");
@@ -408,11 +409,47 @@ describe("persistence", () => {
 
     const meta = JSON.parse(readFileSync(join(dir, "world.json"), "utf8")) as Record<string, unknown>;
     expect(meta["worlds"]).toBeUndefined();
+    expect(meta["furnaces"]).toBeUndefined();
+    expect(meta["chests"]).toBeUndefined();
     expect(existsSync(join(dir, "world", "overworld"))).toBe(true);
-    // Exactly one region file - all the merely-visited chunks generated
+    // Exactly one chunk file - all the merely-visited chunks generated
     // nothing worth saving, only the one containing the edited block did.
-    const regionFiles = readdirSync(join(dir, "world", "overworld")).filter((f) => f.endsWith(".bin"));
-    expect(regionFiles).toHaveLength(1);
+    const chunkFiles = readdirSync(join(dir, "world", "overworld")).filter((f) => f.endsWith(".bin"));
+    expect(chunkFiles).toHaveLength(1);
     await alice.close();
+  });
+
+  it("a chest's contents survive a restart, anchored with its own chunk", async () => {
+    const ded = await startServer();
+    const dir = dataDir!;
+    const alice = await connectAs(ded, "Alice");
+    alice.join();
+    await alice.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
+    const sim = ded.gameServer.simulation;
+    const aliceState = sim.players.get(alice.playerId)!;
+    addToInventory(aliceState.inventory, "chest", 1);
+
+    const chestX = SPAWN_X + 5;
+    const chestY = SURFACE - 1;
+    alice.send({ type: "place_block", x: chestX, y: chestY });
+    await alice.waitFor((e) => e.type === "block_changed" && e.x === chestX && e.y === chestY);
+    alice.send({ type: "open_chest", x: chestX, y: chestY });
+    await alice.waitFor((e) => e.type === "chest_changed");
+    // Put an item straight into the sim's chest state (simpler than
+    // scripting slot clicks over the wire for this test's purpose).
+    const chest = sim.chests.get(furnaceKey("overworld", chestX, chestY));
+    expect(chest).toBeDefined();
+    chest!.slots[0] = { item: "diamond", count: 9 };
+    await alice.close();
+    await new Promise((r) => setTimeout(r, 200));
+    await server!.close();
+    server = null;
+
+    const restarted = await startServer(dir);
+    expect(
+      restarted.gameServer.simulation.world.getBlockGenerating(chestX, chestY),
+    ).toBe(BlockId.Chest);
+    const restoredChest = restarted.gameServer.simulation.chests.get(furnaceKey("overworld", chestX, chestY));
+    expect(restoredChest?.slots[0]).toEqual({ item: "diamond", count: 9 });
   });
 });

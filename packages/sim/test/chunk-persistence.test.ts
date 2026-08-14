@@ -7,10 +7,19 @@ import {
   decodeChunk,
   decodeRuns,
   encodeRuns,
+  Simulation,
   World,
+  type PlayerId,
 } from "../src/index.js";
 
 const SEED = 1337;
+
+function joinPlayer(sim: Simulation): { player: PlayerId } {
+  const player = sim.allocatePlayerId();
+  sim.tick([{ player, command: { type: "join", name: "T" } }]);
+  for (let i = 0; i < 10; i++) sim.tick([]);
+  return { player };
+}
 
 describe("run-length encoding", () => {
   it("round-trips uniform, striped and random data", () => {
@@ -85,6 +94,29 @@ describe("chunk dirty tracking", () => {
     const restored = new World(SEED);
     restored.loadChunks(world.serializeChunks());
     expect(restored.getChunk(0, 0)!.dirty).toBe(false);
+  });
+
+  it("opening a chest marks its chunk dirty even with no block edits", () => {
+    // A chest placed via a raw tile write (not setBlock) - like one a
+    // structure stamped in - starts out clean, same as any other
+    // generated-but-untouched chunk.
+    const sim = new Simulation(SEED);
+    const { player } = joinPlayer(sim);
+    const state = sim.players.get(player)!;
+    const cx = Math.floor(state.x) + 1;
+    const cy = Math.floor(state.y) - 1;
+    const chunkX = Math.floor(cx / CHUNK_WIDTH);
+    const chunkY = Math.floor(cy / CHUNK_HEIGHT);
+    const localX = cx - chunkX * CHUNK_WIDTH;
+    const localY = cy - chunkY * CHUNK_HEIGHT;
+    const chunk = new Chunk(chunkX, chunkY);
+    chunk.tiles[localY * CHUNK_WIDTH + localX] = BlockId.Chest;
+    sim.world.setChunk(chunk);
+    expect(sim.world.getChunk(chunkX, chunkY)!.dirty).toBe(false);
+
+    sim.tick([{ player, command: { type: "open_chest", x: cx, y: cy } }]);
+    expect(sim.world.getChunk(chunkX, chunkY)!.dirty).toBe(true);
+    expect(sim.chests.size).toBe(1);
   });
 });
 

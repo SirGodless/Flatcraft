@@ -1833,6 +1833,7 @@ export class Simulation {
         if (!state) {
           state = createFurnace(p.dimension, x, y, furnaceDef.speed);
           this.furnaces.set(furnaceKey(p.dimension, x, y), state);
+          this.worldOf(p.dimension).touchChunk(Math.floor(x / CHUNK_WIDTH), Math.floor(y / CHUNK_HEIGHT));
         }
         reply(this.furnaceEvent(state));
         break;
@@ -2603,6 +2604,7 @@ export class Simulation {
         });
       }
       this.chests.set(key, chest);
+      this.worldOf(dimension).touchChunk(Math.floor(x / CHUNK_WIDTH), Math.floor(y / CHUNK_HEIGHT));
     }
     return chest;
   }

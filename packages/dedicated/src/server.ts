@@ -5,6 +5,9 @@ import { GameServer, INFO_PATH, WS_PATH } from "@flatcraft/server";
 import type { AuthRequest, ClientMessage, ServerConnection, ServerInfo, ServerMessage } from "@flatcraft/server";
 import {
   buildBlockRemap,
+  CHUNK_HEIGHT,
+  CHUNK_WIDTH,
+  furnaceKey,
   registerBlockJson,
   registerItemJson,
   registerMobJson,
@@ -18,8 +21,8 @@ import {
 } from "@flatcraft/sim";
 import { WebSocketServer, type WebSocket } from "ws";
 import { Accounts } from "./accounts.js";
+import { type ChunkExtra, ChunkFileStore } from "./chunkFiles.js";
 import { OidcLogin, type OidcConfig } from "./oidc.js";
-import { RegionStore } from "./regions.js";
 
 const DIMENSIONS: readonly Dimension[] = ["overworld", "nether"];
 
@@ -144,11 +147,16 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   const spriteEntries = [...spriteSet];
 
   // --- World: load from disk or start fresh ---
-  // world.json holds everything except chunk terrain (entities, players,
-  // furnaces, chests, portals, seed, tick/time/rng, the block palette);
-  // terrain lives in world/<dimension>/r.<rx>.<ry>.bin region files (see
-  // regions.ts) and is loaded lazily, one region at a time, on first
-  // touch - not eagerly parsed here.
+  // world.json holds only what isn't chunk-anchored (entities, players,
+  // portals, seed, tick/time/rng, the block palette). Terrain, chests and
+  // furnaces all live in world/<dimension>/c.<cx>.<cy>.bin chunk files
+  // (see chunkFiles.ts) - one per modified chunk, keeping a chunk's
+  // terrain and any container contents anchored within it as a single
+  // consistent unit (see Simulation.ensureChest/World.touchChunk: opening
+  // a chest always dirties its chunk, so the two can never desync). Only
+  // terrain is loaded lazily, on first touch; chest/furnace state is
+  // hydrated eagerly at boot (see scanAll() below) so container ticking
+  // doesn't depend on a player having wandered near enough yet.
   const worldDir = join(dataDir, "world");
   if (options.resetWorld) {
     // Renamed, not deleted - a mistaken RESET_WORLD=true doesn't have to
@@ -169,15 +177,21 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   /** The palette a freshly-loaded meta file's chunk remap is based on -
    * null both when there was no save to load from and when the meta file
    * was corrupt (see the catch branch below): either way there's no
-   * historical palette to remap lazily-loaded region chunks against, so
-   * the chunk loader is simply left unset for this run - any existing
-   * region files just go unused rather than being loaded unremapped. */
+   * historical palette to trust, so the chunk loader and chest/furnace
+   * hydration are simply skipped for this run - any existing chunk files
+   * just go unused rather than being loaded (unremapped, or attached to
+   * an otherwise-fresh simulation) incorrectly. */
   let blockPalette: Record<number, string> | undefined;
   if (existsSync(worldFile)) {
     try {
-      const meta = JSON.parse(readFileSync(worldFile, "utf8")) as Omit<SimSave, "worlds">;
+      const meta = JSON.parse(readFileSync(worldFile, "utf8")) as Omit<SimSave, "worlds" | "furnaces" | "chests">;
       blockPalette = meta.blockPalette;
-      simulation = Simulation.deserialize({ ...meta, worlds: { overworld: [], nether: [] } });
+      simulation = Simulation.deserialize({
+        ...meta,
+        worlds: { overworld: [], nether: [] },
+        furnaces: [],
+        chests: [],
+      });
       log(`world loaded from ${worldFile} (tick ${simulation.tickCount})`);
     } catch (error) {
       // Never overwrite a corrupt save silently - keep it for inspection.
@@ -196,23 +210,58 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
     simulation.resetPlayers();
     log("RESET_PLAYERS set: all saved player state (position/inventory/health) cleared");
   }
-  const regionStore = new RegionStore(worldDir);
+  const chunkFileStore = new ChunkFileStore(worldDir);
   if (blockPalette !== undefined) {
     const remap = buildBlockRemap(blockPalette);
     for (const dim of DIMENSIONS) {
-      simulation.worldOf(dim).setChunkLoader((cx, cy) => regionStore.load(dim, cx, cy, remap));
+      simulation.worldOf(dim).setChunkLoader((cx, cy) => chunkFileStore.load(dim, cx, cy, remap));
     }
+    // Chest/furnace item ids are strings, not the numeric block ids a
+    // renumbered palette would affect, so no remap is needed here.
+    let hydratedContainers = 0;
+    for (const { dim, extra } of chunkFileStore.scanAll()) {
+      for (const f of extra.furnaces) simulation.furnaces.set(furnaceKey(f.dimension, f.x, f.y), f);
+      for (const c of extra.chests) {
+        simulation.chests.set(furnaceKey(dim, c.x, c.y), { dimension: dim, x: c.x, y: c.y, slots: c.slots });
+      }
+      hydratedContainers += extra.furnaces.length + extra.chests.length;
+    }
+    if (hydratedContainers > 0) log(`${hydratedContainers} saved chest(s)/furnace(s) restored`);
   }
   const gameServer = new GameServer(simulation);
 
+  const chunkKeyFor = (x: number, y: number): string =>
+    `${Math.floor(x / CHUNK_WIDTH)},${Math.floor(y / CHUNK_HEIGHT)}`;
+
   const save = (): void => {
     const full = gameServer.simulation.serialize();
-    const { worlds, ...meta } = full;
+    const { worlds, furnaces, chests, ...meta } = full;
     const tmp = `${worldFile}.tmp`;
     writeFileSync(tmp, JSON.stringify(meta));
     renameSync(tmp, worldFile);
     for (const dim of DIMENSIONS) {
-      if (worlds[dim].length > 0) regionStore.write(dim, worlds[dim]);
+      if (worlds[dim].length === 0) continue;
+      // Every chunk with a chest/furnace is guaranteed to also be in
+      // worlds[dim] - opening one always dirties its chunk (see
+      // World.touchChunk) - so bucketing here never orphans container
+      // state against a chunk file that doesn't get written.
+      const extraByChunk = new Map<string, ChunkExtra>();
+      const bucket = (dimension: Dimension, x: number, y: number): ChunkExtra => {
+        const key = chunkKeyFor(x, y);
+        let entry = extraByChunk.get(key);
+        if (!entry) {
+          entry = { chests: [], furnaces: [] };
+          extraByChunk.set(key, entry);
+        }
+        return entry;
+      };
+      for (const f of furnaces) {
+        if (f.dimension === dim) bucket(dim, f.x, f.y).furnaces.push(f);
+      }
+      for (const c of chests ?? []) {
+        if (c.dimension === dim) bucket(dim, c.x, c.y).chests.push({ x: c.x, y: c.y, slots: c.slots });
+      }
+      chunkFileStore.write(dim, worlds[dim], extraByChunk);
     }
   };
 
