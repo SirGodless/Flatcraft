@@ -63,6 +63,24 @@ describe("save/load", () => {
     expect(priorIds).not.toContain(newMob.id);
   });
 
+  it("recovers a save from before the unified id allocator (missing/corrupt nextId)", () => {
+    const sim = new Simulation(SEED);
+    const { state } = joinPlayer(sim, "Alice");
+    const out: OutboundEvent[] = [];
+    sim.spawnMob("pig", state.x + 5, state.y, out);
+
+    // Simulate an old (version < 3) save, or the NaN->null JSON round-trip
+    // a corrupt nextId produces: the field is unusable, not just absent.
+    const save = sim.serialize();
+    const priorIds = [...sim.entities.values()].map((e) => e.id);
+    for (const bad of [undefined, null, NaN, 0, -1] as unknown[]) {
+      const restored = Simulation.deserialize({ ...save, nextId: bad as number });
+      const newPlayer = restored.allocatePlayerId();
+      expect(Number.isFinite(newPlayer)).toBe(true);
+      expect(priorIds).not.toContain(newPlayer);
+    }
+  });
+
   it("a rejoining player adopts their saved position and inventory", () => {
     const sim = new Simulation(SEED);
     const { state } = joinPlayer(sim, "Alice");
@@ -124,14 +142,17 @@ describe("save/load", () => {
     const surface = surfaceHeight(SEED, spawnX);
     sim.world.setBlock(spawnX + 3, surface - 2, BlockId.Glowstone);
     const save = sim.serialize();
-    expect(save.version).toBe(4);
+    expect(save.version).toBe(5);
     expect(save.blockPalette![BlockId.Glowstone]).toBe("glowstone");
 
     // Simulate a registry that renumbered glowstone: the save's chunks
     // carry a fake number whose palette entry still says "glowstone".
+    // tiles/walls are run-length-encoded ([id, count, id, count, ...]),
+    // so only even indices are ids - odd indices are run lengths and
+    // must be left alone.
     const fakeId = 999;
     for (const chunk of save.worlds.overworld) {
-      for (let i = 0; i < chunk.tiles.length; i++) {
+      for (let i = 0; i < chunk.tiles.length; i += 2) {
         if (chunk.tiles[i] === BlockId.Glowstone) chunk.tiles[i] = fakeId;
       }
     }

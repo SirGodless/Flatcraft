@@ -15,8 +15,12 @@ import { startDedicatedServer } from "./server.js";
  *   OIDC_CLIENT_SECRET
  *   PUBLIC_URL        this server's own public origin, e.g. https://flatcraft.anfall.net
  *   OIDC_ALLOW_INSECURE  dev/test only: allows http:// issuer/publicUrl (default: HTTPS required)
+ *   RESET_WORLD       "true" wipes the world on this boot (old save kept as a timestamped backup, not deleted)
+ *   RESET_PLAYERS     "true" keeps the world but resets every player's saved state (position/inventory/health)
  * OIDC_ISSUER/OIDC_CLIENT_ID/OIDC_CLIENT_SECRET/PUBLIC_URL must all be set
  * together, or all omitted (login is disabled and /auth/* answer 501).
+ * RESET_WORLD/RESET_PLAYERS only take effect for this one boot - remove
+ * them again afterwards, or every restart wipes state again.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -47,6 +51,8 @@ const server = await startDedicatedServer({
   clientDir,
   seed: process.env["SEED"] !== undefined ? Number(process.env["SEED"]) : undefined,
   serverName: process.env["SERVER_NAME"],
+  resetWorld: process.env["RESET_WORLD"] === "true",
+  resetPlayers: process.env["RESET_PLAYERS"] === "true",
   oidc:
     oidcIssuer && oidcClientId && oidcClientSecret && publicUrl
       ? {

@@ -107,8 +107,11 @@ import { World, type Dimension } from "./world/world.js";
 /**
  * Old-id -> current-id table from a save's block palette, or null when
  * every id already matches (the common case - skips the remap pass).
+ * Exported so a host that loads chunks outside the bulk deserialize path
+ * (e.g. the dedicated server's on-demand region-file loader) can apply the
+ * exact same remap to a chunk it decodes later, mid-session.
  */
-function buildBlockRemap(palette: Record<number, string> | undefined): Map<number, number> | null {
+export function buildBlockRemap(palette: Record<number, string> | undefined): Map<number, number> | null {
   if (!palette) return null;
   const remap = new Map<number, number>();
   let identical = true;
@@ -119,6 +122,17 @@ function buildBlockRemap(palette: Record<number, string> | undefined): Map<numbe
     if (current !== oldId) identical = false;
   }
   return identical ? null : remap;
+}
+
+/** One past the highest id already used by any saved entity or player -
+ * the fallback for a save whose own nextId can't be trusted (see
+ * deserialize). Never collides with what's already on disk, unlike just
+ * resuming from 1. */
+function safeNextId(save: SimSave): number {
+  let max = 0;
+  for (const e of save.entities) max = Math.max(max, e.id);
+  for (const p of save.players) max = Math.max(max, p.id);
+  return max + 1;
 }
 
 /** Default body color for players who never picked one. */
@@ -220,7 +234,7 @@ export class Simulation {
       blockPalette[def.id] = def.name;
     }
     return {
-      version: 4,
+      version: 5,
       blockPalette,
       seed: this.world.seed,
       tickCount: this.tickCount,
@@ -253,19 +267,20 @@ export class Simulation {
     sim.tickCount = save.tickCount;
     sim.timeOfDay = save.timeOfDay;
     sim.rngState.s = save.rng;
-    sim.nextId = save.nextId;
+    // Saves from before the unified id allocator (version < 3) carry no
+    // usable nextId - JSON round-trips a corrupt value (NaN) to `null`,
+    // and `null++` happens to land on 1, silently colliding with an id
+    // already in use (the exact bug the unified allocator exists to
+    // prevent). Fall back to one past the highest id already on record.
+    sim.nextId = Number.isFinite(save.nextId) && save.nextId > 0 ? save.nextId : safeNextId(save);
     // Saved block numbers are remapped by their palette names, so a
     // renumbered registry (or removed mod blocks -> air) loads cleanly.
+    // Applied inside loadChunks (post-RLE-decode, one id per tile) rather
+    // than on the raw run arrays here - those alternate id/count, and
+    // remapping every element would corrupt the counts too.
     const remap = buildBlockRemap(save.blockPalette);
     for (const dim of ["overworld", "nether"] as const) {
-      const chunks = remap
-        ? save.worlds[dim].map((c) => ({
-            ...c,
-            tiles: c.tiles.map((t) => remap.get(t) ?? t),
-            ...(c.walls ? { walls: c.walls.map((w) => remap.get(w) ?? w) } : {}),
-          }))
-        : save.worlds[dim];
-      sim.worlds[dim].loadChunks(chunks);
+      sim.worlds[dim].loadChunks(save.worlds[dim], remap);
     }
     for (const f of save.furnaces) {
       // Saves from before per-block furnace speed lack the field.
@@ -287,6 +302,17 @@ export class Simulation {
       sim.savedPlayers.set(p.name, structuredClone(p));
     }
     return sim;
+  }
+
+  /** Drops every player's saved state (position, inventory, health, ...)
+   * so the next join with that name starts fresh, without touching the
+   * world itself (blocks, mobs, dropped items). Intended for server
+   * startup only, right after construction/deserialize and before any
+   * connection has joined - at that point every player is still "saved"
+   * (see deserialize), never a live entity yet, so clearing savedPlayers
+   * alone is enough. */
+  resetPlayers(): void {
+    this.savedPlayers.clear();
   }
 
   /** The overworld (kept for compatibility; use worldOf for others). */
