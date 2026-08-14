@@ -23,6 +23,12 @@ export class World {
    * undefined means "nothing saved for this chunk", not an error - the
    * chunk is generated fresh exactly as if no loader were set at all. */
   private chunkLoader: ((cx: number, cy: number) => Chunk | undefined) | undefined;
+  /** Set once per simulation tick (see Simulation.tick), so ensureChunk
+   * can stamp each chunk it touches with "last used" for idle eviction -
+   * see Chunk.lastAccessTick / evictIdle. World itself has no clock of
+   * its own (this package stays I/O- and time-free), it just remembers
+   * whatever tick it was last told about. */
+  private currentTick = 0;
 
   constructor(seed: number, dimension: Dimension = "overworld") {
     this.seed = seed;
@@ -33,12 +39,28 @@ export class World {
     this.chunkLoader = loader;
   }
 
+  setCurrentTick(tick: number): void {
+    this.currentTick = tick;
+  }
+
   getChunk(cx: number, cy: number): Chunk | undefined {
     return this.chunks.get(chunkKey(cx, cy));
   }
 
   setChunk(chunk: Chunk): void {
     this.chunks.set(chunkKey(chunk.cx, chunk.cy), chunk);
+  }
+
+  /** Marks the chunk at (cx, cy) dirty without touching any tile - for
+   * state that's anchored to this chunk but doesn't live in Chunk itself
+   * (e.g. a chest/furnace's contents, which Simulation tracks
+   * separately). A chunk whose only "edit" is a chest being opened for
+   * the first time is otherwise indistinguishable from an untouched one
+   * and would silently never get saved - see Simulation.ensureChest. A
+   * no-op if the chunk isn't currently resident (nothing to mark). */
+  touchChunk(cx: number, cy: number): void {
+    const chunk = this.getChunk(cx, cy);
+    if (chunk) chunk.dirty = true;
   }
 
   /** Get the chunk: already resident, else previously-saved (via the
@@ -64,6 +86,7 @@ export class World {
       }
       this.setChunk(chunk);
     }
+    chunk.lastAccessTick = this.currentTick;
     return chunk;
   }
 
@@ -143,5 +166,45 @@ export class World {
       const chunk = decodeChunk(c.cx, c.cy, c.tiles, c.walls, remap);
       if (chunk) this.setChunk(chunk);
     }
+  }
+
+  /** Marks chunks clean again once a host has *confirmedly* persisted
+   * whatever serializeChunks() handed it (e.g. the chunk files actually
+   * landed on disk) - never call this before the write is known to have
+   * succeeded. Getting that order backwards would mark a chunk clean
+   * despite its edits never having reached disk, so a later crash (or
+   * evictIdle, once introduced) could lose them silently - exactly the
+   * kind of gap Simulation.ensureChest's touchChunk fix exists to avoid
+   * elsewhere. No-op for any entry that isn't currently resident. */
+  markSaved(entries: Iterable<{ cx: number; cy: number }>): void {
+    for (const { cx, cy } of entries) {
+      const chunk = this.getChunk(cx, cy);
+      if (chunk) chunk.dirty = false;
+    }
+  }
+
+  /** Drops resident chunks that haven't been touched in `idleTicks` ticks
+   * (see Chunk.lastAccessTick) and have no unsaved changes (see
+   * Chunk.dirty) - a chunk with pending edits is always kept until a
+   * save cycle calls markSaved for it, however idle it looks in the
+   * meantime. Nothing is lost either way: a clean chunk is by
+   * definition either never modified (regenerates identically from the
+   * seed) or already safely persisted (reloads identically via the
+   * chunk loader) - eviction just frees the in-memory copy, exactly
+   * like never having visited it this session. A chunk still in active
+   * use - a player standing in or near it, a live entity ticking
+   * through it, anything currently reading/writing it - gets touched
+   * again via ensureChunk every tick it's relevant, so it never goes
+   * idle in the first place; only genuinely abandoned chunks qualify.
+   * Returns the number of chunks evicted, for host-side logging. */
+  evictIdle(idleTicks: number): number {
+    let evicted = 0;
+    for (const [key, chunk] of this.chunks) {
+      if (chunk.dirty) continue;
+      if (this.currentTick - chunk.lastAccessTick < idleTicks) continue;
+      this.chunks.delete(key);
+      evicted++;
+    }
+    return evicted;
   }
 }

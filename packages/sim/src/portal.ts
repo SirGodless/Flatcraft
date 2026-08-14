@@ -1,3 +1,4 @@
+import { registerMultiblockHandler } from "./multiblock.js";
 import { BlockId } from "./world/block.js";
 import type { World } from "./world/world.js";
 
@@ -99,6 +100,34 @@ export function convertFrame(
   }
   return changes;
 }
+
+// Registered under data/multiblocks/nether_portal.json's "handler" id -
+// the multiblock engine's generic trigger_on dispatch (place_block +
+// flint_and_steel) reaches this, not a hardcoded item check in
+// simulation.ts. No `states` pattern for this def (see multiblock.ts's
+// doc comment: frame size varies 2-4 x 3-5 and corners don't matter, so
+// it doesn't fit a fixed rectangle) - this handler does its own shape
+// check with findPortalInterior, which already only reads through
+// World.getBlockGenerating, so it's exactly as safe as a pattern-matched
+// multiblock would be.
+registerMultiblockHandler("nether_portal", {
+  activate({ world, x, y, dimension, sim, broadcast }) {
+    const interior = findPortalInterior(world, x, y);
+    if (!interior) return false;
+    for (let ty = interior.top; ty <= interior.bottom; ty++) {
+      for (let tx = interior.left; tx <= interior.right; tx++) {
+        world.setBlock(tx, ty, BlockId.NetherPortal);
+        broadcast({ type: "block_changed", dim: dimension, x: tx, y: ty, block: BlockId.NetherPortal });
+      }
+    }
+    // Lit frames turn side-permeable so players can walk in.
+    for (const change of convertFrame(world, interior)) {
+      broadcast({ type: "block_changed", dim: dimension, x: change.x, y: change.y, block: change.block });
+    }
+    sim.portals[dimension].set(`${interior.left},${interior.bottom}`, { x: interior.left, y: interior.bottom });
+    return true;
+  },
+});
 
 /**
  * Build a standard 2x3 portal (frame + lit interior) with its interior

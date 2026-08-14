@@ -23,6 +23,8 @@ export * from "./math/noise.js";
 export * from "./mining.js";
 export * from "./mobs.js";
 export * from "./math/rng.js";
+export * from "./multiblock.js";
+export * from "./data/multiblocks/index.js";
 export * from "./physics.js";
 export * from "./portal.js";
 export * from "./save.js";
