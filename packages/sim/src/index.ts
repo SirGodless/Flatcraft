@@ -21,6 +21,7 @@ export * from "./items.js";
 export * from "./simulation.js";
 export * from "./math/noise.js";
 export * from "./mining.js";
+export * from "./mobs.js";
 export * from "./math/rng.js";
 export * from "./physics.js";
 export * from "./portal.js";

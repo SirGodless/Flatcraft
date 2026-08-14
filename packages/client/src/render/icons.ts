@@ -1,6 +1,6 @@
 import { Texture } from "pixi.js";
-import { BlockId, itemDef } from "@flatcraft/sim";
-import { SPRITE_OVERRIDES } from "./sprites.js";
+import { BlockId, hash01, itemDef } from "@flatcraft/sim";
+import { spriteKey, SPRITE_OVERRIDES } from "./sprites.js";
 import { TILE_PX } from "./textures.js";
 
 /**
@@ -407,13 +407,29 @@ function artTexture(id: string, art: Art): Texture {
   return texture;
 }
 
-export function itemTexture(item: string, blockTextures: Map<BlockId, Texture>): Texture | undefined {
-  const cached = cache.get(item);
-  if (cached) return cached;
+/** Distinguishes this hash use from any other cosmetic roll that might
+ * someday also hash the same seed (item variant vs. e.g. a future
+ * particle-color roll), so they never accidentally correlate. */
+const VARIANT_SALT = 0x1;
+
+/**
+ * @param variantSeed World-stable id (e.g. the dropped ItemEntity's id)
+ * to deterministically pick one of the item's declared sprite variants
+ * - every client picks the same one without any sync. Omit for UI
+ * contexts (hotbar, cursor, crafting grid, held-item icon): those stay
+ * pinned to variant 0 so inventory icons don't flicker/vary.
+ */
+export function itemTexture(item: string, blockTextures: Map<BlockId, Texture>, variantSeed?: number): Texture | undefined {
   const def = itemDef(item);
+  const variantCount = def?.visual?.variants ?? 1;
+  const hasVariants = variantCount > 1;
+  const variantIndex = hasVariants && variantSeed !== undefined ? Math.floor(hash01(variantSeed, VARIANT_SALT) * variantCount) : 0;
+  const cacheKey = hasVariants ? `${item}#${variantIndex}` : item;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
   // Sprite files beat everything (datapack override or convention path).
-  let texture: Texture | undefined =
-    SPRITE_OVERRIDES.get(spriteKey(def?.sprite) ?? `item/${item}`);
+  const baseKey = spriteKey(def?.sprite) ?? `item/${item}`;
+  let texture: Texture | undefined = SPRITE_OVERRIDES.get(hasVariants ? `${baseKey}_${variantIndex}` : baseKey);
   if (!texture) {
     if (def?.block !== undefined) {
       texture = blockTextures.get(def.block);
@@ -422,12 +438,6 @@ export function itemTexture(item: string, blockTextures: Map<BlockId, Texture>):
       if (art) texture = artTexture(item, art);
     }
   }
-  if (texture) cache.set(item, texture);
+  if (texture) cache.set(cacheKey, texture);
   return texture;
-}
-
-/** "sprites/item/x.png" -> override key "item/x". */
-function spriteKey(path: string | undefined): string | undefined {
-  if (path === undefined) return undefined;
-  return path.replace(/^sprites\//, "").replace(/\.[a-z0-9]+$/i, "");
 }

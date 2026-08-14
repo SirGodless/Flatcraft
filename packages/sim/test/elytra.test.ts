@@ -4,14 +4,14 @@ import {
   Simulation,
   surfaceHeight,
   type PlayerId,
-  type PlayerState,
+  type PlayerEntity,
 } from "../src/index.js";
 
 const SEED = 1337;
 const SPAWN_X = findSpawnX(SEED);
 const SURFACE = surfaceHeight(SEED, SPAWN_X);
 
-function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerState } {
+function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerEntity } {
   const player = sim.allocatePlayerId();
   sim.tick([{ player, command: { type: "join", name: "T" } }]);
   for (let i = 0; i < 10; i++) sim.tick([]);
@@ -19,7 +19,7 @@ function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerState } {
 }
 
 /** Put the player high in the air and start moving right. */
-function launch(sim: Simulation, state: PlayerState, withElytra: boolean, holdJump: boolean, player: PlayerId): void {
+function launch(sim: Simulation, state: PlayerEntity, withElytra: boolean, holdJump: boolean, player: PlayerId): void {
   if (withElytra) state.inventory[8] = { item: "elytra", count: 1 };
   state.x = SPAWN_X + 0.5;
   state.y = SURFACE - 40;

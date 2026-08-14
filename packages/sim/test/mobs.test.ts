@@ -1,21 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
   BlockId,
-  CREEPER_FUSE,
+  createInventory,
   findSpawnX,
-  MOB_LOOT,
-  MOB_STATS,
+  isItemEntity,
+  isMobEntity,
+  mobDef,
   Simulation,
   surfaceHeight,
   type MobKind,
   type OutboundEvent,
   type PlayerId,
-  type PlayerState,
+  type PlayerEntity,
 } from "../src/index.js";
 
 const SEED = 1337;
 
-function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerState } {
+function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerEntity } {
   const player = sim.allocatePlayerId();
   sim.tick([{ player, command: { type: "join", name: "T" } }]);
   for (let i = 0; i < 10; i++) sim.tick([]);
@@ -26,8 +27,8 @@ describe("new mobs", () => {
   it("every mob kind has stats and loot", () => {
     const kinds: MobKind[] = ["zombie", "skeleton", "creeper", "zombified_piglin", "pig", "cow", "sheep", "chicken"];
     for (const kind of kinds) {
-      expect(MOB_STATS[kind].health).toBeGreaterThan(0);
-      expect(MOB_LOOT[kind]).toBeDefined();
+      expect(mobDef(kind)!.health).toBeGreaterThan(0);
+      expect(mobDef(kind)!.loot).toBeDefined();
     }
   });
 
@@ -60,7 +61,8 @@ describe("new mobs", () => {
 
     let exploded = false;
     let blocksDestroyed = 0;
-    for (let i = 0; i < CREEPER_FUSE + 60 && !exploded; i++) {
+    const fuseTicks = mobDef("creeper")!.explodes!.fuseTicks;
+    for (let i = 0; i < fuseTicks + 60 && !exploded; i++) {
       const events = sim.tick([]);
       for (const o of events) {
         if (o.event.type === "entity_removed" && o.event.id === creeper.id) exploded = true;
@@ -82,8 +84,8 @@ describe("new mobs", () => {
       sim.tick([{ player, command: { type: "attack", entity: cow.id } }]);
     }
     expect(sim.entities.has(cow.id)).toBe(false);
-    const drops = [...sim.entities.values()].filter((e) => e.kind === "item");
-    const items = drops.map((d) => (d.kind === "item" ? d.stack.item : ""));
+    const drops = [...sim.entities.values()].filter(isItemEntity);
+    const items = drops.map((d) => d.stack.item);
     expect(items).toContain("beef");
   });
 
@@ -125,5 +127,43 @@ describe("new mobs", () => {
     const arrows = [...sim.entities.values()].filter((e) => e.kind === "arrow");
     expect(arrows.length).toBeLessThanOrEqual(1);
     expect(state.health).toBe(20);
+  });
+
+  // ECS unification, stage 5: mobs can now carry the same optional
+  // armor/offhand/inventory fields as a player (mobs.ts full equipping
+  // lands in stage 6, but the damage-handling support exists already).
+  it("a mob wearing armor absorbs damage like a player would", () => {
+    const sim = new Simulation(SEED);
+    const { player, state } = joinPlayer(sim);
+    sim.timeOfDay = 18000; // night: no burning
+    state.inventory[0] = { item: "diamond_sword", count: 1 }; // 7 raw damage
+    const out: OutboundEvent[] = [];
+    const zombie = sim.spawnMob("zombie", state.x + 1, state.y, out);
+    zombie.armor = { item: "iron_armor", count: 1 }; // 30% absorption
+
+    sim.tick([{ player, command: { type: "attack", entity: zombie.id } }]);
+
+    const hurtZombie = sim.entities.get(zombie.id);
+    expect(hurtZombie && isMobEntity(hurtZombie) ? hurtZombie.health : undefined).toBe(mobDef("zombie")!.health - 5);
+  });
+
+  it("a mob carrying an inventory drops it on death, like a player would", () => {
+    const sim = new Simulation(SEED);
+    const { player, state } = joinPlayer(sim);
+    sim.timeOfDay = 18000;
+    state.inventory[0] = { item: "diamond_sword", count: 1 };
+    const out: OutboundEvent[] = [];
+    const zombie = sim.spawnMob("zombie", state.x + 1, state.y, out);
+    zombie.health = 1; // one hit kills
+    zombie.inventory = createInventory();
+    zombie.inventory[0] = { item: "emerald", count: 3 };
+    zombie.offhand = { item: "wooden_shield", count: 1 };
+
+    sim.tick([{ player, command: { type: "attack", entity: zombie.id } }]);
+
+    expect(sim.entities.has(zombie.id)).toBe(false);
+    const drops = [...sim.entities.values()].filter(isItemEntity).map((e) => e.stack.item);
+    expect(drops).toContain("emerald");
+    expect(drops).toContain("wooden_shield");
   });
 });

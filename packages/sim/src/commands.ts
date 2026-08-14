@@ -1,10 +1,14 @@
+import type { EntityId } from "./entities.js";
+
 /**
  * Commands are the ONLY way anything outside the simulation requests a state
  * change ("client says what it wants to do"). The simulation validates each
  * command and either applies it or rejects it. In multiplayer these become
  * the client->server messages verbatim, so they must stay plain JSON data.
  */
-export type PlayerId = number;
+/** A connected player's id - the same id space as any other entity, since
+ * a live player is just an Entity with kind "player" (see entities.ts). */
+export type PlayerId = EntityId;
 
 export type Command =
   /** color is an optional 0xRRGGBB body color (kept on the player). */

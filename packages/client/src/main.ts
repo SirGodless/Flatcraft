@@ -1,17 +1,22 @@
 import { GameServer, createLoopbackPair, INFO_PATH, type ClientConnection, type ServerInfo } from "@flatcraft/server";
 import {
   addToInventory,
+  blockByName,
   buildPortal,
+  CHUNK_HEIGHT,
+  CHUNK_WIDTH,
   chunkKey,
   findSpawnX,
   itemDef,
   PLAYER_HEIGHT,
   registerBlockJson,
   registerItemJson,
+  registerMobJson,
   resolveBlockLinks,
   Simulation,
   surfaceHeight,
   syncItemRecipes,
+  type OutboundEvent,
   type PlayerId,
 } from "@flatcraft/sim";
 import { attachInput } from "./input/input.js";
@@ -224,7 +229,7 @@ async function applyServerDatapack(): Promise<void> {
     const response = await fetch("/api/datapack", { headers: { accept: "application/json" } });
     const contentType = response.headers.get("content-type") ?? "";
     if (!response.ok || !contentType.includes("application/json")) return;
-    const pack = (await response.json()) as { blocks?: unknown[]; items?: unknown[] };
+    const pack = (await response.json()) as { blocks?: unknown[]; items?: unknown[]; mobs?: unknown[] };
     for (const raw of pack.blocks ?? []) {
       registerBlockJson(raw, "server datapack");
     }
@@ -233,6 +238,9 @@ async function applyServerDatapack(): Promise<void> {
       registerItemJson(raw, "server datapack");
     }
     syncItemRecipes();
+    for (const raw of pack.mobs ?? []) {
+      registerMobJson(raw, "server datapack");
+    }
   } catch (error) {
     console.warn("server datapack failed to load:", error);
   }
@@ -323,6 +331,24 @@ async function startSingleplayer(): Promise<void> {
     buildPortal(sim.world, sx + 3, sy);
     sim.portals.overworld.set(`${sx + 3},${sy}`, { x: sx + 3, y: sy });
   }
+  // Debug: ?fillblock=name:count places a horizontal strip below spawn
+  // (e.g. to eyeball sprite-variant variety across many tiles of one id).
+  const fillBlock = params.get("fillblock");
+  if (fillBlock) {
+    const [name, countStr] = fillBlock.split(":");
+    const blockId = name ? blockByName(name) : undefined;
+    if (blockId !== undefined) {
+      const sim = server.simulation;
+      const sx = findSpawnX(sim.world.seed);
+      const sy = surfaceHeight(sim.world.seed, sx);
+      const count = Number(countStr ?? "20");
+      for (let i = 0; i < count; i++) {
+        const x = sx + i;
+        sim.world.ensureChunk(Math.floor(x / CHUNK_WIDTH), Math.floor((sy + 2) / CHUNK_HEIGHT));
+        sim.world.setBlock(x, sy + 2, blockId);
+      }
+    }
+  }
 
   const playerId = server.simulation.allocatePlayerId();
   const { server: serverEnd, client: connection } = createLoopbackPair(playerId);
@@ -360,6 +386,20 @@ async function startSingleplayer(): Promise<void> {
             if (item) addToInventory(p.inventory, item, Number(count ?? "1"));
           }
           connection.send({ type: "select_slot", index: 0 }); // force a sync
+        }, 500);
+      }
+
+      // Debug: ?spawn=kind,kind,... spawns mobs in a line beside the player.
+      const spawn = params.get("spawn");
+      if (spawn) {
+        setTimeout(() => {
+          const p = server.simulation.players.get(playerId);
+          if (!p) return;
+          const out: OutboundEvent[] = [];
+          spawn.split(",").forEach((kind, i) => {
+            server.simulation.spawnMob(kind, p.x + 3 + i * 1.5, p.y, out);
+          });
+          serverEnd.send(out.map((o) => o.event));
         }, 500);
       }
     },

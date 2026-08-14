@@ -3,13 +3,20 @@ import { Texture } from "pixi.js";
 /**
  * Sprite overrides: real image files replacing the procedural graphics.
  * Convention: sprites/<type>/<id>.png (e.g. sprites/item/golden_shovel.png,
- * sprites/block/stone.png), listed in /sprites/manifest.json - served by
+ * sprites/block/stone.png, sprites/mob/zombie.png, sprites/entity/arrow.png),
+ * listed in /sprites/manifest.json - served by
  * the dedicated server from its datapack directory, or from the static
  * public/ directory in singleplayer. Rules: PNG, 8 bit per channel,
  * dimensions a multiple of 2, at most 128x128. Missing manifest or files
  * simply mean: procedural fallback, never an error.
  */
 export const SPRITE_OVERRIDES = new Map<string, Texture>();
+
+/** "sprites/item/x.png" -> override key "item/x". */
+export function spriteKey(path: string | undefined): string | undefined {
+  if (path === undefined) return undefined;
+  return path.replace(/^sprites\//, "").replace(/\.[a-z0-9]+$/i, "");
+}
 
 export async function loadSpriteOverrides(): Promise<void> {
   let entries: string[];

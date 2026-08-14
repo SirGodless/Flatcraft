@@ -1,5 +1,6 @@
 import { BLOCK_JSONS } from "../data/blocks/index.js";
 import { validateBlockJson } from "../registry/schema.js";
+import type { VisualDef } from "../registry/visual.js";
 
 /**
  * Block registry. The canonical identity of a block is its string id
@@ -129,8 +130,14 @@ export interface BlockDef {
   readonly tall?: boolean;
   /** Flowing liquid: kind and fill level 1..8. */
   readonly liquid?: { kind: "water" | "lava"; level: number };
+  /** Opens a chest-style storage screen with this many slots. */
+  readonly container?: number;
+  /** Opens a furnace-style cook screen; speed scales burn/cook rate. */
+  readonly furnace?: { speed: number };
   /** Sprite path override (default sprites/block/<name>.png). */
   readonly sprite?: string;
+  /** Sprite variants/animation/shader. */
+  readonly visual?: VisualDef;
 }
 
 const defs = new Map<BlockId, BlockDef>();
@@ -179,7 +186,10 @@ export function registerBlockJson(raw: unknown, source = "datapack"): BlockDef {
     ...(json.slab ? { slab: true } : {}),
     ...(json.tall ? { tall: true } : {}),
     ...(json.liquid !== undefined ? { liquid: json.liquid } : {}),
+    ...(json.container !== undefined ? { container: json.container.slots } : {}),
+    ...(json.furnace !== undefined ? { furnace: { speed: json.furnace.speed ?? 1 } } : {}),
     ...(json.sprite !== undefined ? { sprite: json.sprite } : {}),
+    ...(json.visual !== undefined ? { visual: json.visual } : {}),
   };
   defs.set(id, def);
   byName.set(json.id, id);

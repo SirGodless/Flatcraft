@@ -8,6 +8,31 @@
  * with the source file named, so typos never fail silently.
  */
 
+export interface AnimationClipJson {
+  /** Total frame count in this state's strip. */
+  frames: number;
+  /** Pixel width of one frame (frames tile horizontally in the sheet). */
+  frame_width: number;
+  fps: number;
+  /** Loop (idle/walk) or play once and hold/signal done (hurt/death). Default true. */
+  loop?: boolean;
+}
+
+export interface VisualJson {
+  /** Declared count of numbered sprite variants at the sprite's base
+   * path (sprites/<type>/<id>_0.png .. _<variants-1>.png), for visual
+   * variety (e.g. ore that doesn't look identical every tile). Default
+   * 1 (today's single-sprite behavior). */
+  variants?: number;
+  /** Named animation states (idle/walk/hurt/death/...), each its own
+   * sprite-sheet strip. */
+  animation?: { states: Record<string, AnimationClipJson> };
+  /** A named client-side shader effect (e.g. "shimmer"); unknown ids
+   * simply render with no effect, same as a missing sprite falls back
+   * to the procedural shape - never an error. */
+  shader?: { id: string; params?: Record<string, number | string | boolean> };
+}
+
 export interface RecipeJson {
   /** Where this recipe is crafted. */
   station: "inventory" | "crafting_table" | "furnace" | "brewing_stand";
@@ -34,6 +59,8 @@ export interface ItemJson {
   max_stack?: number;
   /** Sprite path override (default sprites/item/<id>.png). */
   sprite?: string;
+  /** Variants/animation/shader - see VisualJson. */
+  visual?: VisualJson;
   /** Block id (string) this item places. */
   places_block?: string;
   tool?: { kind: "pickaxe" | "axe" | "shovel" | "sword" | "hammer"; tier: number; mining_speed: number };
@@ -56,6 +83,8 @@ export interface BlockJson {
   id: string;
   name?: string;
   sprite?: string;
+  /** Variants/animation/shader - see VisualJson. */
+  visual?: VisualJson;
   solid: boolean;
   hardness: number;
   tool?: "pickaxe" | "axe" | "shovel";
@@ -67,6 +96,49 @@ export interface BlockJson {
   tall?: boolean;
   toggle_to?: string;
   liquid?: { kind: "water" | "lava"; level: number };
+  /** Opens a chest-style storage screen with this many slots. */
+  container?: { slots: number };
+  /** Opens a furnace-style cook screen. speed scales burn/cook rate
+   * (2 = a blast furnace that burns and cooks twice as fast). */
+  furnace?: { speed?: number };
+}
+
+export interface MobJson {
+  id: string;
+  name?: string;
+  sprite?: string;
+  /** Variants/animation/shader - see VisualJson. */
+  visual?: VisualJson;
+  health: number;
+  speed: number;
+  size: { width: number; height: number };
+  /** Chases within follow_range and hits on contact. */
+  melee?: { damage: number; cooldown: number; follow_range: number };
+  /** Kites: backs off closer than kite_near, closes in past kite_far,
+   * fires an arrow whenever in range and off cooldown. */
+  ranged?: { damage: number; range: number; shoot_cooldown: number; kite_near: number; kite_far: number };
+  /** Approaches within follow_range, ignites within trigger_range, counts
+   * down fuse_ticks, then blows. */
+  explodes?: { follow_range: number; trigger_range: number; fuse_ticks: number; block_radius: number; damage_radius: number; max_damage: number };
+  /** Ambles in a random direction, changing every so often. */
+  wanders?: boolean;
+  /** Undead: takes damage standing in daylight (overworld only). */
+  burns_in_daylight?: boolean;
+  /** Death drops: item, max count (1..max rolled), chance. */
+  loot?: Array<{ item: string; max: number; chance: number }>;
+  /** Gear this mob spawns wearing (armor absorbs damage, offhand blocks
+   * like a shield) - dropped again on death, same as a player's. */
+  equipment?: { armor?: string; offhand?: string };
+  /** Natural-spawn eligibility. group buckets this mob into one of the
+   * pools stepSpawning already rolls against; weight repeats it within
+   * that pool (2 = twice as likely as weight 1). near_structure anchors
+   * spawning to a placed structure (villagers appear near houses)
+   * instead of the ambient roll. */
+  spawn?: {
+    group?: "hostile_surface" | "grass_day" | "nether_pocket";
+    weight?: number;
+    near_structure?: string;
+  };
 }
 
 class SchemaError extends Error {
@@ -127,6 +199,59 @@ function needIngredientRef(source: string, path: string, value: unknown): string
   return cleaned;
 }
 
+function validateAnimationClipJson(raw: unknown, source: string, path: string): AnimationClipJson {
+  const value = need<Record<string, unknown>>(source, path, raw, "object");
+  checkKeys(source, `${path}.`, value, ["frames", "frame_width", "fps", "loop"]);
+  const out: AnimationClipJson = {
+    frames: needNumber(source, `${path}.frames`, value["frames"], 1, 64),
+    frame_width: needNumber(source, `${path}.frame_width`, value["frame_width"], 2, 128),
+    fps: needNumber(source, `${path}.fps`, value["fps"], 1, 60),
+  };
+  if (value["loop"] !== undefined) out.loop = need<boolean>(source, `${path}.loop`, value["loop"], "boolean");
+  return out;
+}
+
+/** Shared `visual` sub-validator, called identically from items/blocks/mobs
+ * - see VisualJson for field meanings. */
+function validateVisualJson(raw: unknown, source: string): VisualJson {
+  const value = need<Record<string, unknown>>(source, "visual", raw, "object");
+  checkKeys(source, "visual.", value, ["variants", "animation", "shader"]);
+  const out: VisualJson = {};
+  if (value["variants"] !== undefined) {
+    out.variants = needNumber(source, "visual.variants", value["variants"], 1, 16);
+  }
+  if (value["animation"] !== undefined) {
+    const animation = need<Record<string, unknown>>(source, "visual.animation", value["animation"], "object");
+    checkKeys(source, "visual.animation.", animation, ["states"]);
+    const states = need<Record<string, unknown>>(source, "visual.animation.states", animation["states"], "object");
+    const outStates: Record<string, AnimationClipJson> = {};
+    for (const [name, clip] of Object.entries(states)) {
+      if (!ID_PATTERN.test(name)) {
+        throw new SchemaError(source, `"visual.animation.states" key "${name}" must be a lowercase snake_case id`);
+      }
+      outStates[name] = validateAnimationClipJson(clip, source, `visual.animation.states.${name}`);
+    }
+    out.animation = { states: outStates };
+  }
+  if (value["shader"] !== undefined) {
+    const shader = need<Record<string, unknown>>(source, "visual.shader", value["shader"], "object");
+    checkKeys(source, "visual.shader.", shader, ["id", "params"]);
+    out.shader = { id: needId(source, "visual.shader.id", shader["id"]) };
+    if (shader["params"] !== undefined) {
+      const params = need<Record<string, unknown>>(source, "visual.shader.params", shader["params"], "object");
+      const outParams: Record<string, number | string | boolean> = {};
+      for (const [key, entry] of Object.entries(params)) {
+        if (typeof entry !== "number" && typeof entry !== "string" && typeof entry !== "boolean") {
+          throw new SchemaError(source, `"visual.shader.params.${key}" must be a number, string, or boolean`);
+        }
+        outParams[key] = entry;
+      }
+      out.shader.params = outParams;
+    }
+  }
+  return out;
+}
+
 function validateRecipeJson(raw: unknown, source: string, index: number): RecipeJson {
   const path = `recipes[${index}].`;
   const value = need<Record<string, unknown>>(source, `recipes[${index}]`, raw, "object");
@@ -179,13 +304,14 @@ function validateRecipeJson(raw: unknown, source: string, index: number): Recipe
 export function validateItemJson(raw: unknown, source: string): ItemJson {
   const value = need<Record<string, unknown>>(source, "(root)", raw, "object");
   checkKeys(source, "", value, [
-    "id", "name", "max_stack", "sprite", "places_block", "tool", "weapon", "food",
+    "id", "name", "max_stack", "sprite", "visual", "places_block", "tool", "weapon", "food",
     "armor", "shield", "grapple", "effect", "bucket", "container", "fuel_ticks", "enchants", "recipes",
   ]);
   const out: ItemJson = { id: needId(source, "id", value["id"]) };
   if (value["name"] !== undefined) out.name = need<string>(source, "name", value["name"], "string");
   if (value["max_stack"] !== undefined) out.max_stack = needNumber(source, "max_stack", value["max_stack"], 1, 64);
   if (value["sprite"] !== undefined) out.sprite = need<string>(source, "sprite", value["sprite"], "string");
+  if (value["visual"] !== undefined) out.visual = validateVisualJson(value["visual"], source);
   if (value["places_block"] !== undefined) out.places_block = needId(source, "places_block", value["places_block"]);
   if (value["tool"] !== undefined) {
     const tool = need<Record<string, unknown>>(source, "tool", value["tool"], "object");
@@ -261,8 +387,8 @@ export function validateItemJson(raw: unknown, source: string): ItemJson {
 export function validateBlockJson(raw: unknown, source: string): BlockJson {
   const value = need<Record<string, unknown>>(source, "(root)", raw, "object");
   checkKeys(source, "", value, [
-    "id", "name", "sprite", "solid", "hardness", "tool", "required_tier", "drops",
-    "side_permeable", "slab", "tall", "toggle_to", "liquid",
+    "id", "name", "sprite", "visual", "solid", "hardness", "tool", "required_tier", "drops",
+    "side_permeable", "slab", "tall", "toggle_to", "liquid", "container", "furnace",
   ]);
   const out: BlockJson = {
     id: needId(source, "id", value["id"]),
@@ -271,6 +397,7 @@ export function validateBlockJson(raw: unknown, source: string): BlockJson {
   };
   if (value["name"] !== undefined) out.name = need<string>(source, "name", value["name"], "string");
   if (value["sprite"] !== undefined) out.sprite = need<string>(source, "sprite", value["sprite"], "string");
+  if (value["visual"] !== undefined) out.visual = validateVisualJson(value["visual"], source);
   if (value["tool"] !== undefined) out.tool = needOneOf(source, "tool", value["tool"], ["pickaxe", "axe", "shovel"] as const);
   if (value["required_tier"] !== undefined) out.required_tier = needNumber(source, "required_tier", value["required_tier"], 0, 8);
   if (value["drops"] !== undefined) {
@@ -296,6 +423,106 @@ export function validateBlockJson(raw: unknown, source: string): BlockJson {
       kind: needOneOf(source, "liquid.kind", liquid["kind"], ["water", "lava"] as const),
       level: needNumber(source, "liquid.level", liquid["level"], 1, 8),
     };
+  }
+  if (value["container"] !== undefined) {
+    const container = need<Record<string, unknown>>(source, "container", value["container"], "object");
+    checkKeys(source, "container.", container, ["slots"]);
+    out.container = { slots: needNumber(source, "container.slots", container["slots"], 1, 54) };
+  }
+  if (value["furnace"] !== undefined) {
+    const furnace = need<Record<string, unknown>>(source, "furnace", value["furnace"], "object");
+    checkKeys(source, "furnace.", furnace, ["speed"]);
+    out.furnace = {};
+    if (furnace["speed"] !== undefined) out.furnace.speed = needNumber(source, "furnace.speed", furnace["speed"], 0.1, 100);
+  }
+  return out;
+}
+
+export function validateMobJson(raw: unknown, source: string): MobJson {
+  const value = need<Record<string, unknown>>(source, "(root)", raw, "object");
+  checkKeys(source, "", value, [
+    "id", "name", "sprite", "visual", "health", "speed", "size", "melee", "ranged",
+    "explodes", "wanders", "burns_in_daylight", "loot", "equipment", "spawn",
+  ]);
+  const size = need<Record<string, unknown>>(source, "size", value["size"], "object");
+  checkKeys(source, "size.", size, ["width", "height"]);
+  const out: MobJson = {
+    id: needId(source, "id", value["id"]),
+    health: needNumber(source, "health", value["health"], 1, 10_000),
+    speed: needNumber(source, "speed", value["speed"], 0, 10),
+    size: {
+      width: needNumber(source, "size.width", size["width"], 0.1, 10),
+      height: needNumber(source, "size.height", size["height"], 0.1, 10),
+    },
+  };
+  if (value["name"] !== undefined) out.name = need<string>(source, "name", value["name"], "string");
+  if (value["sprite"] !== undefined) out.sprite = need<string>(source, "sprite", value["sprite"], "string");
+  if (value["visual"] !== undefined) out.visual = validateVisualJson(value["visual"], source);
+  if (value["melee"] !== undefined) {
+    const melee = need<Record<string, unknown>>(source, "melee", value["melee"], "object");
+    checkKeys(source, "melee.", melee, ["damage", "cooldown", "follow_range"]);
+    out.melee = {
+      damage: needNumber(source, "melee.damage", melee["damage"], 0, 1000),
+      cooldown: needNumber(source, "melee.cooldown", melee["cooldown"], 1, 1000),
+      follow_range: needNumber(source, "melee.follow_range", melee["follow_range"], 1, 256),
+    };
+  }
+  if (value["ranged"] !== undefined) {
+    const ranged = need<Record<string, unknown>>(source, "ranged", value["ranged"], "object");
+    checkKeys(source, "ranged.", ranged, ["damage", "range", "shoot_cooldown", "kite_near", "kite_far"]);
+    out.ranged = {
+      damage: needNumber(source, "ranged.damage", ranged["damage"], 0, 1000),
+      range: needNumber(source, "ranged.range", ranged["range"], 1, 256),
+      shoot_cooldown: needNumber(source, "ranged.shoot_cooldown", ranged["shoot_cooldown"], 1, 1000),
+      kite_near: needNumber(source, "ranged.kite_near", ranged["kite_near"], 0, 256),
+      kite_far: needNumber(source, "ranged.kite_far", ranged["kite_far"], 0, 256),
+    };
+  }
+  if (value["explodes"] !== undefined) {
+    const explodes = need<Record<string, unknown>>(source, "explodes", value["explodes"], "object");
+    checkKeys(source, "explodes.", explodes, ["follow_range", "trigger_range", "fuse_ticks", "block_radius", "damage_radius", "max_damage"]);
+    out.explodes = {
+      follow_range: needNumber(source, "explodes.follow_range", explodes["follow_range"], 0, 256),
+      trigger_range: needNumber(source, "explodes.trigger_range", explodes["trigger_range"], 0, 256),
+      fuse_ticks: needNumber(source, "explodes.fuse_ticks", explodes["fuse_ticks"], 1, 1000),
+      block_radius: needNumber(source, "explodes.block_radius", explodes["block_radius"], 0, 64),
+      damage_radius: needNumber(source, "explodes.damage_radius", explodes["damage_radius"], 0, 64),
+      max_damage: needNumber(source, "explodes.max_damage", explodes["max_damage"], 0, 1000),
+    };
+  }
+  if (value["wanders"] !== undefined) out.wanders = need<boolean>(source, "wanders", value["wanders"], "boolean");
+  if (value["burns_in_daylight"] !== undefined) {
+    out.burns_in_daylight = need<boolean>(source, "burns_in_daylight", value["burns_in_daylight"], "boolean");
+  }
+  if (value["loot"] !== undefined) {
+    const list = need<unknown[]>(source, "loot", value["loot"], "array");
+    out.loot = list.map((entry, i) => {
+      const path = `loot[${i}].`;
+      const drop = need<Record<string, unknown>>(source, `loot[${i}]`, entry, "object");
+      checkKeys(source, path, drop, ["item", "max", "chance"]);
+      return {
+        item: needId(source, `${path}item`, drop["item"]),
+        max: needNumber(source, `${path}max`, drop["max"], 1, 64),
+        chance: needNumber(source, `${path}chance`, drop["chance"], 0, 1),
+      };
+    });
+  }
+  if (value["equipment"] !== undefined) {
+    const equipment = need<Record<string, unknown>>(source, "equipment", value["equipment"], "object");
+    checkKeys(source, "equipment.", equipment, ["armor", "offhand"]);
+    out.equipment = {};
+    if (equipment["armor"] !== undefined) out.equipment.armor = needId(source, "equipment.armor", equipment["armor"]);
+    if (equipment["offhand"] !== undefined) out.equipment.offhand = needId(source, "equipment.offhand", equipment["offhand"]);
+  }
+  if (value["spawn"] !== undefined) {
+    const spawn = need<Record<string, unknown>>(source, "spawn", value["spawn"], "object");
+    checkKeys(source, "spawn.", spawn, ["group", "weight", "near_structure"]);
+    out.spawn = {};
+    if (spawn["group"] !== undefined) {
+      out.spawn.group = needOneOf(source, "spawn.group", spawn["group"], ["hostile_surface", "grass_day", "nether_pocket"] as const);
+    }
+    if (spawn["weight"] !== undefined) out.spawn.weight = needNumber(source, "spawn.weight", spawn["weight"], 1, 100);
+    if (spawn["near_structure"] !== undefined) out.spawn.near_structure = needId(source, "spawn.near_structure", spawn["near_structure"]);
   }
   return out;
 }

@@ -1,13 +1,16 @@
-import { Application, Container, Graphics, Sprite, Text, type Texture } from "pixi.js";
+import { Application, Container, Graphics, Rectangle, Sprite, Texture, Text } from "pixi.js";
 import {
   blockDef,
   BlockId,
+  CHUNK_HEIGHT,
+  CHUNK_WIDTH,
   daylightFactor,
-  ENTITY_SIZES,
   itemDef,
+  mobDef,
   PLAYER_HEIGHT,
   PLAYER_MAX_HEALTH,
   PLAYER_WIDTH,
+  sizeOf,
   TICK_MS,
   type EntityId,
   type InventorySlots,
@@ -19,7 +22,9 @@ import {
 import { Camera } from "./camera.js";
 import { FogOfWar } from "./fog.js";
 import { itemTexture } from "./icons.js";
-import { createBlockTextures, TILE_PX } from "./textures.js";
+import { entityAnimationStates, entityTexture } from "./entitySprites.js";
+import { createShaderEffect, type ShaderEffect } from "./shaders.js";
+import { blockAnimationClip, createBlockTextures, createBlockTextureVariants, type BlockAnimationClip, TILE_PX } from "./textures.js";
 import {
   AirUI,
   ContainerPanelUI,
@@ -35,7 +40,7 @@ import {
   liquidTint,
   TradePanelUI,
 } from "./ui.js";
-import { CHUNK_PX_H, CHUNK_PX_W, WorldView } from "./worldView.js";
+import { CHUNK_PX_H, CHUNK_PX_W, type OverlayTile, WorldView } from "./worldView.js";
 
 export interface ChunkRange {
   minCx: number;
@@ -55,6 +60,39 @@ interface PlayerMarker {
   y: number;
   /** When the latest position arrived, for inter-tick interpolation. */
   updatedAt: number;
+  /** Which way this player is facing - flips which side each hand renders on. */
+  facing: "left" | "right";
+  /** Held item ids (not full stacks - other players don't see counts). */
+  main: string | null;
+  off: string | null;
+  mainSprite: Sprite | null;
+  offSprite: Sprite | null;
+}
+
+/** A single named state's pre-sliced frame textures and playback rate. */
+interface EntityAnimationState {
+  frames: Texture[];
+  fps: number;
+  loop: boolean;
+}
+
+/** Sprite-sheet playback state: which named state is currently showing
+ * and since when, advanced manually every frame (draw() loop, alongside
+ * position/rotation/tint) rather than via PixiJS's AnimatedSprite
+ * autoplay - this app's Application uses its own private ticker (not
+ * Ticker.shared), which is what AnimatedSprite's default autoUpdate
+ * hooks into, so autoplay never actually ticks here. See requestAnim()
+ * for the state machine (transitions, priority) driving `current`. */
+interface EntityAnimationView {
+  sprite: Sprite;
+  states: Record<string, EntityAnimationState>;
+  current: string;
+  startedAt: number;
+  priority: number;
+  /** Set once a death clip starts; entity_removed defers actually
+   * destroying the entity until the clip finishes instead of cutting
+   * it off mid-animation. */
+  pendingRemoval: boolean;
 }
 
 interface EntityView {
@@ -67,7 +105,35 @@ interface EntityView {
   y: number;
   updatedAt: number;
   hurtAt: number;
+  anim?: EntityAnimationView;
+  /** From the item/mob def's visual.shader, if it names a known effect. */
+  shaderFx?: ShaderEffect;
+  /** Set by entity_removed when a death clip is still playing; the draw
+   * loop performs the actual destroy/delete once it finishes. */
+  removeRequested: boolean;
 }
+
+/** One always-live overlay sprite sitting on top of a baked tile - a
+ * single continuously-looping clip (if the block declares one) and/or a
+ * shader effect, no state machine (blocks have no hurt/death/attack). */
+interface BlockOverlayView {
+  id: BlockId;
+  container: Container;
+  sprite: Sprite;
+  frames?: Texture[];
+  fps?: number;
+  shaderFx?: ShaderEffect;
+}
+
+/** Continuous states (idle/walk) are mutually exclusive and always
+ * overridable; one-shots (attack/hurt/death) play to completion before
+ * anything at their priority or below can take over. Mob/remote-player
+ * attack animation isn't wired up yet (no sim signal exists for "who
+ * attacked" beyond the local player's own command - see the visual
+ * system plan's stage e notes), but the slot is reserved here so
+ * that's a pure addition later, not a schema change. */
+const ANIM_PRIORITY: Record<string, number> = { idle: 0, walk: 0, attack: 1, hurt: 2, death: 3 };
+const ANIM_ONE_SHOT = new Set(["attack", "hurt", "death"]);
 
 /**
  * Rendering layer. Consumes SimEvents and draws; it never mutates game
@@ -92,6 +158,11 @@ export class Renderer {
   private readonly players = new Map<PlayerId, PlayerMarker>();
   private readonly entities = new Map<EntityId, EntityView>();
   private readonly miningOverlays = new Map<PlayerId, Graphics>();
+  /** Live sprites for animated/shaded blocks, on top of their baked static
+   * base (see worldView.ts's OverlayTile) - keyed by "worldX,worldY",
+   * reconciled against the visible tile range once per frame. */
+  private readonly blockOverlayContainer = new Container();
+  private readonly blockOverlays = new Map<string, BlockOverlayView>();
   private hearts!: HeartsUI;
   private hungerBar!: HungerUI;
   private airBar!: AirUI;
@@ -153,13 +224,17 @@ export class Renderer {
   }
 
   async init(container: HTMLElement): Promise<void> {
-    await this.app.init({ resizeTo: container, background: "#87b9e7" });
+    // WebGL-only: shaders.ts's named effects only ship a glProgram, not a
+    // gpuProgram, to avoid maintaining duplicate GLSL/WGSL for one effect.
+    await this.app.init({ resizeTo: container, background: "#87b9e7", preference: "webgl" });
     container.appendChild(this.app.canvas);
 
     const blockTextures = createBlockTextures();
     this.blockTextures = blockTextures;
-    this.worldView = new WorldView(this.app.renderer, blockTextures);
+    const blockTextureVariants = createBlockTextureVariants(blockTextures);
+    this.worldView = new WorldView(this.app.renderer, blockTextures, blockTextureVariants);
     this.worldContainer.addChild(this.worldView.container);
+    this.worldContainer.addChild(this.blockOverlayContainer);
     this.app.stage.addChild(this.worldContainer);
     this.fog = new FogOfWar(blockTextures);
 
@@ -305,7 +380,7 @@ export class Renderer {
     this.furnacePanel.close();
     this.chestPanel.close();
     this.backpackPanel.setInventory(this.inventory, this.selectedSlot);
-    this.backpackPanel.open((index) => ({ container: "backpack", index }), capacity);
+    this.backpackPanel.open((index) => ({ container: "backpack", index }), capacity, capacity);
     this.refreshBackpack();
   }
 
@@ -337,7 +412,7 @@ export class Renderer {
       this.craftingPanel.open(3);
       return true;
     }
-    if (block === BlockId.Furnace) {
+    if (blockDef(block).furnace !== undefined) {
       this.craftingPanel.close();
       this.chestPanel.close();
       this.furnacePanel.setInventory(this.inventory, this.selectedSlot);
@@ -353,12 +428,13 @@ export class Renderer {
       this.enchantPanel.update(this.inventory, this.selectedSlot);
       return true;
     }
-    if (block === BlockId.Chest) {
+    const containerSlots = blockDef(block).container;
+    if (containerSlots !== undefined) {
       this.craftingPanel.close();
       this.furnacePanel.close();
       this.openChestPos = { x: tileX, y: tileY };
       this.chestPanel.setInventory(this.inventory, this.selectedSlot);
-      this.chestPanel.open((index) => ({ container: "chest", x: tileX, y: tileY, index }));
+      this.chestPanel.open((index) => ({ container: "chest", x: tileX, y: tileY, index }), containerSlots);
       this.onOpenChest?.(tileX, tileY);
       return true;
     }
@@ -434,7 +510,7 @@ export class Renderer {
           label.visible = gfx.visible;
           this.worldContainer.addChild(label);
         }
-        this.players.set(event.player, {
+        const marker: PlayerMarker = {
           gfx,
           label,
           prevX: event.x,
@@ -442,9 +518,26 @@ export class Renderer {
           x: event.x,
           y: event.y,
           updatedAt: performance.now(),
-        });
+          facing: event.facing,
+          main: event.main,
+          off: event.off,
+          mainSprite: null,
+          offSprite: null,
+        };
+        this.players.set(event.player, marker);
+        this.refreshHeldItems(marker);
         if (event.player === this.localPlayerId) {
           this.camera.centerOnTile(event.x, event.y);
+        }
+        break;
+      }
+      case "player_gear": {
+        const marker = this.players.get(event.player);
+        if (marker) {
+          marker.facing = event.facing;
+          marker.main = event.main;
+          marker.off = event.off;
+          this.refreshHeldItems(marker);
         }
         break;
       }
@@ -517,6 +610,7 @@ export class Renderer {
           // Reset the world view for the new dimension.
           this.localDim = event.dim;
           this.worldView.clear();
+          this.clearBlockOverlays();
           this.closeUI();
           this.camera.centerOnTile(event.x, event.y);
           for (const [id, view] of this.entities) {
@@ -533,7 +627,7 @@ export class Renderer {
       }
       case "entity_spawned": {
         if (this.entities.has(event.id)) break;
-        const gfx = this.buildEntityGfx(event.kind, event.stack);
+        const { gfx, anim, shaderFx } = this.buildEntityGfx(event.kind, event.id, event.stack);
         gfx.visible = event.dim === this.localDim;
         this.worldContainer.addChild(gfx);
         this.entities.set(event.id, {
@@ -546,6 +640,9 @@ export class Renderer {
           y: event.y,
           updatedAt: performance.now(),
           hurtAt: 0,
+          removeRequested: false,
+          ...(anim ? { anim } : {}),
+          ...(shaderFx ? { shaderFx } : {}),
         });
         break;
       }
@@ -561,21 +658,44 @@ export class Renderer {
       }
       case "entity_hurt": {
         const view = this.entities.get(event.id);
-        if (view) view.hurtAt = performance.now();
+        if (view) {
+          view.hurtAt = performance.now();
+          if (view.anim) this.requestAnim(view, "hurt", view.hurtAt);
+        }
+        break;
+      }
+      case "entity_died": {
+        const view = this.entities.get(event.id);
+        if (view?.anim?.states["death"]) {
+          const now = performance.now();
+          this.requestAnim(view, "death", now);
+          view.anim.pendingRemoval = true;
+        }
         break;
       }
       case "entity_removed": {
         const view = this.entities.get(event.id);
         if (view) {
-          view.gfx.destroy({ children: true });
-          this.entities.delete(event.id);
+          const anim = view.anim;
+          const deathClip = anim?.pendingRemoval ? anim.states["death"] : undefined;
+          const deathStillPlaying =
+            deathClip !== undefined &&
+            anim!.current === "death" &&
+            performance.now() - anim!.startedAt < this.clipDurationMs(deathClip);
+          if (deathStillPlaying) {
+            view.removeRequested = true;
+          } else {
+            view.gfx.destroy({ children: true });
+            view.shaderFx?.destroy();
+            this.entities.delete(event.id);
+          }
         }
         break;
       }
       case "player_left": {
         const marker = this.players.get(event.player);
         if (marker) {
-          marker.gfx.destroy();
+          marker.gfx.destroy({ children: true });
           marker.label?.destroy();
           this.players.delete(event.player);
         }
@@ -689,10 +809,74 @@ export class Renderer {
     gfx.clear().rect(0, 0, PLAYER_WIDTH * TILE_PX, PLAYER_HEIGHT * TILE_PX).fill({ color });
   }
 
-  private buildEntityGfx(kind: string, stack?: ItemStack): Container {
+  /** Rebuilds the held-item icons: main-hand on the side faced, offhand
+   * on the other. Both mirror with the player's facing so they read as
+   * turning around with the body, not just swapping sides in place. */
+  private refreshHeldItems(marker: PlayerMarker): void {
+    marker.mainSprite?.destroy();
+    marker.offSprite?.destroy();
+    const mainOnRight = marker.facing === "right";
+    marker.mainSprite = this.buildHeldSprite(marker.main, mainOnRight, marker.facing);
+    marker.offSprite = this.buildHeldSprite(marker.off, !mainOnRight, marker.facing);
+    if (marker.mainSprite) marker.gfx.addChild(marker.mainSprite);
+    if (marker.offSprite) marker.gfx.addChild(marker.offSprite);
+  }
+
+  private buildHeldSprite(item: string | null, onRightSide: boolean, facing: "left" | "right"): Sprite | null {
+    if (item === null) return null;
+    const texture = itemTexture(item, this.blockTextures);
+    if (!texture) return null;
+    const sprite = new Sprite(texture);
+    sprite.anchor.set(0.5, 0.5);
+    const size = TILE_PX * 0.55;
+    sprite.width = size;
+    sprite.height = size;
+    const bodyWidth = PLAYER_WIDTH * TILE_PX;
+    const handY = PLAYER_HEIGHT * TILE_PX * 0.42;
+    sprite.position.set(onRightSide ? bodyWidth + size * 0.4 : -size * 0.4, handY);
+    if (facing === "left") sprite.scale.x = -Math.abs(sprite.scale.x);
+    return sprite;
+  }
+
+  private clipDurationMs(state: EntityAnimationState): number {
+    return (state.frames.length / state.fps) * 1000;
+  }
+
+  /** Animation state machine transition: applies the priority/one-shot
+   * rules from the visual system plan (higher priority always
+   * interrupts, even mid-clip; a playing one-shot blocks anything at
+   * its priority or below; continuous states never restart themselves
+   * to avoid stutter, but do restart a same-named one-shot). */
+  private requestAnim(view: EntityView, state: string, now: number): void {
+    const anim = view.anim;
+    if (!anim || !anim.states[state]) return;
+    const priority = ANIM_PRIORITY[state] ?? 0;
+    if (ANIM_ONE_SHOT.has(anim.current) && priority <= anim.priority && state !== anim.current) {
+      const stillPlaying = now - anim.startedAt < this.clipDurationMs(anim.states[anim.current]!);
+      if (stillPlaying) return;
+    }
+    if (state === anim.current) {
+      if (ANIM_ONE_SHOT.has(state)) anim.startedAt = now;
+      return;
+    }
+    anim.current = state;
+    anim.priority = priority;
+    anim.startedAt = now;
+  }
+
+  private buildEntityGfx(
+    kind: string,
+    entityId: EntityId,
+    stack?: ItemStack,
+  ): { gfx: Container; anim?: EntityAnimationView; shaderFx?: ShaderEffect } {
+    // Same def either names a shader effect or it doesn't, regardless of
+    // which branch below ends up building the actual graphics.
+    const shaderDef = kind === "item" && stack ? itemDef(stack.item)?.visual?.shader : mobDef(kind)?.visual?.shader;
+    const shaderFx = shaderDef ? createShaderEffect(shaderDef.id, shaderDef.params) : undefined;
+
     if (kind === "item" && stack) {
       const container = new Container();
-      const texture = itemTexture(stack.item, this.blockTextures);
+      const texture = itemTexture(stack.item, this.blockTextures, entityId);
       if (texture) {
         const sprite = new Sprite(texture);
         sprite.width = TILE_PX * 0.5;
@@ -701,7 +885,60 @@ export class Renderer {
         if (tint !== undefined) sprite.tint = tint;
         container.addChild(sprite);
       }
-      return container;
+      if (shaderFx) container.filters = [shaderFx];
+      return { gfx: container, ...(shaderFx ? { shaderFx } : {}) };
+    }
+    {
+      const clips = entityAnimationStates(kind);
+      if (clips) {
+        const states: Record<string, EntityAnimationState> = {};
+        for (const [name, clip] of Object.entries(clips)) {
+          const frameCount = Math.min(clip.frames, Math.floor(clip.sheet.width / clip.frameWidth));
+          const frames: Texture[] = [];
+          for (let i = 0; i < frameCount; i++) {
+            frames.push(
+              new Texture({
+                source: clip.sheet.source,
+                frame: new Rectangle(i * clip.frameWidth, 0, clip.frameWidth, clip.sheet.height),
+              }),
+            );
+          }
+          if (frames.length > 0) states[name] = { frames, fps: clip.fps, loop: clip.loop };
+        }
+        const initial = states["idle"] ? "idle" : Object.keys(states)[0];
+        if (initial !== undefined) {
+          const container = new Container();
+          const size = sizeOf(kind);
+          const sprite = new Sprite(states[initial]!.frames[0]);
+          sprite.width = size.width * TILE_PX;
+          sprite.height = size.height * TILE_PX;
+          container.addChild(sprite);
+          if (shaderFx) container.filters = [shaderFx];
+          return {
+            gfx: container,
+            anim: { sprite, states, current: initial, startedAt: performance.now(), priority: 0, pendingRemoval: false },
+            ...(shaderFx ? { shaderFx } : {}),
+          };
+        }
+      }
+    }
+    {
+      const texture = entityTexture(kind, entityId);
+      if (texture) {
+        const container = new Container();
+        const size = sizeOf(kind);
+        const sprite = new Sprite(texture);
+        sprite.width = size.width * TILE_PX;
+        sprite.height = size.height * TILE_PX;
+        if (kind === "arrow") {
+          // Centered anchor (not top-left, like every other kind here)
+          // so it can rotate in place - see the per-frame update loop.
+          sprite.anchor.set(0.5);
+        }
+        container.addChild(sprite);
+        if (shaderFx) container.filters = [shaderFx];
+        return { gfx: container, ...(shaderFx ? { shaderFx } : {}) };
+      }
     }
     const gfx = new Graphics();
     const humanoid = (body: number, head: number): void => {
@@ -746,12 +983,16 @@ export class Renderer {
         gfx.rect(0.22 * TILE_PX, 0.3 * TILE_PX, 0.16 * TILE_PX, 0.25 * TILE_PX).fill({ color: 0xb08858 });
         break;
       case "arrow":
-        gfx.rect(0, 0, 0.3 * TILE_PX, 0.12 * TILE_PX).fill({ color: 0x9a9a9a });
+        // Centered on the local origin (not top-left, like everything
+        // else here) so it can rotate in place to face its flight
+        // direction - see the per-frame update loop.
+        gfx.rect(-0.15 * TILE_PX, -0.06 * TILE_PX, 0.3 * TILE_PX, 0.12 * TILE_PX).fill({ color: 0x9a9a9a });
         break;
       default:
         gfx.rect(0, 0, TILE_PX, TILE_PX).fill({ color: 0xff00ff });
     }
-    return gfx;
+    if (shaderFx) gfx.filters = [shaderFx];
+    return { gfx, ...(shaderFx ? { shaderFx } : {}) };
   }
 
   /**
@@ -777,7 +1018,7 @@ export class Renderer {
   mobAt(tileX: number, tileY: number): EntityId | null {
     for (const [id, view] of this.entities) {
       if (view.kind === "item") continue;
-      const size = ENTITY_SIZES[view.kind as keyof typeof ENTITY_SIZES];
+      const size = sizeOf(view.kind);
       if (
         tileX >= view.x - size.width / 2 &&
         tileX <= view.x + size.width / 2 &&
@@ -802,11 +1043,97 @@ export class Renderer {
     };
   }
 
+  /** Creates/destroys block overlay sprites so the live set matches
+   * exactly the animated/shaded tiles currently in view (plus the same
+   * one-chunk prefetch padding chunk loading already uses) - chunks are
+   * never unloaded as the player explores, so without this cull the
+   * overlay count would only ever grow. Also advances each surviving
+   * overlay's animation frame / shader time for this frame. */
+  private reconcileBlockOverlays(now: number): void {
+    const range = this.visibleChunkRange();
+    const minX = range.minCx * CHUNK_WIDTH;
+    const maxX = (range.maxCx + 1) * CHUNK_WIDTH - 1;
+    const minY = range.minCy * CHUNK_HEIGHT;
+    const maxY = (range.maxCy + 1) * CHUNK_HEIGHT - 1;
+    const visible = this.worldView.overlaysInView(minX, minY, maxX, maxY);
+
+    const seen = new Set<string>();
+    for (const tile of visible) {
+      const key = `${tile.worldX},${tile.worldY}`;
+      seen.add(key);
+      const existing = this.blockOverlays.get(key);
+      if (existing && existing.id === tile.id) continue;
+      if (existing) {
+        existing.container.destroy({ children: true });
+        existing.shaderFx?.destroy();
+      }
+      const overlay = this.buildBlockOverlay(tile);
+      this.blockOverlayContainer.addChild(overlay.container);
+      this.blockOverlays.set(key, overlay);
+    }
+    for (const [key, overlay] of this.blockOverlays) {
+      if (seen.has(key)) continue;
+      overlay.container.destroy({ children: true });
+      overlay.shaderFx?.destroy();
+      this.blockOverlays.delete(key);
+    }
+
+    for (const overlay of this.blockOverlays.values()) {
+      overlay.shaderFx?.setTime(now);
+      if (overlay.frames && overlay.fps) {
+        const frameIndex = Math.floor((now / 1000) * overlay.fps) % overlay.frames.length;
+        overlay.sprite.texture = overlay.frames[frameIndex]!;
+      }
+    }
+  }
+
+  private buildBlockOverlay(tile: OverlayTile): BlockOverlayView {
+    const container = new Container();
+    container.position.set(tile.worldX * TILE_PX, tile.worldY * TILE_PX);
+    const sprite = new Sprite(tile.texture);
+    sprite.width = TILE_PX;
+    sprite.height = TILE_PX;
+    container.addChild(sprite);
+
+    const overlay: BlockOverlayView = { id: tile.id, container, sprite };
+    const clip: BlockAnimationClip | undefined = blockAnimationClip(tile.id);
+    if (clip) {
+      const frameCount = Math.min(clip.frames, Math.floor(clip.sheet.width / clip.frameWidth));
+      const frames: Texture[] = [];
+      for (let i = 0; i < frameCount; i++) {
+        frames.push(
+          new Texture({ source: clip.sheet.source, frame: new Rectangle(i * clip.frameWidth, 0, clip.frameWidth, clip.sheet.height) }),
+        );
+      }
+      if (frames.length > 0) {
+        overlay.frames = frames;
+        overlay.fps = clip.fps;
+        sprite.texture = frames[0]!;
+      }
+    }
+    const shaderDef = blockDef(tile.id)?.visual?.shader;
+    const shaderFx = shaderDef ? createShaderEffect(shaderDef.id, shaderDef.params) : undefined;
+    if (shaderFx) {
+      overlay.shaderFx = shaderFx;
+      container.filters = [shaderFx];
+    }
+    return overlay;
+  }
+
+  private clearBlockOverlays(): void {
+    for (const overlay of this.blockOverlays.values()) {
+      overlay.container.destroy({ children: true });
+      overlay.shaderFx?.destroy();
+    }
+    this.blockOverlays.clear();
+  }
+
   draw(dtMs: number): void {
     const now = performance.now();
 
     // Bake chunks touched since the last frame (at most once each).
     this.worldView.flush();
+    this.reconcileBlockOverlays(now);
 
     // Advance local time between server syncs (1 tick per 50 ms) and
     // shade the world: sky color blends toward night, plus a veil.
@@ -848,15 +1175,55 @@ export class Renderer {
       }
     }
 
-    for (const view of this.entities.values()) {
+    const finishedDeaths: EntityId[] = [];
+    for (const [id, view] of this.entities) {
       const alpha = Math.min(1, (now - view.updatedAt) / TICK_MS);
       const x = view.prevX + (view.x - view.prevX) * alpha;
       const y = view.prevY + (view.y - view.prevY) * alpha;
-      const size = ENTITY_SIZES[view.kind as keyof typeof ENTITY_SIZES] ?? { width: 1, height: 1 };
-      // Items bob gently so they read as pickups.
-      const bob = view.kind === "item" ? Math.sin(now / 300 + view.x) * 1.5 : 0;
-      view.gfx.position.set((x - size.width / 2) * TILE_PX, (y - size.height) * TILE_PX + bob);
+      const size = sizeOf(view.kind);
+      if (view.kind === "arrow") {
+        // Centered anchor (see buildEntityGfx) so it can rotate in place
+        // to face the direction it actually traveled last tick.
+        const dx = view.x - view.prevX;
+        const dy = view.y - view.prevY;
+        if (dx !== 0 || dy !== 0) view.gfx.rotation = Math.atan2(dy, dx);
+        view.gfx.position.set(x * TILE_PX, (y - size.height / 2) * TILE_PX);
+      } else {
+        // Items bob gently so they read as pickups.
+        const bob = view.kind === "item" ? Math.sin(now / 300 + view.x) * 1.5 : 0;
+        view.gfx.position.set((x - size.width / 2) * TILE_PX, (y - size.height) * TILE_PX + bob);
+      }
       view.gfx.tint = now - view.hurtAt < 150 ? 0xff6060 : 0xffffff;
+      view.shaderFx?.setTime(now);
+      if (view.anim) {
+        if (!view.anim.pendingRemoval) {
+          const moved = view.x !== view.prevX || view.y !== view.prevY;
+          this.requestAnim(view, moved ? "walk" : "idle", now);
+        }
+        const state = view.anim.states[view.anim.current];
+        if (state) {
+          const elapsedFrames = ((now - view.anim.startedAt) / 1000) * state.fps;
+          const frameIndex = state.loop
+            ? Math.floor(elapsedFrames) % state.frames.length
+            : Math.min(state.frames.length - 1, Math.floor(elapsedFrames));
+          view.anim.sprite.texture = state.frames[frameIndex]!;
+          if (
+            view.removeRequested &&
+            view.anim.current === "death" &&
+            now - view.anim.startedAt >= this.clipDurationMs(state)
+          ) {
+            finishedDeaths.push(id);
+          }
+        }
+      }
+    }
+    for (const id of finishedDeaths) {
+      const view = this.entities.get(id);
+      if (view) {
+        view.gfx.destroy({ children: true });
+        view.shaderFx?.destroy();
+      }
+      this.entities.delete(id);
     }
 
     if (localX !== null && localY !== null) {

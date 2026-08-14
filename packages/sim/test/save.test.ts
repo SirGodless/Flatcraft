@@ -3,16 +3,17 @@ import {
   BlockId,
   countInInventory,
   findSpawnX,
+  isPlayerEntity,
   Simulation,
   surfaceHeight,
   type OutboundEvent,
   type PlayerId,
-  type PlayerState,
+  type PlayerEntity,
 } from "../src/index.js";
 
 const SEED = 1337;
 
-function joinPlayer(sim: Simulation, name = "T"): { player: PlayerId; state: PlayerState } {
+function joinPlayer(sim: Simulation, name = "T"): { player: PlayerId; state: PlayerEntity } {
   const player = sim.allocatePlayerId();
   sim.tick([{ player, command: { type: "join", name } }]);
   for (let i = 0; i < 10; i++) sim.tick([]);
@@ -39,8 +40,27 @@ describe("save/load", () => {
     expect(restored.world.getBlock(2, 2)).toBe(BlockId.Glowstone);
     expect(restored.timeOfDay).toBe(sim.timeOfDay);
     expect(restored.tickCount).toBe(sim.tickCount);
-    expect(restored.entities.size).toBe(sim.entities.size);
+    // Non-player entities round-trip directly; the live player instead
+    // round-trips through `players` (saved, adopted again on rejoin).
+    const nonPlayerCount = (s: Simulation): number => [...s.entities.values()].filter((e) => !isPlayerEntity(e)).length;
+    expect(nonPlayerCount(restored)).toBe(nonPlayerCount(sim));
     expect(restored.portals.nether.get("9,40")).toEqual({ x: 9, y: 40 });
+  });
+
+  it("carries the id allocator over the round-trip, still collision-free after load", () => {
+    const sim = new Simulation(SEED);
+    const { state } = joinPlayer(sim);
+    const out: OutboundEvent[] = [];
+    sim.spawnMob("pig", state.x + 5, state.y, out);
+
+    const restored = Simulation.deserialize(sim.serialize());
+    const newPlayer = restored.allocatePlayerId();
+    const newMob = restored.spawnMob("pig", state.x - 5, state.y, out);
+    expect(newPlayer).not.toBe(newMob.id);
+    // Neither collides with anything that already existed before the save.
+    const priorIds = [...sim.entities.values()].map((e) => e.id);
+    expect(priorIds).not.toContain(newPlayer);
+    expect(priorIds).not.toContain(newMob.id);
   });
 
   it("a rejoining player adopts their saved position and inventory", () => {
@@ -104,7 +124,7 @@ describe("save/load", () => {
     const surface = surfaceHeight(SEED, spawnX);
     sim.world.setBlock(spawnX + 3, surface - 2, BlockId.Glowstone);
     const save = sim.serialize();
-    expect(save.version).toBe(2);
+    expect(save.version).toBe(4);
     expect(save.blockPalette![BlockId.Glowstone]).toBe("glowstone");
 
     // Simulate a registry that renumbered glowstone: the save's chunks

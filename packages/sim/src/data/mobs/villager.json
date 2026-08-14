@@ -1,0 +1,9 @@
+{
+  "id": "villager",
+  "name": "Villager",
+  "health": 20,
+  "speed": 0.05,
+  "size": { "width": 0.6, "height": 1.9 },
+  "wanders": true,
+  "spawn": { "near_structure": "house", "weight": 1 }
+}

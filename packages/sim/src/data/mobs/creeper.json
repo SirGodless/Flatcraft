@@ -1,0 +1,17 @@
+{
+  "id": "creeper",
+  "name": "Creeper",
+  "health": 20,
+  "speed": 0.09,
+  "size": { "width": 0.6, "height": 1.5 },
+  "explodes": {
+    "follow_range": 16,
+    "trigger_range": 1.8,
+    "fuse_ticks": 30,
+    "block_radius": 2.5,
+    "damage_radius": 4,
+    "max_damage": 18
+  },
+  "loot": [{ "item": "gunpowder", "max": 2, "chance": 0.9 }],
+  "spawn": { "group": "hostile_surface", "weight": 1 }
+}

@@ -6,41 +6,29 @@ import { DEFAULT_COOK_TICKS, fuelTicks, ingredientOptions } from "./crafting/rec
 import { RECIPES } from "./data/recipes/index.js";
 import { createFurnace, furnaceIdle, furnaceKey, stepFurnace, type FurnaceState } from "./furnace.js";
 import {
-  ARROW_DAMAGE,
   ARROW_TTL,
   ATTACK_REACH,
   BOW_ARROW_SPEED,
   BOW_COOLDOWN,
   BOW_DAMAGE,
-  BURNING_MOBS,
-  CREEPER_FUSE,
-  CREEPER_TRIGGER_RANGE,
-  ENTITY_SIZES,
-  EXPLOSION_BLOCK_RADIUS,
-  EXPLOSION_DAMAGE_RADIUS,
-  EXPLOSION_MAX_DAMAGE,
   ITEM_DESPAWN_TICKS,
   ITEM_PICKUP_DELAY,
   ITEM_PICKUP_RADIUS,
-  MELEE_MOBS,
+  isArrowEntity,
+  isItemEntity,
+  isMobEntity,
+  isPlayerEntity,
   MOB_CAP,
   MOB_DESPAWN_RANGE,
-  MOB_LOOT,
-  MOB_STATS,
-  PASSIVE_MOBS,
-  SKELETON_RANGE,
-  WANDERING_MOBS,
-  SKELETON_SHOOT_COOLDOWN,
-  ZOMBIE_ATTACK_COOLDOWN,
-  ZOMBIE_DAMAGE,
-  ZOMBIE_FOLLOW_RANGE,
   type ArrowEntity,
   type Entity,
   type EntityId,
   type ItemEntity,
   type MobEntity,
   type MobKind,
+  type PlayerEntity,
 } from "./entities.js";
+import { mobDef, mobsNearStructure, sizeOf, spawnPool, type ExplodesDef } from "./mobs.js";
 import {
   attackDamage,
   attackKnockback,
@@ -133,14 +121,6 @@ function buildBlockRemap(palette: Record<number, string> | undefined): Map<numbe
   return identical ? null : remap;
 }
 
-/** The player's current movement intent, kept until the next move command. */
-export interface PlayerInput {
-  dx: -1 | 0 | 1;
-  jump: boolean;
-  /** Creative flight: descend. */
-  down?: boolean;
-}
-
 /** Default body color for players who never picked one. */
 export const DEFAULT_PLAYER_COLOR = 0x4868e0;
 
@@ -149,64 +129,6 @@ function sanitizeColor(value: unknown): number | null {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 0xffffff
     ? value
     : null;
-}
-
-export interface PlayerState {
-  id: PlayerId;
-  name: string;
-  /** Body color (0xRRGGBB), chosen at login / via set_color. */
-  color: number;
-  dimension: Dimension;
-  /** Feet-center position in tiles (see physics.ts for the AABB layout). */
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  onGround: boolean;
-  input: PlayerInput;
-  inventory: InventorySlots;
-  /** Selected hotbar slot, 0..8. */
-  selected: number;
-  /** Stack held on the cursor while a UI is open. */
-  cursor: ItemStack | null;
-  /** Personal 3x3 crafting grid (only the 2x2 corner without a table). */
-  craftGrid: (ItemStack | null)[];
-  /** Block currently being mined, with accumulated progress ticks.
-   * `wall` targets the background layer (hammer mining). */
-  mining: { x: number; y: number; progress: number; wall?: boolean } | null;
-  health: number;
-  /** Hunger bar, 0..PLAYER_MAX_HUNGER. */
-  hunger: number;
-  /** Accumulated activity; drains hunger at EXHAUSTION_PER_POINT. */
-  exhaustion: number;
-  /** Invulnerability frames after taking a hit. */
-  hurtCooldown: number;
-  /** Ticks until the next melee attack is allowed. */
-  attackCooldown: number;
-  /** Knockback velocity, decays and adds onto walking. */
-  kbX: number;
-  /** Tiles fallen so far in the current fall. */
-  fallDistance: number;
-  /** Active potion effects, remaining ticks by effect id. */
-  effects: Record<string, number>;
-  /** Consecutive ticks standing inside a nether portal. */
-  portalTicks: number;
-  /** Ticks left before a portal can trigger again after arriving. */
-  portalCooldown: number;
-  /** Saturation buffers hunger drain (eating tops it up). */
-  saturation: number;
-  /** Food currently being eaten (takes the item's eat_ticks). */
-  eating: { item: string; ticks: number } | null;
-  /** Worn armor piece (damage absorption). */
-  armor: ItemStack | null;
-  /** Offhand item (shields block passively from here). */
-  offhand: ItemStack | null;
-  /** Active grappling-hook pull toward an anchor point. */
-  grapple: { x: number; y: number; ticks: number } | null;
-  /** Creative mode: no damage, flight, instant break, free placement. */
-  creative: boolean;
-  /** Remaining diving air in ticks (MAX_AIR_TICKS when surfaced). */
-  air: number;
 }
 
 /** Diving: air supply in ticks, and drowning damage cadence. */
@@ -226,7 +148,6 @@ const MAX_CHUNK_COORD = 1_000_000;
  */
 export class Simulation {
   readonly worlds: Record<Dimension, World>;
-  readonly players = new Map<PlayerId, PlayerState>();
   readonly furnaces = new Map<string, FurnaceState>();
   /** Chest contents, keyed like furnaces: "dim:x,y". */
   readonly chests = new Map<string, { dimension: Dimension; x: number; y: number; slots: (ItemStack | null)[] }>();
@@ -247,10 +168,14 @@ export class Simulation {
 
   private readonly rng: Rng;
   private readonly rngState: RngState;
-  private nextPlayerId: PlayerId = 1;
-  private nextEntityId: EntityId = 1;
+  /** Single allocator for both player and entity ids - they share one
+   * id space, so a player and a mob can never collide. */
+  private nextId: EntityId = 1;
   /** Disconnected players' state, by name, adopted on rejoin. */
-  private readonly savedPlayers = new Map<string, PlayerState>();
+  private readonly savedPlayers = new Map<string, PlayerEntity>();
+  /** Last facing/held-item state broadcast per player, to detect changes
+   * without hooking every place inventory/offhand/facing can mutate. */
+  private readonly lastGear = new Map<PlayerId, { facing: "left" | "right"; main: string | null; off: string | null }>();
 
   constructor(seed: number) {
     this.worlds = {
@@ -261,6 +186,33 @@ export class Simulation {
     this.rng = () => rngNext(this.rngState);
   }
 
+  /** Connected players are just entities with kind "player" - this is a
+   * read-only snapshot view for callers that want a player-only map (a
+   * live player is never removed from `entities` except via "leave"; the
+   * returned Map is a fresh snapshot, but its values are the same live
+   * entity objects, so mutating them still mutates the simulation). */
+  get players(): ReadonlyMap<PlayerId, PlayerEntity> {
+    const map = new Map<PlayerId, PlayerEntity>();
+    for (const p of this.playerEntities()) map.set(p.id, p);
+    return map;
+  }
+
+  private getPlayer(id: PlayerId): PlayerEntity | undefined {
+    const e = this.entities.get(id);
+    return e && isPlayerEntity(e) ? e : undefined;
+  }
+
+  private *playerEntities(): IterableIterator<PlayerEntity> {
+    for (const e of this.entities.values()) {
+      if (isPlayerEntity(e)) yield e;
+    }
+  }
+
+  private hasPlayers(): boolean {
+    for (const _ of this.playerEntities()) return true;
+    return false;
+  }
+
   /** Snapshot the complete simulation state as plain serializable data. */
   serialize(): SimSave {
     const blockPalette: Record<number, string> = {};
@@ -268,14 +220,13 @@ export class Simulation {
       blockPalette[def.id] = def.name;
     }
     return {
-      version: 2,
+      version: 4,
       blockPalette,
       seed: this.world.seed,
       tickCount: this.tickCount,
       timeOfDay: this.timeOfDay,
       rng: this.rngState.s,
-      nextPlayerId: this.nextPlayerId,
-      nextEntityId: this.nextEntityId,
+      nextId: this.nextId,
       worlds: {
         overworld: this.worlds.overworld.serializeChunks(),
         nether: this.worlds.nether.serializeChunks(),
@@ -286,10 +237,11 @@ export class Simulation {
         overworld: [...this.portals.overworld.values()],
         nether: [...this.portals.nether.values()],
       },
-      entities: [...this.entities.values()].map((e) => structuredClone(e)),
+      // Players live in `entities` too, but are saved separately below.
+      entities: [...this.entities.values()].filter((e) => !isPlayerEntity(e)).map((e) => structuredClone(e)),
       // Both connected and previously saved players, by name.
       players: [
-        ...[...this.players.values()].map((p) => structuredClone(p)),
+        ...[...this.playerEntities()].map((p) => structuredClone(p)),
         ...[...this.savedPlayers.values()].map((p) => structuredClone(p)),
       ],
     };
@@ -301,8 +253,7 @@ export class Simulation {
     sim.tickCount = save.tickCount;
     sim.timeOfDay = save.timeOfDay;
     sim.rngState.s = save.rng;
-    sim.nextPlayerId = save.nextPlayerId;
-    sim.nextEntityId = save.nextEntityId;
+    sim.nextId = save.nextId;
     // Saved block numbers are remapped by their palette names, so a
     // renumbered registry (or removed mod blocks -> air) loads cleanly.
     const remap = buildBlockRemap(save.blockPalette);
@@ -317,7 +268,8 @@ export class Simulation {
       sim.worlds[dim].loadChunks(chunks);
     }
     for (const f of save.furnaces) {
-      sim.furnaces.set(furnaceKey(f.dimension, f.x, f.y), structuredClone(f));
+      // Saves from before per-block furnace speed lack the field.
+      sim.furnaces.set(furnaceKey(f.dimension, f.x, f.y), { ...structuredClone(f), speed: f.speed ?? 1 });
     }
     for (const c of save.chests ?? []) {
       sim.chests.set(furnaceKey(c.dimension, c.x, c.y), structuredClone(c));
@@ -346,9 +298,11 @@ export class Simulation {
     return this.worlds[dimension];
   }
 
-  /** Reserve a player id for a new connection (embedded or remote). */
+  /** Reserve a player id for a new connection (embedded or remote). Draws
+   * from the same id space as spawned entities, so a player and a mob
+   * can never end up sharing an id. */
   allocatePlayerId(): PlayerId {
-    return this.nextPlayerId++;
+    return this.nextId++;
   }
 
   tick(commands: readonly PlayerCommand[]): OutboundEvent[] {
@@ -361,6 +315,7 @@ export class Simulation {
     this.stepLiquids(out);
     this.stepEntities(out);
     this.stepPlayers(out);
+    this.stepGearSync(out);
     this.stepSpawning(out);
     this.tickCount++;
     this.timeOfDay = (this.timeOfDay + 1) % DAY_LENGTH;
@@ -373,7 +328,7 @@ export class Simulation {
   /** Spawn an item lying in the world (block drops, mob loot, death drops). */
   spawnItem(dimension: Dimension, x: number, y: number, stack: ItemStack, out: OutboundEvent[]): ItemEntity {
     const entity: ItemEntity = {
-      id: this.nextEntityId++,
+      id: this.nextId++,
       kind: "item",
       dimension,
       x,
@@ -393,8 +348,10 @@ export class Simulation {
   }
 
   spawnMob(kind: MobKind, x: number, y: number, out: OutboundEvent[], dimension: Dimension = "overworld"): MobEntity {
+    const def = mobDef(kind);
+    if (!def) throw new Error(`spawnMob: unknown mob kind "${kind}"`);
     const entity: MobEntity = {
-      id: this.nextEntityId++,
+      id: this.nextId++,
       kind,
       dimension,
       x,
@@ -402,11 +359,13 @@ export class Simulation {
       vx: 0,
       vy: 0,
       onGround: false,
-      health: MOB_STATS[kind].health,
+      health: def.health,
       hurtCooldown: 0,
       attackCooldown: 0,
       wanderDir: 0,
       wanderTimer: 0,
+      ...(def.equipment?.armor !== undefined ? { armor: { item: def.equipment.armor, count: 1 } } : {}),
+      ...(def.equipment?.offhand !== undefined ? { offhand: { item: def.equipment.offhand, count: 1 } } : {}),
     };
     this.entities.set(entity.id, entity);
     out.push({ event: { type: "entity_spawned", id: entity.id, kind, dim: dimension, x, y } });
@@ -625,7 +584,7 @@ export class Simulation {
   }
 
   private stepMining(out: OutboundEvent[]): void {
-    for (const p of this.players.values()) {
+    for (const p of this.playerEntities()) {
       const mining = p.mining;
       if (!mining) continue;
       const world = this.worldOf(p.dimension);
@@ -716,7 +675,7 @@ export class Simulation {
             }
           }
         }
-        if (block === BlockId.Furnace) {
+        if (blockDef(block).furnace !== undefined) {
           const state = this.furnaces.get(furnaceKey(p.dimension, mining.x, mining.y));
           if (state) {
             for (const stack of [state.input, state.fuel, state.output]) {
@@ -725,9 +684,10 @@ export class Simulation {
             this.furnaces.delete(furnaceKey(p.dimension, mining.x, mining.y));
           }
         }
-        if (block === BlockId.Chest) {
+        const minedContainerSlots = blockDef(block).container;
+        if (minedContainerSlots !== undefined) {
           // Materialize structure loot before spilling.
-          const chest = this.ensureChest(p.dimension, mining.x, mining.y);
+          const chest = this.ensureChest(p.dimension, mining.x, mining.y, minedContainerSlots);
           if (chest) {
             // Contents spill out as item entities, like Minecraft.
             for (const stack of chest.slots) {
@@ -753,12 +713,15 @@ export class Simulation {
 
   private stepEntities(out: OutboundEvent[]): void {
     for (const entity of [...this.entities.values()]) {
+      // Players are stepped separately (stepPlayers) - very different
+      // physics (input-driven, creative flight, ...).
+      if (isPlayerEntity(entity)) continue;
       const prevX = entity.x;
       const prevY = entity.y;
-      const size = ENTITY_SIZES[entity.kind];
+      const size = sizeOf(entity.kind);
       const world = this.worldOf(entity.dimension);
 
-      if (entity.kind === "item") {
+      if (isItemEntity(entity)) {
         entity.age++;
         if (entity.pickupDelay > 0) entity.pickupDelay--;
         if (entity.age >= ITEM_DESPAWN_TICKS) {
@@ -786,7 +749,7 @@ export class Simulation {
             this.syncInventory(taker, out);
           }
         }
-      } else if (entity.kind === "arrow") {
+      } else if (isArrowEntity(entity)) {
         entity.ttl--;
         if (entity.ttl <= 0) {
           this.removeEntity(entity.id, out);
@@ -831,9 +794,11 @@ export class Simulation {
           if (!this.entities.has(entity.id)) continue;
         }
 
+        const mob = mobDef(entity.kind);
+
         // Daylight burning for undead (not in the nether).
         if (
-          BURNING_MOBS.includes(entity.kind) &&
+          mob?.burnsInDaylight &&
           entity.dimension === "overworld" &&
           this.tickCount % 40 === 0 &&
           daylightFactor(this.timeOfDay) > 0.5 &&
@@ -845,46 +810,50 @@ export class Simulation {
 
         let dir: -1 | 0 | 1 = 0;
         const target = this.nearestPlayer(entity.dimension, entity.x, entity.y);
-        const inRange =
-          target !== null &&
-          Math.abs(target.p.x - entity.x) <= ZOMBIE_FOLLOW_RANGE &&
-          target.dist <= ZOMBIE_FOLLOW_RANGE * 1.5;
+        /** Is the target within followRange (and not comically far by
+         * pure x-distance, for the tighter horizontal chase check)? */
+        const approaching = (followRange: number): boolean =>
+          target !== null && Math.abs(target.p.x - entity.x) <= followRange && target.dist <= followRange * 1.5;
 
-        if (MELEE_MOBS.includes(entity.kind)) {
-          if (target && inRange) {
+        const melee = mob?.melee;
+        const ranged = mob?.ranged;
+        const explodes = mob?.explodes;
+        if (melee) {
+          if (target && approaching(melee.followRange)) {
             const dx = target.p.x - entity.x;
             dir = Math.abs(dx) > 0.4 ? (dx > 0 ? 1 : -1) : 0;
             if (entity.attackCooldown === 0 && this.entityTouchesPlayer(entity, target.p)) {
-              entity.attackCooldown = ZOMBIE_ATTACK_COOLDOWN;
-              this.hurtPlayer(target.p, ZOMBIE_DAMAGE, out, entity.x);
+              entity.attackCooldown = melee.cooldown;
+              this.hurtPlayer(target.p, melee.damage, out, entity.x);
             }
           }
-        } else if (entity.kind === "skeleton") {
-          if (target && target.dist <= SKELETON_RANGE + 2) {
+        } else if (ranged) {
+          if (target && target.dist <= ranged.range + 2) {
             const dx = target.p.x - entity.x;
             // Kite: back off when close, approach when far.
-            dir = target.dist < 5 ? (dx > 0 ? -1 : 1) : target.dist > 9 ? (dx > 0 ? 1 : -1) : 0;
-            if (entity.attackCooldown === 0 && target.dist <= SKELETON_RANGE) {
-              entity.attackCooldown = SKELETON_SHOOT_COOLDOWN;
-              this.shootArrow(entity, target.p, out);
+            dir =
+              target.dist < ranged.kiteNear ? (dx > 0 ? -1 : 1) : target.dist > ranged.kiteFar ? (dx > 0 ? 1 : -1) : 0;
+            if (entity.attackCooldown === 0 && target.dist <= ranged.range) {
+              entity.attackCooldown = ranged.shootCooldown;
+              this.shootArrow(entity, target.p, ranged.damage, out);
             }
           }
-        } else if (entity.kind === "creeper") {
+        } else if (explodes) {
           if (entity.fuse !== undefined && entity.fuse >= 0) {
             // Hissing: stand still and count down.
             entity.fuse--;
             if (entity.fuse < 0) {
-              this.explode(entity, out);
+              this.explode(entity, explodes, out);
               continue;
             }
-          } else if (target && inRange) {
+          } else if (target && approaching(explodes.followRange)) {
             const dx = target.p.x - entity.x;
             dir = Math.abs(dx) > 0.4 ? (dx > 0 ? 1 : -1) : 0;
-            if (target.dist <= CREEPER_TRIGGER_RANGE) {
-              entity.fuse = CREEPER_FUSE;
+            if (target.dist <= explodes.triggerRange) {
+              entity.fuse = explodes.fuseTicks;
             }
           }
-        } else if (WANDERING_MOBS.includes(entity.kind)) {
+        } else if (mob?.wanders) {
           entity.wanderTimer--;
           if (entity.wanderTimer <= 0) {
             const roll = this.rng();
@@ -894,7 +863,7 @@ export class Simulation {
           dir = entity.wanderDir;
         }
 
-        entity.vx = dir * MOB_STATS[entity.kind].speed;
+        entity.vx = dir * (mob?.speed ?? 0);
         if (world.getBlockGenerating(Math.floor(entity.x), Math.floor(entity.y)) === BlockId.SoulSand) {
           entity.vx *= 0.4;
         }
@@ -918,14 +887,14 @@ export class Simulation {
   }
 
   private stepSpawning(out: OutboundEvent[]): void {
-    if (this.tickCount % 50 !== 0 || this.players.size === 0) return;
+    if (this.tickCount % 50 !== 0 || !this.hasPlayers()) return;
     let mobCount = 0;
     for (const e of this.entities.values()) {
-      if (e.kind !== "item") mobCount++;
+      if (!isItemEntity(e) && !isPlayerEntity(e)) mobCount++;
     }
     if (mobCount >= MOB_CAP) return;
 
-    const players = [...this.players.values()];
+    const players = [...this.playerEntities()];
     const anchor = players[Math.floor(this.rng() * players.length)]!;
     const world = this.worldOf(anchor.dimension);
     const offset = 12 + Math.floor(this.rng() * 20);
@@ -947,22 +916,26 @@ export class Simulation {
       return false;
     };
 
-    // Villagers move into houses: if a house stands near the player and
-    // has no villager around, one appears.
+    // Structure-anchored mobs (villagers move into houses): if a
+    // structure with such a mob stands near the player and has no
+    // instance around yet, one appears. Generalizes past just
+    // villagers/houses to whatever a datapack mob declares via
+    // spawn.near_structure.
     if (anchor.dimension === "overworld" && this.tickCount % 200 === 0) {
       const pcx = Math.floor(anchor.x / CHUNK_WIDTH);
       for (let cx = pcx - 2; cx <= pcx + 2; cx++) {
         for (let cy = -2; cy <= 3; cy++) {
           for (const placement of placementsNear(world.seed, "overworld", cx, cy)) {
-            if (placement.structure.id !== "house") continue;
+            const residents = mobsNearStructure(placement.structure.id);
+            if (residents.length === 0) continue;
             const homeX = placement.originX + 3.5;
             const homeY = placement.originY + 4;
             let occupied = false;
             for (const e of this.entities.values()) {
-              if (e.kind === "villager" && Math.abs(e.x - homeX) < 20) occupied = true;
+              if (residents.includes(e.kind) && Math.abs(e.x - homeX) < 20) occupied = true;
             }
             if (!occupied) {
-              this.spawnMob("villager", homeX, homeY, out);
+              this.spawnMob(residents[0]!, homeX, homeY, out);
               return;
             }
           }
@@ -972,13 +945,13 @@ export class Simulation {
 
     if (anchor.dimension === "nether") {
       const yStart = 10 + Math.floor(this.rng() * 50);
-      spawnInPocket(yStart, yStart + 16, "zombified_piglin");
+      spawnInPocket(yStart, yStart + 16, pickMob(spawnPool("nether_pocket")));
       return;
     }
 
     const surface = surfaceHeight(world.seed, x);
     const night = isNight(this.timeOfDay);
-    const hostiles: readonly MobKind[] = ["zombie", "zombie", "skeleton", "creeper"];
+    const hostiles = spawnPool("hostile_surface");
     if (this.rng() < 0.5) {
       if (night) {
         // At night, hostile mobs rise on the surface instead of animals.
@@ -993,7 +966,7 @@ export class Simulation {
       if (world.getBlockGenerating(x, surface) !== BlockId.Grass) return;
       const biome = biomeAt(world.seed, x);
       if (biome !== Biome.Plains && biome !== Biome.Forest) return;
-      this.spawnMob(pickMob(PASSIVE_MOBS), x + 0.5, surface, out);
+      this.spawnMob(pickMob(spawnPool("grass_day")), x + 0.5, surface, out);
     } else {
       const yStart = surface + 6 + Math.floor(this.rng() * 40);
       spawnInPocket(yStart, yStart + 12, pickMob(hostiles));
@@ -1001,7 +974,7 @@ export class Simulation {
   }
 
   private stepPlayers(out: OutboundEvent[]): void {
-    for (const p of this.players.values()) {
+    for (const p of this.playerEntities()) {
       const prevX = p.x;
       const prevY = p.y;
       const wasOnGround = p.onGround;
@@ -1024,7 +997,7 @@ export class Simulation {
       }
       if (p.effects["regeneration"] !== undefined && this.tickCount % REGEN_EFFECT_INTERVAL === 0 && p.health < PLAYER_MAX_HEALTH) {
         p.health++;
-        out.push({ event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
+        out.push({ to: p.id, event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
       }
 
       const feetBlock = blockDef(world.getBlockGenerating(Math.floor(p.x), Math.floor(p.y - 0.1)));
@@ -1199,7 +1172,7 @@ export class Simulation {
       ) {
         p.health++;
         p.exhaustion += EXHAUST_REGEN;
-        out.push({ event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
+        out.push({ to: p.id, event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
       }
 
       // Starving: an empty bar wears you down to 1 HP (never kills).
@@ -1218,7 +1191,26 @@ export class Simulation {
     }
   }
 
-  private teleportThroughPortal(p: PlayerState, out: OutboundEvent[]): void {
+  /** Broadcast facing/held-item changes - covers every way the selected
+   * slot or offhand can change (crafting, mining, eating, drag-and-drop,
+   * ...) without hooking each site individually. */
+  private stepGearSync(out: OutboundEvent[]): void {
+    for (const p of this.playerEntities()) {
+      const current = {
+        facing: p.facing,
+        main: p.inventory[p.selected]?.item ?? null,
+        off: p.offhand?.item ?? null,
+      };
+      const last = this.lastGear.get(p.id);
+      if (last && last.facing === current.facing && last.main === current.main && last.off === current.off) {
+        continue;
+      }
+      this.lastGear.set(p.id, current);
+      out.push({ event: { type: "player_gear", player: p.id, ...current } });
+    }
+  }
+
+  private teleportThroughPortal(p: PlayerEntity, out: OutboundEvent[]): void {
     const targetDim: Dimension = p.dimension === "overworld" ? "nether" : "overworld";
     const targetWorld = this.worldOf(targetDim);
     const xt = Math.round(p.dimension === "overworld" ? p.x / NETHER_SCALE : p.x * NETHER_SCALE);
@@ -1270,19 +1262,46 @@ export class Simulation {
     out.push({ event: { type: "player_dimension", player: p.id, dim: targetDim, x: p.x, y: p.y } });
   }
 
+  /**
+   * Shared health/cooldown bookkeeping for anything hurtable. PlayerEntity
+   * and MobEntity both structurally carry {health, hurtCooldown}, so this
+   * works for either without needing a common base class - this just
+   * kills the duplicated cooldown/health math. Knockback and death
+   * handling stay in each caller: players and mobs apply knockback
+   * through different mechanisms (a decaying kbX overlay vs a direct vx
+   * nudge) and diverge completely on death (respawn vs loot-and-despawn).
+   */
+  private applyDamageCore(
+    target: { health: number; hurtCooldown: number },
+    amount: number,
+  ): { applied: boolean; lethal: boolean } {
+    if (amount <= 0 || target.hurtCooldown > 0) return { applied: false, lethal: false };
+    target.hurtCooldown = HURT_COOLDOWN_TICKS;
+    target.health -= amount;
+    return { applied: true, lethal: target.health <= 0 };
+  }
+
+  /** Mob armor/offhand absorb damage exactly like a player's would (see
+   * hurtPlayer); unset for every built-in mob today, but a datapack mob
+   * or Stage-6 equipped spawn can carry them (mobs.ts). */
   private hurtMob(entity: MobEntity, amount: number, out: OutboundEvent[], fromX?: number, knockback = 0.3): void {
-    if (amount <= 0 || entity.hurtCooldown > 0) return;
-    entity.hurtCooldown = HURT_COOLDOWN_TICKS;
-    entity.health -= amount;
+    const armorAbsorb = entity.armor ? (itemDef(entity.armor.item)?.armor ?? 0) : 0;
+    const shieldBlock = entity.offhand ? (itemDef(entity.offhand.item)?.shieldBlock ?? 0) : 0;
+    const reduced =
+      armorAbsorb > 0 || shieldBlock > 0
+        ? Math.max(1, Math.round(amount * (1 - armorAbsorb) * (1 - shieldBlock)))
+        : amount;
+    const hit = this.applyDamageCore(entity, reduced);
+    if (!hit.applied) return;
     if (fromX !== undefined) {
       entity.vx += (entity.x >= fromX ? 1 : -1) * knockback;
       entity.vy = Math.min(entity.vy, -0.2);
     }
-    if (entity.health > 0) {
+    if (!hit.lethal) {
       out.push({ event: { type: "entity_hurt", id: entity.id, health: entity.health } });
       return;
     }
-    for (const loot of MOB_LOOT[entity.kind] ?? []) {
+    for (const loot of mobDef(entity.kind)?.loot ?? []) {
       const roll = this.rng();
       const countRoll = this.rng();
       if (roll < loot.chance) {
@@ -1290,16 +1309,25 @@ export class Simulation {
         this.spawnItem(entity.dimension, entity.x, entity.y - 0.5, { item: loot.item, count }, out);
       }
     }
+    // Equipped/carrying mobs (Stage 6) drop their gear just like a player.
+    if (entity.inventory) {
+      for (const stack of entity.inventory) {
+        if (stack) this.spawnItem(entity.dimension, entity.x, entity.y - 0.5, stack, out);
+      }
+    }
+    if (entity.armor) this.spawnItem(entity.dimension, entity.x, entity.y - 0.5, entity.armor, out);
+    if (entity.offhand) this.spawnItem(entity.dimension, entity.x, entity.y - 0.5, entity.offhand, out);
+    out.push({ event: { type: "entity_died", id: entity.id, kind: entity.kind } });
     this.removeEntity(entity.id, out);
   }
 
-  private shootArrow(from: MobEntity, target: PlayerState, out: OutboundEvent[]): void {
-    const originY = from.y - ENTITY_SIZES[from.kind].height * 0.75;
+  private shootArrow(from: MobEntity, target: PlayerEntity, damage: number, out: OutboundEvent[]): void {
+    const originY = from.y - sizeOf(from.kind).height * 0.75;
     const dx = target.x - from.x;
     const dy = target.y - PLAYER_HEIGHT / 2 - originY;
     const dist = Math.max(1, Math.hypot(dx, dy));
     const arrow: ArrowEntity = {
-      id: this.nextEntityId++,
+      id: this.nextId++,
       kind: "arrow",
       dimension: from.dimension,
       x: from.x + Math.sign(dx) * 0.5,
@@ -1308,7 +1336,7 @@ export class Simulation {
       // Arc the shot slightly upward for the travel time.
       vy: (dy / dist) * 0.6 - dist * 0.015,
       onGround: false,
-      damage: ARROW_DAMAGE,
+      damage,
       ttl: ARROW_TTL,
     };
     this.entities.set(arrow.id, arrow);
@@ -1317,46 +1345,47 @@ export class Simulation {
     });
   }
 
-  private explode(creeper: MobEntity, out: OutboundEvent[]): void {
+  private explode(creeper: MobEntity, def: ExplodesDef, out: OutboundEvent[]): void {
     const world = this.worldOf(creeper.dimension);
     const cx = creeper.x;
-    const cy = creeper.y - ENTITY_SIZES.creeper.height / 2;
+    const cy = creeper.y - sizeOf("creeper").height / 2;
+    out.push({ event: { type: "entity_died", id: creeper.id, kind: creeper.kind } });
     this.removeEntity(creeper.id, out);
 
     // Blast a crater (tough blocks survive; nothing drops).
-    const r = EXPLOSION_BLOCK_RADIUS;
+    const r = def.blockRadius;
     for (let ty = Math.floor(cy - r); ty <= Math.floor(cy + r); ty++) {
       for (let tx = Math.floor(cx - r); tx <= Math.floor(cx + r); tx++) {
         if (Math.hypot(tx + 0.5 - cx, ty + 0.5 - cy) > r) continue;
         const block = world.getBlockGenerating(tx, ty);
-        const def = blockDef(block);
-        if (block === BlockId.Air || def.hardness < 0 || def.hardness >= 100) continue;
+        const blockInfo = blockDef(block);
+        if (block === BlockId.Air || blockInfo.hardness < 0 || blockInfo.hardness >= 100) continue;
         world.setBlock(tx, ty, BlockId.Air);
         out.push({ event: { type: "block_changed", dim: creeper.dimension, x: tx, y: ty, block: BlockId.Air } });
       }
     }
 
     // Hurt anything nearby, scaled by distance.
-    for (const p of this.players.values()) {
+    for (const p of this.playerEntities()) {
       if (p.dimension !== creeper.dimension) continue;
       const dist = Math.hypot(p.x - cx, p.y - PLAYER_HEIGHT / 2 - cy);
-      if (dist > EXPLOSION_DAMAGE_RADIUS) continue;
+      if (dist > def.damageRadius) continue;
       p.hurtCooldown = 0; // explosions pierce invulnerability frames
-      this.hurtPlayer(p, Math.round(EXPLOSION_MAX_DAMAGE * (1 - dist / EXPLOSION_DAMAGE_RADIUS)), out, cx);
+      this.hurtPlayer(p, Math.round(def.maxDamage * (1 - dist / def.damageRadius)), out, cx);
     }
     for (const other of this.entities.values()) {
-      if (other.kind === "item" || other.kind === "arrow") continue;
+      if (!isMobEntity(other)) continue;
       if (other.dimension !== creeper.dimension) continue;
       const dist = Math.hypot(other.x - cx, other.y - cy);
-      if (dist > EXPLOSION_DAMAGE_RADIUS) continue;
+      if (dist > def.damageRadius) continue;
       other.hurtCooldown = 0;
-      this.hurtMob(other, Math.round(EXPLOSION_MAX_DAMAGE * (1 - dist / EXPLOSION_DAMAGE_RADIUS)), out, cx);
+      this.hurtMob(other, Math.round(def.maxDamage * (1 - dist / def.damageRadius)), out, cx);
     }
   }
 
-  private nearestPlayer(dimension: Dimension, x: number, y: number): { p: PlayerState; dist: number } | null {
-    let best: { p: PlayerState; dist: number } | null = null;
-    for (const p of this.players.values()) {
+  private nearestPlayer(dimension: Dimension, x: number, y: number): { p: PlayerEntity; dist: number } | null {
+    let best: { p: PlayerEntity; dist: number } | null = null;
+    for (const p of this.playerEntities()) {
       if (p.dimension !== dimension) continue;
       const dist = Math.hypot(p.x - x, p.y - PLAYER_HEIGHT / 2 - y);
       if (!best || dist < best.dist) best = { p, dist };
@@ -1367,9 +1396,9 @@ export class Simulation {
   /** Mob whose AABB (expanded by radius) contains the point. */
   private mobNear(dimension: Dimension, x: number, y: number, radius: number): MobEntity | null {
     for (const entity of this.entities.values()) {
-      if (entity.kind === "item" || entity.kind === "arrow") continue;
+      if (!isMobEntity(entity)) continue;
       if (entity.dimension !== dimension) continue;
-      const size = ENTITY_SIZES[entity.kind];
+      const size = sizeOf(entity.kind);
       const dx = Math.max(0, Math.abs(x - entity.x) - size.width / 2);
       const top = entity.y - size.height;
       const dy = y < top ? top - y : y > entity.y ? y - entity.y : 0;
@@ -1379,8 +1408,8 @@ export class Simulation {
   }
 
   /** Player whose AABB (expanded by radius) contains the point. */
-  private playerNearBox(dimension: Dimension, x: number, y: number, radius: number): PlayerState | null {
-    for (const p of this.players.values()) {
+  private playerNearBox(dimension: Dimension, x: number, y: number, radius: number): PlayerEntity | null {
+    for (const p of this.playerEntities()) {
       if (p.dimension !== dimension) continue;
       const dx = Math.max(0, Math.abs(x - p.x) - PLAYER_WIDTH / 2);
       const top = p.y - PLAYER_HEIGHT;
@@ -1390,27 +1419,27 @@ export class Simulation {
     return null;
   }
 
-  private entityTouchesPlayer(entity: MobEntity, p: PlayerState): boolean {
-    const size = ENTITY_SIZES[entity.kind];
+  private entityTouchesPlayer(entity: MobEntity, p: PlayerEntity): boolean {
+    const size = sizeOf(entity.kind);
     const overlapsX = Math.abs(entity.x - p.x) < (size.width + PLAYER_WIDTH) / 2 + 0.2;
     const overlapsY = entity.y > p.y - PLAYER_HEIGHT - 0.2 && entity.y - size.height < p.y + 0.2;
     return overlapsX && overlapsY;
   }
 
-  private hurtPlayer(p: PlayerState, amount: number, out: OutboundEvent[], fromX?: number): void {
+  private hurtPlayer(p: PlayerEntity, amount: number, out: OutboundEvent[], fromX?: number): void {
     if (p.creative) return;
-    if (amount <= 0 || p.hurtCooldown > 0) return;
+    if (amount <= 0) return;
     // Armor absorbs a fraction; an offhand shield blocks another share.
     const armorAbsorb = p.armor ? (itemDef(p.armor.item)?.armor ?? 0) : 0;
     const shieldBlock = p.offhand ? (itemDef(p.offhand.item)?.shieldBlock ?? 0) : 0;
-    amount = Math.max(1, Math.round(amount * (1 - armorAbsorb) * (1 - shieldBlock)));
-    p.hurtCooldown = HURT_COOLDOWN_TICKS;
-    p.health -= amount;
+    const reduced = Math.max(1, Math.round(amount * (1 - armorAbsorb) * (1 - shieldBlock)));
+    const hit = this.applyDamageCore(p, reduced);
+    if (!hit.applied) return;
     if (fromX !== undefined) {
       p.kbX = (p.x >= fromX ? 1 : -1) * 0.35;
       p.vy = Math.min(p.vy, -0.2);
     }
-    if (p.health <= 0) {
+    if (hit.lethal) {
       // Death: drop the inventory (and grid/cursor/armor/offhand) as
       // item entities, respawn at the overworld spawn.
       this.dumpGridAndCursor(p);
@@ -1455,10 +1484,10 @@ export class Simulation {
       }
       this.syncInventory(p, out);
     }
-    out.push({ event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
+    out.push({ to: p.id, event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
   }
 
-  private syncInventory(p: PlayerState, out: OutboundEvent[]): void {
+  private syncInventory(p: PlayerEntity, out: OutboundEvent[]): void {
     out.push({
       to: p.id,
       event: {
@@ -1484,20 +1513,20 @@ export class Simulation {
     const reject = (reason: string): void => {
       reply({ type: "command_rejected", player, reason });
     };
-    const syncInventory = (p: PlayerState): void => {
+    const syncInventory = (p: PlayerEntity): void => {
       this.syncInventory(p, out);
     };
 
     switch (command.type) {
       case "join": {
         // One live player per name (names are identity for saves/rejoins).
-        if ([...this.players.values()].some((p) => p.name === command.name)) {
+        if ([...this.playerEntities()].some((p) => p.name === command.name)) {
           reject("name already in use");
           break;
         }
         // Tell the joiner who is already in the world.
         const replayPlayers = (): void => {
-          for (const other of this.players.values()) {
+          for (const other of this.playerEntities()) {
             if (other.id === player) continue;
             reply({
               type: "player_joined",
@@ -1507,6 +1536,9 @@ export class Simulation {
               y: other.y,
               dim: other.dimension,
               color: other.color,
+              facing: other.facing,
+              main: other.inventory[other.selected]?.item ?? null,
+              off: other.offhand?.item ?? null,
             });
           }
         };
@@ -1515,7 +1547,7 @@ export class Simulation {
         const saved = this.savedPlayers.get(command.name);
         if (saved) {
           this.savedPlayers.delete(command.name);
-          const state: PlayerState = { ...structuredClone(saved), id: player };
+          const state: PlayerEntity = { ...structuredClone(saved), id: player };
           // Older saves lack newer fields; default them on adoption.
           state.hunger = Number.isFinite(state.hunger) ? state.hunger : PLAYER_MAX_HUNGER;
           state.exhaustion = Number.isFinite(state.exhaustion) ? state.exhaustion : 0;
@@ -1527,7 +1559,11 @@ export class Simulation {
           state.grapple = null;
           state.creative = state.creative === true;
           state.air = Number.isFinite(state.air) ? state.air : MAX_AIR_TICKS;
-          this.players.set(player, state);
+          state.facing = state.facing === "left" ? "left" : "right";
+          this.entities.set(player, state);
+          const rejoinMain = state.inventory[state.selected]?.item ?? null;
+          const rejoinOff = state.offhand?.item ?? null;
+          this.lastGear.set(player, { facing: state.facing, main: rejoinMain, off: rejoinOff });
           broadcast({
             type: "player_joined",
             player,
@@ -1536,6 +1572,9 @@ export class Simulation {
             y: state.y,
             dim: state.dimension,
             color: state.color,
+            facing: state.facing,
+            main: rejoinMain,
+            off: rejoinOff,
           });
           this.syncInventory(state, out);
           reply({ type: "player_health", player, health: state.health, max: PLAYER_MAX_HEALTH });
@@ -1544,6 +1583,7 @@ export class Simulation {
           reply({ type: "player_dimension", player, dim: state.dimension, x: state.x, y: state.y });
           replayPlayers();
           for (const entity of this.entities.values()) {
+            if (isPlayerEntity(entity)) continue;
             reply({
               type: "entity_spawned",
               id: entity.id,
@@ -1551,7 +1591,7 @@ export class Simulation {
               dim: entity.dimension,
               x: entity.x,
               y: entity.y,
-              ...(entity.kind === "item" ? { stack: { ...entity.stack } } : {}),
+              ...(isItemEntity(entity) ? { stack: { ...entity.stack } } : {}),
             });
           }
           break;
@@ -1559,8 +1599,9 @@ export class Simulation {
         const spawnX = findSpawnX(this.world.seed);
         const x = spawnX + 0.5;
         const y = surfaceHeight(this.world.seed, spawnX);
-        const state: PlayerState = {
+        const state: PlayerEntity = {
           id: player,
+          kind: "player",
           name: command.name,
           color: chosenColor ?? DEFAULT_PLAYER_COLOR,
           dimension: "overworld",
@@ -1592,15 +1633,29 @@ export class Simulation {
           grapple: null,
           creative: false,
           air: MAX_AIR_TICKS,
+          facing: "right",
         };
-        this.players.set(player, state);
-        broadcast({ type: "player_joined", player, name: state.name, x, y, dim: "overworld", color: state.color });
+        this.entities.set(player, state);
+        this.lastGear.set(player, { facing: state.facing, main: null, off: null });
+        broadcast({
+          type: "player_joined",
+          player,
+          name: state.name,
+          x,
+          y,
+          dim: "overworld",
+          color: state.color,
+          facing: state.facing,
+          main: null,
+          off: null,
+        });
         syncInventory(state);
         reply({ type: "player_health", player, health: state.health, max: PLAYER_MAX_HEALTH });
         reply({ type: "player_hunger", player, hunger: state.hunger, max: PLAYER_MAX_HUNGER });
         reply({ type: "time_changed", time: this.timeOfDay });
         replayPlayers();
         for (const entity of this.entities.values()) {
+          if (isPlayerEntity(entity)) continue;
           reply({
             type: "entity_spawned",
             id: entity.id,
@@ -1608,22 +1663,23 @@ export class Simulation {
             dim: entity.dimension,
             x: entity.x,
             y: entity.y,
-            ...(entity.kind === "item" ? { stack: { ...entity.stack } } : {}),
+            ...(isItemEntity(entity) ? { stack: { ...entity.stack } } : {}),
           });
         }
         break;
       }
       case "leave": {
-        const p = this.players.get(player);
-        if (p && this.players.delete(player)) {
+        const p = this.getPlayer(player);
+        if (p && this.entities.delete(player)) {
           // Keep the state for a future rejoin (and for saves).
           this.savedPlayers.set(p.name, p);
+          this.lastGear.delete(player);
           broadcast({ type: "player_left", player });
         }
         break;
       }
       case "move": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1633,10 +1689,11 @@ export class Simulation {
           break;
         }
         p.input = { dx: command.dx, jump: command.jump, down: command.down === true };
+        if (command.dx !== 0) p.facing = command.dx > 0 ? "right" : "left";
         break;
       }
       case "set_color": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1651,7 +1708,7 @@ export class Simulation {
         break;
       }
       case "select_slot": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1665,7 +1722,7 @@ export class Simulation {
         break;
       }
       case "craft": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1707,7 +1764,7 @@ export class Simulation {
         break;
       }
       case "slot_click": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1721,7 +1778,7 @@ export class Simulation {
         break;
       }
       case "return_grid": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1731,7 +1788,7 @@ export class Simulation {
         break;
       }
       case "open_furnace": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1741,20 +1798,21 @@ export class Simulation {
           reject("out of reach");
           break;
         }
-        if (this.worldOf(p.dimension).getBlockGenerating(x, y) !== BlockId.Furnace) {
+        const furnaceDef = blockDef(this.worldOf(p.dimension).getBlockGenerating(x, y)).furnace;
+        if (furnaceDef === undefined) {
           reject("no furnace there");
           break;
         }
         let state = this.furnaces.get(furnaceKey(p.dimension, x, y));
         if (!state) {
-          state = createFurnace(p.dimension, x, y);
+          state = createFurnace(p.dimension, x, y, furnaceDef.speed);
           this.furnaces.set(furnaceKey(p.dimension, x, y), state);
         }
         reply(this.furnaceEvent(state));
         break;
       }
       case "open_chest": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1764,16 +1822,17 @@ export class Simulation {
           reject("out of reach");
           break;
         }
-        if (this.worldOf(p.dimension).getBlockGenerating(x, y) !== BlockId.Chest) {
+        const slots = blockDef(this.worldOf(p.dimension).getBlockGenerating(x, y)).container;
+        if (slots === undefined) {
           reject("no chest there");
           break;
         }
-        const chest = this.ensureChest(p.dimension, x, y);
+        const chest = this.ensureChest(p.dimension, x, y, slots);
         reply({ type: "chest_changed", dim: p.dimension, x, y, slots: cloneInventory(chest.slots) });
         break;
       }
       case "request_chunk": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1800,7 +1859,7 @@ export class Simulation {
         break;
       }
       case "start_mining": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1835,7 +1894,7 @@ export class Simulation {
         break;
       }
       case "stop_mining": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1848,7 +1907,7 @@ export class Simulation {
         break;
       }
       case "attack": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1857,11 +1916,11 @@ export class Simulation {
           break;
         }
         const entity = this.entities.get(command.entity);
-        if (!entity || entity.kind === "item" || entity.kind === "arrow" || entity.dimension !== p.dimension) {
+        if (!entity || !isMobEntity(entity) || entity.dimension !== p.dimension) {
           reject("no such target");
           break;
         }
-        const size = ENTITY_SIZES[entity.kind];
+        const size = sizeOf(entity.kind);
         const dist = Math.hypot(entity.x - p.x, entity.y - size.height / 2 - (p.y - PLAYER_HEIGHT / 2));
         if (dist > ATTACK_REACH) {
           reject("out of reach");
@@ -1874,7 +1933,7 @@ export class Simulation {
         break;
       }
       case "trade": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1902,7 +1961,7 @@ export class Simulation {
         break;
       }
       case "use_item": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1941,7 +2000,7 @@ export class Simulation {
         break;
       }
       case "shoot": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -1970,7 +2029,7 @@ export class Simulation {
         p.attackCooldown = BOW_COOLDOWN;
         const originY = p.y - PLAYER_HEIGHT * 0.6;
         const arrow: ArrowEntity = {
-          id: this.nextEntityId++,
+          id: this.nextId++,
           kind: "arrow",
           dimension: p.dimension,
           x: p.x + (dx / len) * 0.8,
@@ -1995,7 +2054,7 @@ export class Simulation {
         break;
       }
       case "enchant": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -2028,7 +2087,7 @@ export class Simulation {
         break;
       }
       case "place_block": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -2150,7 +2209,7 @@ export class Simulation {
         break;
       }
       case "use_block": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -2186,7 +2245,7 @@ export class Simulation {
         break;
       }
       case "use_bucket": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -2253,7 +2312,7 @@ export class Simulation {
         break;
       }
       case "grapple": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -2297,7 +2356,7 @@ export class Simulation {
         break;
       }
       case "set_creative": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -2308,7 +2367,7 @@ export class Simulation {
         break;
       }
       case "creative_give": {
-        const p = this.players.get(player);
+        const p = this.getPlayer(player);
         if (!p) {
           reject("not joined");
           break;
@@ -2331,7 +2390,7 @@ export class Simulation {
   }
 
   private applySlotClick(
-    p: PlayerState,
+    p: PlayerEntity,
     slot: SlotRef,
     button: "left" | "right",
     reject: (reason: string) => void,
@@ -2393,15 +2452,16 @@ export class Simulation {
           reject("out of reach");
           return;
         }
-        if (this.worldOf(p.dimension).getBlockGenerating(x, y) !== BlockId.Chest) {
+        const chestSlots = blockDef(this.worldOf(p.dimension).getBlockGenerating(x, y)).container;
+        if (chestSlots === undefined) {
           reject("no chest there");
           return;
         }
-        if (!Number.isInteger(slot.index) || slot.index < 0 || slot.index >= 27) {
+        if (!Number.isInteger(slot.index) || slot.index < 0 || slot.index >= chestSlots) {
           reject("invalid slot");
           return;
         }
-        const chest = this.ensureChest(p.dimension, x, y);
+        const chest = this.ensureChest(p.dimension, x, y, chestSlots);
         const result = clickStack(p.cursor, chest.slots[slot.index] ?? null, button);
         p.cursor = result.cursor;
         chest.slots[slot.index] = result.slot;
@@ -2461,13 +2521,14 @@ export class Simulation {
           reject("out of reach");
           return;
         }
-        if (this.worldOf(p.dimension).getBlockGenerating(x, y) !== BlockId.Furnace) {
+        const clickFurnaceDef = blockDef(this.worldOf(p.dimension).getBlockGenerating(x, y)).furnace;
+        if (clickFurnaceDef === undefined) {
           reject("no furnace there");
           return;
         }
         let state = this.furnaces.get(furnaceKey(p.dimension, x, y));
         if (!state) {
-          state = createFurnace(p.dimension, x, y);
+          state = createFurnace(p.dimension, x, y, clickFurnaceDef.speed);
           this.furnaces.set(furnaceKey(p.dimension, x, y), state);
         }
         if (slot.slot === "output") {
@@ -2502,11 +2563,12 @@ export class Simulation {
     dimension: Dimension,
     x: number,
     y: number,
+    slotCount: number,
   ): { dimension: Dimension; x: number; y: number; slots: (ItemStack | null)[] } {
     const key = furnaceKey(dimension, x, y);
     let chest = this.chests.get(key);
     if (!chest) {
-      chest = { dimension, x, y, slots: new Array<ItemStack | null>(27).fill(null) };
+      chest = { dimension, x, y, slots: new Array<ItemStack | null>(slotCount).fill(null) };
       // Structure chests come pre-filled with their rolled loot.
       const loot = structureLootAt(this.worldOf(dimension).seed, dimension, x, y);
       if (loot) {
@@ -2519,7 +2581,7 @@ export class Simulation {
     return chest;
   }
 
-  private dumpGridAndCursor(p: PlayerState): void {
+  private dumpGridAndCursor(p: PlayerEntity): void {
     for (let i = 0; i < CRAFT_GRID_SIZE; i++) {
       const cell = p.craftGrid[i];
       if (!cell) continue;
@@ -2533,7 +2595,7 @@ export class Simulation {
   }
 
   private withinReach(player: PlayerId, tileX: number, tileY: number): boolean {
-    const p = this.players.get(player);
+    const p = this.getPlayer(player);
     if (!p) return false;
     const dx = tileX + 0.5 - p.x;
     const dy = tileY + 0.5 - (p.y - PLAYER_HEIGHT / 2);
@@ -2541,7 +2603,7 @@ export class Simulation {
   }
 
   private tileIntersectsAnyPlayer(dimension: Dimension, tileX: number, tileY: number): boolean {
-    for (const p of this.players.values()) {
+    for (const p of this.playerEntities()) {
       if (p.dimension !== dimension) continue;
       const overlapsX = tileX + 1 > p.x - PLAYER_WIDTH / 2 && tileX < p.x + PLAYER_WIDTH / 2;
       const overlapsY = tileY + 1 > p.y - PLAYER_HEIGHT && tileY < p.y;
@@ -2550,7 +2612,7 @@ export class Simulation {
     return false;
   }
 
-  private blockNearby(p: PlayerState, block: BlockId): boolean {
+  private blockNearby(p: PlayerEntity, block: BlockId): boolean {
     const world = this.worldOf(p.dimension);
     const centerY = p.y - PLAYER_HEIGHT / 2;
     const minX = Math.floor(p.x - REACH);

@@ -10,13 +10,31 @@ import type { Dimension } from "./world/world.js";
  * Like commands they must remain plain serializable data.
  */
 export type SimEvent =
-  | { type: "player_joined"; player: PlayerId; name: string; x: number; y: number; dim: Dimension; color: number }
+  | {
+      type: "player_joined";
+      player: PlayerId;
+      name: string;
+      x: number;
+      y: number;
+      dim: Dimension;
+      color: number;
+      facing: "left" | "right";
+      /** Item ids only (not full stacks - other players can't see counts/data). */
+      main: string | null;
+      off: string | null;
+    }
   | { type: "player_left"; player: PlayerId }
   /** A player changed their body color. */
   | { type: "player_color"; player: PlayerId; color: number }
+  /** Which way a player is facing, and what's visible in their hands -
+   * broadcast whenever any of it changes (movement direction, hotbar
+   * selection, offhand). Item ids only, like player_joined. */
+  | { type: "player_gear"; player: PlayerId; facing: "left" | "right"; main: string | null; off: string | null }
   | { type: "player_moved"; player: PlayerId; x: number; y: number }
   /** A player switched dimension (portal); position is the arrival spot. */
   | { type: "player_dimension"; player: PlayerId; dim: Dimension; x: number; y: number }
+  /** Health bar sync (sent to its owner - nothing renders another
+   * player's health today, unlike position/gear which are public). */
   | { type: "player_health"; player: PlayerId; health: number; max: number }
   /** Hunger bar sync (sent to its owner). */
   | { type: "player_hunger"; player: PlayerId; hunger: number; max: number }
@@ -29,6 +47,12 @@ export type SimEvent =
   | { type: "entity_spawned"; id: EntityId; kind: string; dim: Dimension; x: number; y: number; stack?: ItemStack }
   | { type: "entity_moved"; id: EntityId; x: number; y: number }
   | { type: "entity_hurt"; id: EntityId; health: number }
+  /** Fired right before entity_removed, only on an actual death (lethal
+   * hit or explosion) - never on despawn, pickup, or arrow expiry, which
+   * also remove an entity but aren't a death. Pure presentation signal
+   * (like entity_hurt): drives a client-side death animation, carries no
+   * authoritative state of its own. */
+  | { type: "entity_died"; id: EntityId; kind: string }
   | { type: "entity_removed"; id: EntityId }
   | { type: "block_changed"; dim: Dimension; x: number; y: number; block: BlockId }
   /** Background wall layer changed (hammer mining / wall placement). */
