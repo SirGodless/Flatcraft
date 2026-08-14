@@ -1,6 +1,6 @@
 import type { PlayerCommand, PlayerId, SlotRef } from "./commands.js";
 import type { OutboundEvent, SimEvent } from "./events.js";
-import { CHUNK_HEIGHT, CHUNK_WIDTH } from "./constants.js";
+import { CHUNK_HEIGHT, CHUNK_IDLE_EVICT_TICKS, CHUNK_WIDTH } from "./constants.js";
 import { CRAFT_GRID_SIZE, matchGrid, SMALL_GRID_INDICES } from "./crafting/match.js";
 import { DEFAULT_COOK_TICKS, fuelTicks, ingredientOptions } from "./crafting/recipe.js";
 import { RECIPES } from "./data/recipes/index.js";
@@ -317,6 +317,22 @@ export class Simulation {
     return this.worlds[dimension];
   }
 
+  /** Drops chunks that have gone unused for CHUNK_IDLE_EVICT_TICKS and
+   * have no unsaved changes (see World.evictIdle) - a host with its own
+   * save/autosave cadence calls this periodically (not every tick),
+   * ideally right after a save so any chunks that were dirty a moment
+   * ago are freshly clean and immediately eligible. Both dimensions are
+   * swept together, since a long-running server can go idle in either
+   * one independently. Returns the total number of chunks evicted, for
+   * host-side logging. */
+  evictIdleChunks(): number {
+    let evicted = 0;
+    for (const dimension of ["overworld", "nether"] as const) {
+      evicted += this.worldOf(dimension).evictIdle(CHUNK_IDLE_EVICT_TICKS);
+    }
+    return evicted;
+  }
+
   /** Reserve a player id for a new connection (embedded or remote). Draws
    * from the same id space as spawned entities, so a player and a mob
    * can never end up sharing an id. */
@@ -326,6 +342,9 @@ export class Simulation {
 
   tick(commands: readonly PlayerCommand[]): OutboundEvent[] {
     const out: OutboundEvent[] = [];
+    for (const dimension of ["overworld", "nether"] as const) {
+      this.worldOf(dimension).setCurrentTick(this.tickCount);
+    }
     for (const pc of commands) {
       this.apply(pc, out);
     }
@@ -425,7 +444,13 @@ export class Simulation {
     };
   }
 
-  /** Mark liquids around a changed tile as needing a flow update. */
+  /** Mark liquids around a changed tile as needing a flow update. Reads
+   * via getBlockGenerating, not getBlock: a neighbor tile can fall in an
+   * adjacent chunk that's gone idle and been evicted (see
+   * World.evictIdle), and the plain getBlock would silently read that as
+   * Air instead of loading it back in - exactly the kind of stale-read
+   * gap eviction reintroduces wherever a World read doesn't force
+   * residency. */
   private wakeLiquids(dimension: Dimension, x: number, y: number): void {
     const world = this.worldOf(dimension);
     for (const [nx, ny] of [
@@ -435,7 +460,7 @@ export class Simulation {
       [x, y - 1],
       [x, y + 1],
     ] as const) {
-      if (blockDef(world.getBlock(nx, ny)).liquid) {
+      if (blockDef(world.getBlockGenerating(nx, ny)).liquid) {
         this.liquidActive[dimension].add(`${nx},${ny}`);
       }
     }
@@ -2632,7 +2657,10 @@ export class Simulation {
     const maxY = Math.floor(centerY + REACH);
     for (let ty = minY; ty <= maxY; ty++) {
       for (let tx = minX; tx <= maxX; tx++) {
-        if (world.getBlock(tx, ty) === block) return true;
+        // getBlockGenerating, not getBlock: REACH can poke into a
+        // neighboring chunk that's idle-evicted (see World.evictIdle)
+        // without a player ever having stood in it directly.
+        if (world.getBlockGenerating(tx, ty) === block) return true;
       }
     }
     return false;

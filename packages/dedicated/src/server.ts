@@ -175,12 +175,13 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   }
   let simulation: Simulation;
   /** The palette a freshly-loaded meta file's chunk remap is based on -
-   * null both when there was no save to load from and when the meta file
-   * was corrupt (see the catch branch below): either way there's no
-   * historical palette to trust, so the chunk loader and chest/furnace
-   * hydration are simply skipped for this run - any existing chunk files
-   * just go unused rather than being loaded (unremapped, or attached to
-   * an otherwise-fresh simulation) incorrectly. */
+   * undefined when there was no save to load from, or the meta file was
+   * corrupt (see the catch branch below). Either way buildBlockRemap
+   * below turns that into "no remap", which is exactly right: a brand
+   * new Simulation just uses whatever ids are current, and any chunk
+   * file it later writes and reloads within this same run (e.g. after
+   * idle eviction - see Simulation.evictIdleChunks) was written by that
+   * same current registry, so nothing needs remapping either. */
   let blockPalette: Record<number, string> | undefined;
   if (existsSync(worldFile)) {
     try {
@@ -197,6 +198,17 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
       // Never overwrite a corrupt save silently - keep it for inspection.
       const backup = `${worldFile}.corrupt-${Date.now()}`;
       renameSync(worldFile, backup);
+      // The chunk files next to it describe terrain for the simulation
+      // we're discarding, not the fresh one about to replace it - move
+      // them aside too, the same way RESET_WORLD backs up both halves,
+      // so the new simulation's chunk loader (wired unconditionally
+      // below) can't pick up orphaned terrain from the old, now-gone
+      // world and present it as if it belonged to the new one.
+      if (existsSync(worldDir)) {
+        const terrainBackup = `${worldDir}.corrupt-${Date.now()}`;
+        renameSync(worldDir, terrainBackup);
+        log(`its chunk files were moved to ${terrainBackup} along with it`);
+      }
       log(`world file was unreadable, moved to ${backup}; starting fresh (${String(error)})`);
       simulation = new Simulation(options.seed ?? 1337);
     }
@@ -210,24 +222,28 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
     simulation.resetPlayers();
     log("RESET_PLAYERS set: all saved player state (position/inventory/health) cleared");
   }
+  // Wired unconditionally, even for a brand new world: idle eviction (see
+  // Simulation.evictIdleChunks) can drop a chunk from memory and expect
+  // it back later purely from a file this same process wrote itself
+  // earlier in the run, long before any restart happens.
   const chunkFileStore = new ChunkFileStore(worldDir);
-  if (blockPalette !== undefined) {
-    const remap = buildBlockRemap(blockPalette);
-    for (const dim of DIMENSIONS) {
-      simulation.worldOf(dim).setChunkLoader((cx, cy) => chunkFileStore.load(dim, cx, cy, remap));
-    }
-    // Chest/furnace item ids are strings, not the numeric block ids a
-    // renumbered palette would affect, so no remap is needed here.
-    let hydratedContainers = 0;
-    for (const { dim, extra } of chunkFileStore.scanAll()) {
-      for (const f of extra.furnaces) simulation.furnaces.set(furnaceKey(f.dimension, f.x, f.y), f);
-      for (const c of extra.chests) {
-        simulation.chests.set(furnaceKey(dim, c.x, c.y), { dimension: dim, x: c.x, y: c.y, slots: c.slots });
-      }
-      hydratedContainers += extra.furnaces.length + extra.chests.length;
-    }
-    if (hydratedContainers > 0) log(`${hydratedContainers} saved chest(s)/furnace(s) restored`);
+  const remap = buildBlockRemap(blockPalette);
+  for (const dim of DIMENSIONS) {
+    simulation.worldOf(dim).setChunkLoader((cx, cy) => chunkFileStore.load(dim, cx, cy, remap));
   }
+  // Chest/furnace item ids are strings, not the numeric block ids a
+  // renumbered palette would affect, so no remap is needed here. A fresh
+  // world's worldDir has nothing to scan yet, so this is just a no-op
+  // empty loop in that case.
+  let hydratedContainers = 0;
+  for (const { dim, extra } of chunkFileStore.scanAll()) {
+    for (const f of extra.furnaces) simulation.furnaces.set(furnaceKey(f.dimension, f.x, f.y), f);
+    for (const c of extra.chests) {
+      simulation.chests.set(furnaceKey(dim, c.x, c.y), { dimension: dim, x: c.x, y: c.y, slots: c.slots });
+    }
+    hydratedContainers += extra.furnaces.length + extra.chests.length;
+  }
+  if (hydratedContainers > 0) log(`${hydratedContainers} saved chest(s)/furnace(s) restored`);
   const gameServer = new GameServer(simulation);
 
   const chunkKeyFor = (x: number, y: number): string =>
@@ -262,7 +278,15 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
         if (c.dimension === dim) bucket(dim, c.x, c.y).chests.push({ x: c.x, y: c.y, slots: c.slots });
       }
       chunkFileStore.write(dim, worlds[dim], extraByChunk);
+      // Only mark chunks clean after the write above actually succeeded -
+      // see World.markSaved's doc comment for why the order matters.
+      gameServer.simulation.worldOf(dim).markSaved(worlds[dim]);
     }
+    // Idle chunks are only evictable once clean, so sweeping right after
+    // a save catches everything the save just settled - see
+    // Simulation.evictIdleChunks.
+    const evicted = gameServer.simulation.evictIdleChunks();
+    if (evicted > 0) log(`${evicted} idle chunk(s) evicted from memory`);
   };
 
   // --- Game loop + autosave ---

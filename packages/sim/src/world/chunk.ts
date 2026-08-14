@@ -18,6 +18,14 @@ export class Chunk {
    * are still identical to what deterministic generation would produce
    * again anyway - see World.serializeChunks(). */
   dirty = false;
+  /** Tick of the last ensureChunk() touch (see World.setCurrentTick) -
+   * how World.evictIdle decides a chunk has gone unused long enough to
+   * drop from memory. Defaults to 0, i.e. "not accessed yet this
+   * session" - correct for a chunk that just came from a bulk load
+   * (Simulation.deserialize/World.loadChunks) and hasn't been touched
+   * again since: it's fair game for the very next idle sweep, exactly
+   * like any other chunk nothing has asked for. */
+  lastAccessTick = 0;
 
   constructor(cx: number, cy: number, tiles?: Uint16Array, walls?: Uint16Array) {
     this.cx = cx;

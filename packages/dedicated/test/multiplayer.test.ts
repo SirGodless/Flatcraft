@@ -7,6 +7,9 @@ import type { ServerMessage } from "@flatcraft/server";
 import {
   addToInventory,
   BlockId,
+  CHUNK_HEIGHT,
+  CHUNK_IDLE_EVICT_TICKS,
+  CHUNK_WIDTH,
   countInInventory,
   findSpawnX,
   furnaceKey,
@@ -451,5 +454,35 @@ describe("persistence", () => {
     ).toBe(BlockId.Chest);
     const restoredChest = restarted.gameServer.simulation.chests.get(furnaceKey("overworld", chestX, chestY));
     expect(restoredChest?.slots[0]).toEqual({ item: "diamond", count: 9 });
+  });
+
+  it("an idle chunk is evicted from memory after a save, and reloads identically on next touch", async () => {
+    const ded = await startServer();
+    const alice = await connectAs(ded, "Alice");
+    alice.join();
+    await alice.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
+    const sim = ded.gameServer.simulation;
+
+    const farX = SPAWN_X + 500; // far enough that nothing else keeps it resident
+    const farY = SURFACE - 1;
+    const cx = Math.floor(farX / CHUNK_WIDTH);
+    const cy = Math.floor(farY / CHUNK_HEIGHT);
+    sim.world.ensureChunk(cx, cy); // not resident yet - setBlock needs it loaded first
+    sim.world.setBlock(farX, farY, BlockId.Glowstone);
+    ded.save(); // writes the chunk file and marks the chunk clean (see World.markSaved)
+    expect(sim.world.getChunk(cx, cy)).toBeDefined();
+
+    // Fast-forward past the idle threshold without touching the chunk
+    // again - no await between these two calls, so the real tick timer
+    // can't sneak in and overwrite World's currentTick in between.
+    sim.world.setCurrentTick(sim.tickCount + CHUNK_IDLE_EVICT_TICKS);
+    const evicted = sim.evictIdleChunks();
+
+    expect(evicted).toBeGreaterThan(0);
+    expect(sim.world.getChunk(cx, cy)).toBeUndefined();
+    // Reloading it (via the chunk loader, from the file just saved)
+    // reproduces the exact same edit - nothing was lost by evicting it.
+    expect(sim.world.getBlockGenerating(farX, farY)).toBe(BlockId.Glowstone);
+    await alice.close();
   });
 });

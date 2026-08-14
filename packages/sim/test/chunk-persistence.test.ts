@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BlockId,
   CHUNK_HEIGHT,
+  CHUNK_IDLE_EVICT_TICKS,
   CHUNK_WIDTH,
   Chunk,
   decodeChunk,
@@ -136,6 +137,75 @@ describe("chunk loader (lazy on-demand persistence hook)", () => {
     world.setChunkLoader(() => undefined);
     const generated = new World(SEED).ensureChunk(0, 0);
     expect(Array.from(world.ensureChunk(0, 0).tiles)).toEqual(Array.from(generated.tiles));
+  });
+});
+
+describe("chunk idle eviction", () => {
+  it("evicts a clean chunk once it's gone unused for the idle threshold", () => {
+    const world = new World(SEED);
+    world.setCurrentTick(0);
+    world.ensureChunk(0, 0); // never modified - clean by definition
+    world.setCurrentTick(CHUNK_IDLE_EVICT_TICKS - 1);
+    expect(world.evictIdle(CHUNK_IDLE_EVICT_TICKS)).toBe(0);
+    expect(world.getChunk(0, 0)).toBeDefined();
+
+    world.setCurrentTick(CHUNK_IDLE_EVICT_TICKS);
+    expect(world.evictIdle(CHUNK_IDLE_EVICT_TICKS)).toBe(1);
+    expect(world.getChunk(0, 0)).toBeUndefined();
+  });
+
+  it("never evicts a dirty chunk, however idle, until markSaved clears it", () => {
+    const world = new World(SEED);
+    world.setCurrentTick(0);
+    world.ensureChunk(0, 0);
+    world.setBlock(1, 1, BlockId.Stone); // dirty
+    world.setCurrentTick(CHUNK_IDLE_EVICT_TICKS * 10);
+    expect(world.evictIdle(CHUNK_IDLE_EVICT_TICKS)).toBe(0);
+    expect(world.getChunk(0, 0)).toBeDefined();
+
+    world.markSaved([{ cx: 0, cy: 0 }]);
+    expect(world.getChunk(0, 0)!.dirty).toBe(false);
+    expect(world.evictIdle(CHUNK_IDLE_EVICT_TICKS)).toBe(1);
+    expect(world.getChunk(0, 0)).toBeUndefined();
+  });
+
+  it("markSaved is a no-op for a chunk that isn't resident", () => {
+    const world = new World(SEED);
+    expect(() => world.markSaved([{ cx: 5, cy: 5 }])).not.toThrow();
+    expect(world.getChunk(5, 5)).toBeUndefined();
+  });
+
+  it("a fresh ensureChunk touch resets the idle clock, even for an otherwise-stale chunk", () => {
+    const world = new World(SEED);
+    world.setCurrentTick(0);
+    world.ensureChunk(0, 0);
+    world.setCurrentTick(CHUNK_IDLE_EVICT_TICKS);
+    world.ensureChunk(0, 0); // e.g. a player walked back through it
+    expect(world.evictIdle(CHUNK_IDLE_EVICT_TICKS)).toBe(0);
+    expect(world.getChunk(0, 0)).toBeDefined();
+  });
+
+  it("an evicted chunk reloads identically on the next touch - nothing is lost", () => {
+    const world = new World(SEED);
+    world.setCurrentTick(0);
+    world.ensureChunk(0, 0);
+    const before = Array.from(world.getChunk(0, 0)!.tiles);
+    world.setCurrentTick(CHUNK_IDLE_EVICT_TICKS);
+    world.evictIdle(CHUNK_IDLE_EVICT_TICKS);
+    expect(world.getChunk(0, 0)).toBeUndefined();
+    expect(Array.from(world.ensureChunk(0, 0).tiles)).toEqual(before);
+  });
+
+  it("Simulation.evictIdleChunks sweeps both dimensions and returns the total evicted", () => {
+    const sim = new Simulation(SEED);
+    sim.world.ensureChunk(0, 0);
+    sim.worldOf("nether").ensureChunk(0, 0);
+    // Advance sim.tickCount well past the idle threshold without ever
+    // touching those chunks again.
+    for (let i = 0; i < CHUNK_IDLE_EVICT_TICKS + 1; i++) sim.tick([]);
+    expect(sim.evictIdleChunks()).toBe(2);
+    expect(sim.world.getChunk(0, 0)).toBeUndefined();
+    expect(sim.worldOf("nether").getChunk(0, 0)).toBeUndefined();
   });
 });
 
