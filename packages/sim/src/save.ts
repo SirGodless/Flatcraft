@@ -8,7 +8,7 @@ import type { Dimension } from "./world/world.js";
  * safe, so it can go to IndexedDB (client) or a file (dedicated server).
  */
 export interface SimSave {
-  version: 1 | 2 | 3 | 4;
+  version: 1 | 2 | 3 | 4 | 5;
   /**
    * Numeric block id -> canonical string id at save time. On load,
    * chunks are remapped by name, so the numbers in `worlds` are never
@@ -22,6 +22,16 @@ export interface SimSave {
   rng: number;
   /** Single allocator for both player and entity ids (one shared id space). */
   nextId: number;
+  /**
+   * Only chunks that differ from what deterministic generation would
+   * produce again (World.serializeChunks skips anything still "clean") -
+   * a chunk that was only ever visited, never changed, simply isn't here
+   * and regenerates identically on load. `tiles`/`walls` are run-length-
+   * encoded as flattened [id, count, id, count, ...] pairs (see
+   * encodeRuns/decodeRuns in world/chunk.ts), not one entry per tile -
+   * since version 5. `walls` is optional only for saves from before the
+   * wall layer existed.
+   */
   worlds: {
     overworld: Array<{ cx: number; cy: number; tiles: number[]; walls?: number[] }>;
     nether: Array<{ cx: number; cy: number; tiles: number[]; walls?: number[] }>;

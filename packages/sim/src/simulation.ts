@@ -107,8 +107,11 @@ import { World, type Dimension } from "./world/world.js";
 /**
  * Old-id -> current-id table from a save's block palette, or null when
  * every id already matches (the common case - skips the remap pass).
+ * Exported so a host that loads chunks outside the bulk deserialize path
+ * (e.g. the dedicated server's on-demand region-file loader) can apply the
+ * exact same remap to a chunk it decodes later, mid-session.
  */
-function buildBlockRemap(palette: Record<number, string> | undefined): Map<number, number> | null {
+export function buildBlockRemap(palette: Record<number, string> | undefined): Map<number, number> | null {
   if (!palette) return null;
   const remap = new Map<number, number>();
   let identical = true;
@@ -231,7 +234,7 @@ export class Simulation {
       blockPalette[def.id] = def.name;
     }
     return {
-      version: 4,
+      version: 5,
       blockPalette,
       seed: this.world.seed,
       tickCount: this.tickCount,
@@ -272,16 +275,12 @@ export class Simulation {
     sim.nextId = Number.isFinite(save.nextId) && save.nextId > 0 ? save.nextId : safeNextId(save);
     // Saved block numbers are remapped by their palette names, so a
     // renumbered registry (or removed mod blocks -> air) loads cleanly.
+    // Applied inside loadChunks (post-RLE-decode, one id per tile) rather
+    // than on the raw run arrays here - those alternate id/count, and
+    // remapping every element would corrupt the counts too.
     const remap = buildBlockRemap(save.blockPalette);
     for (const dim of ["overworld", "nether"] as const) {
-      const chunks = remap
-        ? save.worlds[dim].map((c) => ({
-            ...c,
-            tiles: c.tiles.map((t) => remap.get(t) ?? t),
-            ...(c.walls ? { walls: c.walls.map((w) => remap.get(w) ?? w) } : {}),
-          }))
-        : save.worlds[dim];
-      sim.worlds[dim].loadChunks(chunks);
+      sim.worlds[dim].loadChunks(save.worlds[dim], remap);
     }
     for (const f of save.furnaces) {
       // Saves from before per-block furnace speed lack the field.

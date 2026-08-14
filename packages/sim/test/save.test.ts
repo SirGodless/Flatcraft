@@ -142,14 +142,17 @@ describe("save/load", () => {
     const surface = surfaceHeight(SEED, spawnX);
     sim.world.setBlock(spawnX + 3, surface - 2, BlockId.Glowstone);
     const save = sim.serialize();
-    expect(save.version).toBe(4);
+    expect(save.version).toBe(5);
     expect(save.blockPalette![BlockId.Glowstone]).toBe("glowstone");
 
     // Simulate a registry that renumbered glowstone: the save's chunks
     // carry a fake number whose palette entry still says "glowstone".
+    // tiles/walls are run-length-encoded ([id, count, id, count, ...]),
+    // so only even indices are ids - odd indices are run lengths and
+    // must be left alone.
     const fakeId = 999;
     for (const chunk of save.worlds.overworld) {
-      for (let i = 0; i < chunk.tiles.length; i++) {
+      for (let i = 0; i < chunk.tiles.length; i += 2) {
         if (chunk.tiles[i] === BlockId.Glowstone) chunk.tiles[i] = fakeId;
       }
     }
