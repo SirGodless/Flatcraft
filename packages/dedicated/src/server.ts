@@ -412,6 +412,10 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
         log(`${result.name} connected (player ${playerId})`);
         return;
       }
+      if (message.type === "ping") {
+        sendMessage({ type: "pong", sentAt: message.sentAt });
+        return;
+      }
       if (message.type === "command") {
         let command = message.command;
         if (typeof command !== "object" || command === null || typeof command.type !== "string") {

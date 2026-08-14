@@ -185,6 +185,9 @@ async function runGame(options: GameOptions): Promise<Renderer> {
       renderer.backgroundMode = placeBackground;
     },
     onToggleCreative: () => connection.send({ type: "set_creative", on: !renderer.creativeMode }),
+    onToggleDebug: () => {
+      renderer.debugVisible = !renderer.debugVisible;
+    },
     onPointerMove: (x, y) => renderer.setPointer(x, y),
   });
 
@@ -256,7 +259,9 @@ async function startOnline(info: ServerInfo): Promise<void> {
     playerName: session.name,
     playerColor: storedPlayerColor(),
   });
-  void renderer;
+  session.onPing((ms) => {
+    renderer.pingMs = ms;
+  });
   session.onDisconnect(() => disconnectOverlay());
 }
 

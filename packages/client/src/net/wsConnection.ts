@@ -9,6 +9,9 @@ import type { Command, PlayerId, SimEvent } from "@flatcraft/sim";
  * singleplayer one - the rest of the client cannot tell the difference.
  */
 
+/** How often a ping probe is sent while connected (debug overlay only). */
+const PING_INTERVAL_MS = 2000;
+
 export interface OnlineSession {
   connection: ClientConnection;
   playerId: PlayerId;
@@ -19,6 +22,9 @@ export interface OnlineSession {
   token: string;
   /** Fired once when the socket drops after a successful login. */
   onDisconnect(handler: () => void): void;
+  /** Fired with the round-trip time (ms) whenever a ping probe completes -
+   * see PING_INTERVAL_MS. Debug overlay only; nothing else depends on it. */
+  onPing(handler: (ms: number) => void): void;
 }
 
 export function connectWebSocket(auth: { name: string; token: string }): Promise<OnlineSession> {
@@ -29,6 +35,8 @@ export function connectWebSocket(auth: { name: string; token: string }): Promise
     let established = false;
     let eventsHandler: ((events: readonly SimEvent[]) => void) | undefined;
     let disconnectHandler: (() => void) | undefined;
+    let pingHandler: ((ms: number) => void) | undefined;
+    let pingTimer: ReturnType<typeof setInterval> | undefined;
 
     socket.onopen = () => {
       const request: AuthRequest = { type: "auth", ...auth };
@@ -55,9 +63,15 @@ export function connectWebSocket(auth: { name: string; token: string }): Promise
             eventsHandler = handler;
           },
           close() {
+            if (pingTimer !== undefined) clearInterval(pingTimer);
             socket.close();
           },
         };
+        pingTimer = setInterval(() => {
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "ping", sentAt: performance.now() }));
+          }
+        }, PING_INTERVAL_MS);
         resolve({
           connection,
           playerId: message.playerId,
@@ -66,16 +80,22 @@ export function connectWebSocket(auth: { name: string; token: string }): Promise
           onDisconnect(handler) {
             disconnectHandler = handler;
           },
+          onPing(handler) {
+            pingHandler = handler;
+          },
         });
       } else if (message.type === "auth_error") {
         reject(new Error(message.reason));
         socket.close();
       } else if (message.type === "events") {
         eventsHandler?.(message.events);
+      } else if (message.type === "pong") {
+        pingHandler?.(performance.now() - message.sentAt);
       }
     };
 
     socket.onclose = () => {
+      if (pingTimer !== undefined) clearInterval(pingTimer);
       if (established) {
         disconnectHandler?.();
       } else {

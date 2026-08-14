@@ -43,5 +43,18 @@ export interface EventsMessage {
   events: SimEvent[];
 }
 
-export type ClientMessage = AuthRequest | CommandMessage;
-export type ServerMessage = AuthResponse | EventsMessage;
+/** Round-trip latency probe (debug overlay only) - sentAt is the client's
+ * own clock, echoed back unchanged, so RTT is just (now - sentAt) on
+ * receipt; no clock sync between client and server is ever needed. */
+export interface PingMessage {
+  type: "ping";
+  sentAt: number;
+}
+
+export interface PongMessage {
+  type: "pong";
+  sentAt: number;
+}
+
+export type ClientMessage = AuthRequest | CommandMessage | PingMessage;
+export type ServerMessage = AuthResponse | EventsMessage | PongMessage;

@@ -33,6 +33,8 @@ export interface InputOptions {
   onToggleBackground(): void;
   /** Hidden keybind (F8): toggle creative mode. */
   onToggleCreative(): void;
+  /** F3: toggle the debug overlay (FPS/TPS/coords/ping/...). */
+  onToggleDebug(): void;
   /** Raw pointer position for the cursor-stack overlay. */
   onPointerMove(x: number, y: number): void;
 }
@@ -109,6 +111,12 @@ export function attachInput(target: HTMLElement, opts: InputOptions): InputHandl
     if (e.code === "F8") {
       // Hidden keybind: creative mode.
       opts.onToggleCreative();
+      return;
+    }
+    if (e.code === "F3") {
+      // Browsers bind F3 to "find in page" by default - suppress that.
+      e.preventDefault();
+      opts.onToggleDebug();
       return;
     }
     if (e.code === "Equal" || e.code === "NumpadAdd") {

@@ -35,6 +35,7 @@ const SURFACE = surfaceHeight(SEED, SPAWN_X);
 
 class TestClient {
   readonly events: SimEvent[] = [];
+  readonly pongs: number[] = [];
   playerId = 0;
   name = "";
   token = "";
@@ -58,6 +59,8 @@ class TestClient {
           reject(new Error(message.reason));
         } else if (message.type === "events") {
           client.events.push(...message.events);
+        } else if (message.type === "pong") {
+          client.pongs.push(message.sentAt);
         }
       });
       client.socket.on("error", (error) => reject(error));
@@ -66,6 +69,10 @@ class TestClient {
 
   send(command: Command): void {
     this.socket.send(JSON.stringify({ type: "command", command }));
+  }
+
+  ping(sentAt: number): void {
+    this.socket.send(JSON.stringify({ type: "ping", sentAt }));
   }
 
   join(): void {
@@ -84,6 +91,23 @@ class TestClient {
           resolve(found);
         } else if (Date.now() - started > timeoutMs) {
           reject(new Error(`timed out waiting for event; got ${JSON.stringify(this.events.map((e) => e.type))}`));
+        } else {
+          setTimeout(poll, 25);
+        }
+      };
+      poll();
+    });
+  }
+
+  /** Wait until a pong for the given sentAt arrived (or time out). */
+  waitForPong(sentAt: number, timeoutMs = 2000): Promise<void> {
+    const started = Date.now();
+    return new Promise((resolve, reject) => {
+      const poll = (): void => {
+        if (this.pongs.includes(sentAt)) {
+          resolve();
+        } else if (Date.now() - started > timeoutMs) {
+          reject(new Error("timed out waiting for pong"));
         } else {
           setTimeout(poll, 25);
         }
@@ -483,6 +507,35 @@ describe("persistence", () => {
     // Reloading it (via the chunk loader, from the file just saved)
     // reproduces the exact same edit - nothing was lost by evicting it.
     expect(sim.world.getBlockGenerating(farX, farY)).toBe(BlockId.Glowstone);
+    await alice.close();
+  });
+});
+
+describe("debug overlay", () => {
+  it("broadcasts periodic debug_stats with real tps/tickCount/seed/player+entity counts", async () => {
+    const ded = await startServer();
+    const alice = await connectAs(ded, "Alice");
+    alice.join();
+    await alice.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
+
+    const stats = await alice.waitFor((e) => e.type === "debug_stats", 3000);
+    expect(stats.type === "debug_stats" && stats.tps).toBeGreaterThan(0);
+    expect(stats.type === "debug_stats" && stats.tickCount).toBeGreaterThan(0);
+    expect(stats.type === "debug_stats" && stats.seed).toBe(SEED);
+    expect(stats.type === "debug_stats" && stats.players).toBeGreaterThanOrEqual(1);
+    expect(stats.type === "debug_stats" && stats.entities).toBeGreaterThanOrEqual(stats.players);
+    await alice.close();
+  });
+
+  it("answers a ping probe with a pong carrying the same timestamp back", async () => {
+    const ded = await startServer();
+    const alice = await connectAs(ded, "Alice");
+    alice.join();
+    await alice.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
+
+    const sentAt = 123456.789;
+    alice.ping(sentAt);
+    await alice.waitForPong(sentAt);
     await alice.close();
   });
 });

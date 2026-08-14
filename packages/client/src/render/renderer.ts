@@ -171,6 +171,19 @@ export class Renderer {
   creativeMode = false;
   /** Background-wall placement mode (B key), shown in the HUD. */
   backgroundMode = false;
+  /** F3-style debug overlay toggle. */
+  debugVisible = false;
+  private debugHud!: Text;
+  /** Smoothed (EMA) render frames/sec - purely client-side, from draw()'s dtMs. */
+  private fps = 0;
+  /** Latest debug_stats broadcast from the server (see GameServer.advance);
+   * null until the first one arrives. */
+  private debugStats: { tps: number; tickCount: number; seed: number; players: number; entities: number } | null =
+    null;
+  /** Round-trip time to the server in ms, or null when not applicable
+   * (singleplayer's loopback transport has no real network hop) - set
+   * externally by the bootstrap code from OnlineSession.onPing. */
+  pingMs: number | null = null;
   /** Wired by the bootstrap code: right-clicked a door/trapdoor. */
   onUseBlock: ((x: number, y: number) => void) | null = null;
   /** Wired by the bootstrap code: creative picker item click. */
@@ -248,6 +261,14 @@ export class Renderer {
     });
     this.hud.position.set(8, 8);
     this.app.stage.addChild(this.hud);
+
+    this.debugHud = new Text({
+      text: "",
+      style: { fill: "#ffff88", fontSize: 13, fontFamily: "monospace" },
+    });
+    this.debugHud.position.set(8, 28);
+    this.debugHud.visible = false;
+    this.app.stage.addChild(this.debugHud);
 
     this.hotbar = new HotbarUI(blockTextures);
     this.hotbar.update(this.inventory, this.selectedSlot);
@@ -746,6 +767,15 @@ export class Renderer {
       case "time_changed":
         this.timeOfDay = event.time;
         break;
+      case "debug_stats":
+        this.debugStats = {
+          tps: event.tps,
+          tickCount: event.tickCount,
+          seed: event.seed,
+          players: event.players,
+          entities: event.entities,
+        };
+        break;
       case "block_changed": {
         if (event.dim !== this.localDim) break;
         this.worldView.setBlock(event.x, event.y, event.block);
@@ -1131,6 +1161,13 @@ export class Renderer {
   draw(dtMs: number): void {
     const now = performance.now();
 
+    // Smoothed (EMA) FPS for the debug overlay - guard dtMs=0 (first
+    // frame) so this can't divide into Infinity.
+    if (dtMs > 0) {
+      const instantFps = 1000 / dtMs;
+      this.fps = this.fps === 0 ? instantFps : this.fps * 0.9 + instantFps * 0.1;
+    }
+
     // Bake chunks touched since the last frame (at most once each).
     this.worldView.flush();
     this.reconcileBlockOverlays(now);
@@ -1314,5 +1351,20 @@ export class Renderer {
     const py = localY !== null ? Math.floor(localY) : Math.floor(this.camera.y / TILE_PX);
     const modes = `${this.backgroundMode ? " [BG-BAU]" : ""}${this.creativeMode ? " [CREATIVE]" : ""}`;
     this.hud.text = `FlatCraft | ${this.localDim} ${px},${py} | zoom ${this.camera.zoom.toFixed(1)}${modes} | A/D walk, Space jump, hold LMB mine, RMB place/use, 1-9/wheel slot, E craft, B walls, C color, +/- zoom`;
+
+    this.debugHud.visible = this.debugVisible;
+    if (this.debugVisible) {
+      const cx = Math.floor(px / CHUNK_WIDTH);
+      const cy = Math.floor(py / CHUNK_HEIGHT);
+      const stats = this.debugStats;
+      const lines = [
+        `FPS: ${this.fps.toFixed(0)}${stats ? `  TPS: ${stats.tps.toFixed(1)}` : ""}`,
+        `XYZ: ${px} / ${py}  (chunk ${cx}, ${cy})`,
+        `Dim: ${this.localDim}${stats ? `  Seed: ${stats.seed}` : ""}`,
+        stats ? `Tick: ${stats.tickCount}  Players: ${stats.players}  Entities: ${stats.entities}` : "waiting for server stats...",
+        `Ping: ${this.pingMs !== null ? `${Math.round(this.pingMs)} ms` : "n/a (singleplayer)"}`,
+      ];
+      this.debugHud.text = lines.join("\n");
+    }
   }
 }
