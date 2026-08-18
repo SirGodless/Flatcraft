@@ -110,7 +110,7 @@ export function convertFrame(
 // check with findPortalInterior, which already only reads through
 // World.getBlockGenerating, so it's exactly as safe as a pattern-matched
 // multiblock would be.
-registerMultiblockHandler("nether_portal", {
+registerMultiblockHandler("flatcraft:nether_portal", {
   activate({ world, x, y, dimension, sim, broadcast }) {
     const interior = findPortalInterior(world, x, y);
     if (!interior) return false;

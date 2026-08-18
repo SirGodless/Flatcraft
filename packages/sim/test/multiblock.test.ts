@@ -196,4 +196,16 @@ describe("multiblock pattern matching", () => {
       ),
     ).not.toThrow();
   });
+
+  it("rejects registering a multiblock id that's already taken, instead of silently overwriting it", () => {
+    registerTestMultiblock("test_dupe_def", "cobblestone");
+    expect(() => registerTestMultiblock("test_dupe_def", "basalt")).toThrow(/already registered/);
+  });
+
+  it("rejects registering a handler id that's already taken, instead of silently overwriting it", () => {
+    registerMultiblockHandler("test_dupe_handler", { activate: () => true });
+    expect(() => registerMultiblockHandler("test_dupe_handler", { activate: () => false })).toThrow(
+      /already registered/,
+    );
+  });
 });

@@ -1,6 +1,6 @@
 {
-  "id": "nether_portal",
-  "handler": "nether_portal",
+  "id": "flatcraft:nether_portal",
+  "handler": "flatcraft:nether_portal",
   "trigger_on": { "type": "place_block", "item": "flint_and_steel" },
   "fail_reason": "no portal frame"
 }

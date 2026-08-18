@@ -10,13 +10,24 @@ import type { Dimension, World } from "./world/world.js";
  * the same engine). See data/multiblocks/*.json for the format:
  *
  *   {
- *     "id": "example",
- *     "handler": "example",
+ *     "id": "mymod:example",
+ *     "handler": "mymod:example",
  *     "trigger_on": { "type": "place_block", "item": "flint_and_steel" },
  *     "states": {
  *       "off": { "pattern": ["OOO", "O.O", "OOO"], "key": { "O": { "block": "obsidian" }, ".": { "block": "air", "trigger": true } } }
  *     }
  *   }
+ *
+ * `id` and `handler` are conventionally namespaced `modname:funktion`
+ * (built-in content uses `flatcraft:`) - this is a plain naming
+ * convention, not something the engine parses or defaults for you: a
+ * bare id with no colon is just its own distinct string, so two
+ * differently-named mods never collide as long as each prefixes its
+ * own ids. registerMultiblock/registerMultiblockHandler both reject an
+ * id that's already taken (see below) rather than silently letting a
+ * later registration overwrite an earlier one - namespacing is what
+ * makes that collision unlikely in the first place, the check is what
+ * catches it immediately if it happens anyway (e.g. a copy-pasted id).
  *
  * `states` (like a Structure's pattern) is a fixed-size rectangle - any
  * multiblock whose shape doesn't vary works this way, matched by
@@ -191,6 +202,9 @@ function matchesAt(world: World, state: MultiblockState, originX: number, origin
 const DEFS = new Map<string, MultiblockDef>();
 
 export function registerMultiblock(def: MultiblockDef): void {
+  if (DEFS.has(def.id)) {
+    throw new Error(`multiblock "${def.id}" is already registered - ids must be unique (use a modname: prefix)`);
+  }
   DEFS.set(def.id, def);
 }
 
@@ -257,6 +271,9 @@ export interface MultiblockHandler {
 const HANDLERS = new Map<string, MultiblockHandler>();
 
 export function registerMultiblockHandler(id: string, handler: MultiblockHandler): void {
+  if (HANDLERS.has(id)) {
+    throw new Error(`multiblock handler "${id}" is already registered - ids must be unique (use a modname: prefix)`);
+  }
   HANDLERS.set(id, handler);
 }
 
