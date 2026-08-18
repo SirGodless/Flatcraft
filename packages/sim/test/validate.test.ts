@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { parseMultiblock, registerMultiblock, validateAllContent, validateMultiblockHandlers } from "../src/index.js";
+import {
+  parseMultiblock,
+  registerCommandHandler,
+  registerMultiblock,
+  validateAllContent,
+  validateCommandHandlers,
+  validateMultiblockHandlers,
+} from "../src/index.js";
 
 /**
  * Own file, not multiblock.test.ts: registerMultiblock/registerMultiblockHandler
@@ -41,5 +48,15 @@ describe("content dependency validation", () => {
     expect(problems).toContain('multiblock "test_validate_missing_2" references unknown behavior "nobody_registered_this_2"');
     // validateAllContent must surface the same problems, not swallow them.
     expect(validateAllContent().length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("command handler validation", () => {
+  it("every literal Command.type has a registered handler - none were forgotten", () => {
+    expect(validateCommandHandlers()).toEqual([]);
+  });
+
+  it("rejects registering a second handler for a command type that already has one", () => {
+    expect(() => registerCommandHandler("leave", { handle: () => {} })).toThrow(/already registered/);
   });
 });

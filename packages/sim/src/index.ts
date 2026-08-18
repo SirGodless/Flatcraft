@@ -2,6 +2,8 @@ export * from "./constants.js";
 export * from "./combat.js";
 export * from "./effects.js";
 export * from "./commands.js";
+export * from "./commands/registry.js";
+export * from "./commands/index.js";
 export * from "./entities.js";
 export * from "./crafting/match.js";
 export * from "./crafting/recipe.js";

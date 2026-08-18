@@ -1,0 +1,100 @@
+import { ingredientOptions } from "../crafting/recipe.js";
+import { RECIPES } from "../data/recipes/index.js";
+import { addToInventory, countInInventory, removeFromInventory } from "../inventory.js";
+import { itemDef } from "../items.js";
+import { BlockId } from "../world/block.js";
+import { registerCommandHandler } from "./registry.js";
+
+registerCommandHandler("craft", {
+  handle({ sim, player, command, out, reject }) {
+    const p = sim.getPlayer(player);
+    if (!p) {
+      reject("not joined");
+      return;
+    }
+    const recipe = RECIPES.get(command.recipe);
+    if (!recipe || recipe.kind === "smelting") {
+      reject("unknown recipe");
+      return;
+    }
+    if (recipe.kind === "brewing" && !sim.blockNearby(p, BlockId.BrewingStand)) {
+      reject("requires brewing stand");
+      return;
+    }
+    if (recipe.kind === "crafting" && recipe.gridSize === 3 && !sim.blockNearby(p, BlockId.CraftingTable)) {
+      reject("requires crafting table");
+      return;
+    }
+    // Ingredient keys may be tags ("#planks"): any member counts.
+    for (const [key, count] of recipe.ingredients) {
+      const available = ingredientOptions(key).reduce(
+        (sum, item) => sum + countInInventory(p.inventory, item),
+        0,
+      );
+      if (available < count) {
+        reject("missing ingredients");
+        return;
+      }
+    }
+    for (const [key, count] of recipe.ingredients) {
+      let remaining = count;
+      for (const item of ingredientOptions(key)) {
+        while (remaining > 0 && removeFromInventory(p.inventory, item, 1)) {
+          remaining--;
+        }
+      }
+    }
+    addToInventory(p.inventory, recipe.result.item, recipe.result.count);
+    sim.syncInventory(p, out);
+  },
+});
+
+registerCommandHandler("slot_click", {
+  handle({ sim, player, command, out, broadcast, reject }) {
+    const p = sim.getPlayer(player);
+    if (!p) {
+      reject("not joined");
+      return;
+    }
+    if (command.button !== "left" && command.button !== "right") {
+      reject("invalid button");
+      return;
+    }
+    sim.applySlotClick(p, command.slot, command.button, reject, broadcast);
+    sim.syncInventory(p, out);
+  },
+});
+
+registerCommandHandler("return_grid", {
+  handle({ sim, player, out, reject }) {
+    const p = sim.getPlayer(player);
+    if (!p) {
+      reject("not joined");
+      return;
+    }
+    sim.dumpGridAndCursor(p);
+    sim.syncInventory(p, out);
+  },
+});
+
+registerCommandHandler("creative_give", {
+  handle({ sim, player, command, out, reject }) {
+    const p = sim.getPlayer(player);
+    if (!p) {
+      reject("not joined");
+      return;
+    }
+    if (!p.creative) {
+      reject("not in creative mode");
+      return;
+    }
+    const def = itemDef(command.item);
+    const count = Number(command.count);
+    if (!def || !Number.isInteger(count) || count < 1 || count > 64) {
+      reject("invalid item");
+      return;
+    }
+    addToInventory(p.inventory, def.id, Math.min(count, def.maxStack));
+    sim.syncInventory(p, out);
+  },
+});
