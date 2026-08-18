@@ -15,6 +15,7 @@ import {
   Simulation,
   syncItemRecipes,
   TICK_MS,
+  validateAllContent,
   type Command,
   type Dimension,
   type SimSave,
@@ -129,6 +130,19 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   if (packBlocks.length > 0 || packItems.length > 0 || packMobs.length > 0) {
     log(`datapack loaded: ${packBlocks.length} blocks, ${packItems.length} items, ${packMobs.length} mobs`);
   }
+
+  // Hard stop, not a warning: every content reference (currently
+  // multiblock handlers) must resolve to something actually registered,
+  // checked exhaustively so every problem shows up at once instead of a
+  // fix-one-restart-find-the-next loop. Refusing to boot here is
+  // deliberate - silently starting with some content broken just means
+  // someone discovers "why isn't my item in the game" in-game instead
+  // of at startup, which is exactly the confusion this exists to avoid.
+  const contentProblems = validateAllContent();
+  if (contentProblems.length > 0) {
+    throw new Error(`content validation failed:\n${contentProblems.map((p) => `  - ${p}`).join("\n")}`);
+  }
+
   // Sprites come from two places: the repo (shipped inside the client
   // build, dist/sprites) and the server datapack; the datapack wins on
   // conflicts. The manifest is the union of both.

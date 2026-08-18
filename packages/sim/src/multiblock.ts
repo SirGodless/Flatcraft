@@ -203,6 +203,30 @@ export function allMultiblocks(): Iterable<MultiblockDef> {
 }
 
 /**
+ * Every registered multiblock's `handler` must resolve to an actually
+ * registered MultiblockHandler - tryActivateMultiblock already skips a
+ * def with no matching handler rather than crash (so a live game never
+ * breaks over it), but that silence is exactly the problem for content
+ * authoring: a typo'd or forgotten handler id would otherwise only show
+ * up as "this multiblock just doesn't do anything," discovered by a
+ * player, not by whoever shipped it. This walks every def exhaustively
+ * and returns one message per missing handler - never stops at the
+ * first - so a host validating its full content set (see
+ * validateAllContent) can report everything broken in one pass instead
+ * of a fix-one-restart-find-the-next loop. Doesn't throw itself; the
+ * caller decides what "some content is broken" should mean for it.
+ */
+export function validateMultiblockHandlers(): string[] {
+  const problems: string[] = [];
+  for (const def of DEFS.values()) {
+    if (!HANDLERS.has(def.handler)) {
+      problems.push(`multiblock "${def.id}" references unknown behavior "${def.handler}"`);
+    }
+  }
+  return problems;
+}
+
+/**
  * What a multiblock's `handler` id resolves to - one small, trusted,
  * already-compiled function per distinct *behavior* (never per shape;
  * a new shape of an existing behavior is pure JSON, reusing the same
