@@ -30,6 +30,8 @@ export * from "./data/multiblocks/index.js";
 export * from "./physics.js";
 export * from "./portal.js";
 export * from "./save.js";
+export * from "./systems/registry.js";
+export * from "./systems/index.js";
 export * from "./validate.js";
 export * from "./world/block.js";
 export * from "./world/chunk.js";

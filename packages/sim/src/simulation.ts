@@ -1,5 +1,6 @@
 import type { PlayerCommand, PlayerId, SlotRef } from "./commands.js";
 import { dispatchCommand } from "./commands/registry.js";
+import { runTickSystems } from "./systems/registry.js";
 import type { OutboundEvent, SimEvent } from "./events.js";
 import { CHUNK_HEIGHT, CHUNK_IDLE_EVICT_TICKS, CHUNK_WIDTH } from "./constants.js";
 import { CRAFT_GRID_SIZE, matchGrid, SMALL_GRID_INDICES } from "./crafting/match.js";
@@ -349,13 +350,7 @@ export class Simulation {
     for (const pc of commands) {
       this.apply(pc, out);
     }
-    this.stepMining(out);
-    this.stepFurnaces(out);
-    this.stepLiquids(out);
-    this.stepEntities(out);
-    this.stepPlayers(out);
-    this.stepGearSync(out);
-    this.stepSpawning(out);
+    runTickSystems(this, out);
     this.tickCount++;
     this.timeOfDay = (this.timeOfDay + 1) % DAY_LENGTH;
     if (this.tickCount % 100 === 0) {
@@ -417,7 +412,7 @@ export class Simulation {
     }
   }
 
-  private stepFurnaces(out: OutboundEvent[]): void {
+  stepFurnaces(out: OutboundEvent[]): void {
     for (const state of this.furnaces.values()) {
       const changed = stepFurnace(state, RECIPES.values());
       if (changed && (this.tickCount % 4 === 0 || furnaceIdle(state))) {
@@ -473,7 +468,7 @@ export class Simulation {
    * below, and equalize sideways one unit at a time. Lava updates on a
    * slower cadence than water. Water touching lava turns it to obsidian.
    */
-  private stepLiquids(out: OutboundEvent[]): void {
+  stepLiquids(out: OutboundEvent[]): void {
     const BUDGET = 200;
     // No liquid kind is due this tick (water every 3, lava every 10):
     // skip the scan entirely, active cells just stay queued.
@@ -628,7 +623,7 @@ export class Simulation {
     }
   }
 
-  private stepMining(out: OutboundEvent[]): void {
+  stepMining(out: OutboundEvent[]): void {
     for (const p of this.playerEntities()) {
       const mining = p.mining;
       if (!mining) continue;
@@ -756,7 +751,7 @@ export class Simulation {
     }
   }
 
-  private stepEntities(out: OutboundEvent[]): void {
+  stepEntities(out: OutboundEvent[]): void {
     for (const entity of [...this.entities.values()]) {
       // Players are stepped separately (stepPlayers) - very different
       // physics (input-driven, creative flight, ...).
@@ -931,7 +926,7 @@ export class Simulation {
     }
   }
 
-  private stepSpawning(out: OutboundEvent[]): void {
+  stepSpawning(out: OutboundEvent[]): void {
     if (this.tickCount % 50 !== 0 || !this.hasPlayers()) return;
     let mobCount = 0;
     for (const e of this.entities.values()) {
@@ -1018,7 +1013,7 @@ export class Simulation {
     }
   }
 
-  private stepPlayers(out: OutboundEvent[]): void {
+  stepPlayers(out: OutboundEvent[]): void {
     for (const p of this.playerEntities()) {
       const prevX = p.x;
       const prevY = p.y;
@@ -1239,7 +1234,7 @@ export class Simulation {
   /** Broadcast facing/held-item changes - covers every way the selected
    * slot or offhand can change (crafting, mining, eating, drag-and-drop,
    * ...) without hooking each site individually. */
-  private stepGearSync(out: OutboundEvent[]): void {
+  stepGearSync(out: OutboundEvent[]): void {
     for (const p of this.playerEntities()) {
       const current = {
         facing: p.facing,
