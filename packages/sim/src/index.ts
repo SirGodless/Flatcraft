@@ -12,6 +12,8 @@ export * from "./hunger.js";
 export * from "./slots.js";
 export * from "./structures/structure.js";
 export * from "./structures/place.js";
+export * from "./world/dimension.js";
+export * from "./data/dimensions/index.js";
 export * from "./data/structures/index.js";
 export * from "./data/trades/index.js";
 export * from "./trading.js";

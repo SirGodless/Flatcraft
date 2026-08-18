@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  allDimensionIds,
+  parseDimension,
   parseMultiblock,
   registerCommandHandler,
+  registerDimension,
   registerMultiblock,
   validateAllContent,
   validateCommandHandlers,
+  validateDimensionGenerators,
   validateMultiblockHandlers,
 } from "../src/index.js";
 
@@ -58,5 +62,25 @@ describe("command handler validation", () => {
 
   it("rejects registering a second handler for a command type that already has one", () => {
     expect(() => registerCommandHandler("leave", { handle: () => {} })).toThrow(/already registered/);
+  });
+});
+
+describe("dimension registry", () => {
+  it("the built-in overworld and nether are registered, with real generators", () => {
+    expect(allDimensionIds()).toEqual(expect.arrayContaining(["overworld", "nether"]));
+    expect(validateDimensionGenerators()).toEqual([]);
+  });
+
+  it("reports a dimension referencing an unregistered generator", () => {
+    registerDimension(parseDimension("test_validate_dim_missing", { id: "test_validate_dim_missing", generator: "nobody_registered_this_generator" }));
+    expect(validateDimensionGenerators()).toContain(
+      'dimension "test_validate_dim_missing" references unknown generator "nobody_registered_this_generator"',
+    );
+  });
+
+  it("rejects registering a dimension id that's already taken", () => {
+    expect(() => registerDimension(parseDimension("overworld", { id: "overworld", generator: "flatcraft:overworld" }))).toThrow(
+      /already registered/,
+    );
   });
 });

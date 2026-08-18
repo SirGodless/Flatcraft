@@ -32,7 +32,7 @@ describe("save/load", () => {
     const out: OutboundEvent[] = [];
     sim.spawnMob("pig", state.x + 20, state.y, out);
     sim.spawnItem("overworld", state.x + 21, state.y - 2, { item: "coal", count: 5 }, out);
-    sim.portals.nether.set("9,40", { x: 9, y: 40 });
+    sim.portalsOf("nether").set("9,40", { x: 9, y: 40 });
     state.inventory[3] = { item: "diamond", count: 7 };
     sim.tick([{ player, command: { type: "open_furnace", x: 1, y: 1 } }]); // rejected (no furnace), harmless
 
@@ -44,7 +44,37 @@ describe("save/load", () => {
     // round-trips through `players` (saved, adopted again on rejoin).
     const nonPlayerCount = (s: Simulation): number => [...s.entities.values()].filter((e) => !isPlayerEntity(e)).length;
     expect(nonPlayerCount(restored)).toBe(nonPlayerCount(sim));
-    expect(restored.portals.nether.get("9,40")).toEqual({ x: 9, y: 40 });
+    expect(restored.portalsOf("nether").get("9,40")).toEqual({ x: 9, y: 40 });
+  });
+
+  it("migrates a pre-version-6 save's fixed {overworld,nether} worlds/portals shape", () => {
+    const sim = new Simulation(SEED);
+    joinPlayer(sim);
+    sim.world.ensureChunk(0, 0);
+    sim.world.setBlock(3, 3, BlockId.Glowstone);
+    sim.portalsOf("nether").set("9,40", { x: 9, y: 40 });
+
+    const save = sim.serialize();
+    // Pre-version-6 saves stored these as a fixed object keyed by
+    // dimension name, the per-dimension value being the raw chunk/
+    // position array directly (see normalizeWorldsField/
+    // normalizePortalsField in simulation.ts) - reconstruct that exact
+    // legacy shape from the real (new-shape) save, then feed it back in
+    // as if it had just been read off disk from an old save file.
+    const legacyWorlds: Record<string, unknown> = {};
+    for (const { dim, chunks } of save.worlds) legacyWorlds[dim] = chunks;
+    const legacyPortals: Record<string, unknown> = {};
+    for (const { dim, positions } of save.portals) legacyPortals[dim] = positions;
+    const legacySave = {
+      ...save,
+      version: 5 as const,
+      worlds: legacyWorlds as unknown as typeof save.worlds,
+      portals: legacyPortals as unknown as typeof save.portals,
+    };
+
+    const restored = Simulation.deserialize(legacySave);
+    expect(restored.world.getBlockGenerating(3, 3)).toBe(BlockId.Glowstone);
+    expect(restored.portalsOf("nether").get("9,40")).toEqual({ x: 9, y: 40 });
   });
 
   it("carries the id allocator over the round-trip, still collision-free after load", () => {
@@ -142,7 +172,7 @@ describe("save/load", () => {
     const surface = surfaceHeight(SEED, spawnX);
     sim.world.setBlock(spawnX + 3, surface - 2, BlockId.Glowstone);
     const save = sim.serialize();
-    expect(save.version).toBe(5);
+    expect(save.version).toBe(6);
     expect(save.blockPalette![BlockId.Glowstone]).toBe("glowstone");
 
     // Simulate a registry that renumbered glowstone: the save's chunks
@@ -151,7 +181,8 @@ describe("save/load", () => {
     // so only even indices are ids - odd indices are run lengths and
     // must be left alone.
     const fakeId = 999;
-    for (const chunk of save.worlds.overworld) {
+    const overworldChunks = save.worlds.find((w) => w.dim === "overworld")!.chunks;
+    for (const chunk of overworldChunks) {
       for (let i = 0; i < chunk.tiles.length; i += 2) {
         if (chunk.tiles[i] === BlockId.Glowstone) chunk.tiles[i] = fakeId;
       }

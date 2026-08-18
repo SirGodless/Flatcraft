@@ -2,10 +2,16 @@ import { CHUNK_HEIGHT, CHUNK_WIDTH } from "../constants.js";
 import { stampStructures } from "../structures/place.js";
 import { BlockId } from "./block.js";
 import { Chunk, chunkKey, decodeChunk, encodeRuns } from "./chunk.js";
-import { generateChunk } from "./gen.js";
-import { generateNetherChunk } from "./nether.js";
+import { generateDimensionChunk } from "./dimension.js";
 
-export type Dimension = "overworld" | "nether";
+/**
+ * A registered dimension id (see dimension.ts) - "overworld" and
+ * "nether" are just the two the engine ships with, registered the same
+ * way a mod's own dimension would be. Not a closed union: a World can
+ * be constructed for any id that's been registered with
+ * registerDimension before that World is used.
+ */
+export type Dimension = string;
 
 /**
  * World state: a sparse grid of chunks. Purely data + accessors; world
@@ -71,10 +77,7 @@ export class World {
     if (!chunk) {
       chunk = this.chunkLoader?.(cx, cy);
       if (!chunk) {
-        chunk =
-          this.dimension === "nether"
-            ? generateNetherChunk(this.seed, cx, cy)
-            : generateChunk(this.seed, cx, cy);
+        chunk = generateDimensionChunk(this.dimension, this.seed, cx, cy);
         stampStructures(this.seed, this.dimension, chunk);
         // Generation (including structure stamping) writes through the
         // same setBlock/setWall as gameplay does and so marks the chunk

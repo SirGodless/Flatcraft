@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -508,6 +508,28 @@ describe("persistence", () => {
     // reproduces the exact same edit - nothing was lost by evicting it.
     expect(sim.world.getBlockGenerating(farX, farY)).toBe(BlockId.Glowstone);
     await alice.close();
+  });
+
+  it("loads a pre-version-6 world.json (fixed {overworld,nether} portals shape)", async () => {
+    const ded = await startServer();
+    const dir = dataDir!;
+    ded.gameServer.simulation.portalsOf("nether").set("9,40", { x: 9, y: 40 });
+    ded.save();
+    await server!.close();
+    server = null;
+
+    // Rewrite the just-saved world.json's `portals` field into the old,
+    // pre-version-6 fixed-object shape (see Simulation's
+    // normalizePortalsField) - simulating a save file that predates the
+    // dimension registry.
+    const worldFile = join(dir, "world.json");
+    const meta = JSON.parse(readFileSync(worldFile, "utf8")) as { portals: Array<{ dim: string; positions: unknown }> };
+    const legacyPortals: Record<string, unknown> = {};
+    for (const { dim, positions } of meta.portals) legacyPortals[dim] = positions;
+    writeFileSync(worldFile, JSON.stringify({ ...meta, version: 5, portals: legacyPortals }));
+
+    const restarted = await startServer(dir);
+    expect(restarted.gameServer.simulation.portalsOf("nether").get("9,40")).toEqual({ x: 9, y: 40 });
   });
 });
 

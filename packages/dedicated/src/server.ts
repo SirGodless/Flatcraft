@@ -25,8 +25,6 @@ import { Accounts } from "./accounts.js";
 import { type ChunkExtra, ChunkFileStore } from "./chunkFiles.js";
 import { OidcLogin, type OidcConfig } from "./oidc.js";
 
-const DIMENSIONS: readonly Dimension[] = ["overworld", "nether"];
-
 /**
  * The dedicated server: one Node process, one port.
  *   - serves the built browser client (static files)
@@ -203,7 +201,7 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
       blockPalette = meta.blockPalette;
       simulation = Simulation.deserialize({
         ...meta,
-        worlds: { overworld: [], nether: [] },
+        worlds: [],
         furnaces: [],
         chests: [],
       });
@@ -236,6 +234,12 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
     simulation.resetPlayers();
     log("RESET_PLAYERS set: all saved player state (position/inventory/health) cleared");
   }
+  // Every dimension this simulation actually has a World for (see
+  // Simulation's constructor - one per currently-registered dimension,
+  // not a fixed overworld/nether pair), computed once here rather than
+  // hardcoded, so a mod's own dimension gets exactly the same chunk-
+  // loader wiring and save/hydration handling as the built-in two.
+  const DIMENSIONS = [...simulation.worlds.keys()];
   // Wired unconditionally, even for a brand new world: idle eviction (see
   // Simulation.evictIdleChunks) can drop a chunk from memory and expect
   // it back later purely from a file this same process wrote itself
@@ -269,10 +273,10 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
     const tmp = `${worldFile}.tmp`;
     writeFileSync(tmp, JSON.stringify(meta));
     renameSync(tmp, worldFile);
-    for (const dim of DIMENSIONS) {
-      if (worlds[dim].length === 0) continue;
+    for (const { dim, chunks } of worlds) {
+      if (chunks.length === 0) continue;
       // Every chunk with a chest/furnace is guaranteed to also be in
-      // worlds[dim] - opening one always dirties its chunk (see
+      // chunks - opening one always dirties its chunk (see
       // World.touchChunk) - so bucketing here never orphans container
       // state against a chunk file that doesn't get written.
       const extraByChunk = new Map<string, ChunkExtra>();
@@ -291,10 +295,10 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
       for (const c of chests ?? []) {
         if (c.dimension === dim) bucket(dim, c.x, c.y).chests.push({ x: c.x, y: c.y, slots: c.slots });
       }
-      chunkFileStore.write(dim, worlds[dim], extraByChunk);
+      chunkFileStore.write(dim, chunks, extraByChunk);
       // Only mark chunks clean after the write above actually succeeded -
       // see World.markSaved's doc comment for why the order matters.
-      gameServer.simulation.worldOf(dim).markSaved(worlds[dim]);
+      gameServer.simulation.worldOf(dim).markSaved(chunks);
     }
     // Idle chunks are only evictable once clean, so sweeping right after
     // a save catches everything the save just settled - see

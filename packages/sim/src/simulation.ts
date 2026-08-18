@@ -97,6 +97,7 @@ import { DAY_LENGTH, daylightFactor, isNight } from "./time.js";
 import { allBlocks, blockByName, blockDef, blockDrops, BlockId, liquidBlock } from "./world/block.js";
 import { Biome, biomeAt, findSpawnX, surfaceHeight } from "./world/gen.js";
 import { LAVA_LEVEL } from "./world/nether.js";
+import { allDimensionIds } from "./world/dimension.js";
 import { World, type Dimension } from "./world/world.js";
 
 /**
@@ -130,6 +131,39 @@ function safeNextId(save: SimSave): number {
   return max + 1;
 }
 
+/**
+ * SimSave.worlds/.portals across the version-6 format change: pre-6
+ * saves stored these as a fixed `{overworld: [...], nether: [...]}`
+ * object (the per-dimension value being the raw chunk/position array
+ * directly); version 6+ stores one `{dim, ...}` entry per registered
+ * dimension instead, so a mod's own dimension round-trips the same way
+ * the built-in two do. `raw` is deliberately untyped here - an on-disk
+ * save's actual shape can predate whatever SimSave currently declares,
+ * exactly like decodeChunk tolerating pre-RLE data elsewhere.
+ */
+function normalizeWorldsField(raw: unknown): SimSave["worlds"] {
+  if (Array.isArray(raw)) return raw as SimSave["worlds"];
+  if (raw && typeof raw === "object") {
+    return Object.entries(raw as Record<string, SimSave["worlds"][number]["chunks"]>).map(([dim, chunks]) => ({
+      dim,
+      chunks,
+    }));
+  }
+  return [];
+}
+
+/** See normalizeWorldsField - same pre-version-6 migration, applied to
+ * `portals` instead. */
+function normalizePortalsField(raw: unknown): SimSave["portals"] {
+  if (Array.isArray(raw)) return raw as SimSave["portals"];
+  if (raw && typeof raw === "object") {
+    return Object.entries(raw as Record<string, SimSave["portals"][number]["positions"]>).map(
+      ([dim, positions]) => ({ dim, positions }),
+    );
+  }
+  return [];
+}
+
 /** Default body color for players who never picked one. */
 export const DEFAULT_PLAYER_COLOR = 0x4868e0;
 
@@ -156,24 +190,23 @@ export const MAX_CHUNK_COORD = 1_000_000;
  * any other ambient environment - all inputs arrive via commands.
  */
 export class Simulation {
-  readonly worlds: Record<Dimension, World>;
+  /** One World per registered dimension (see world/dimension.ts) -
+   * populated at construction from every dimension currently registered,
+   * not a fixed overworld/nether pair, so a mod's own dimension gets a
+   * World the same way the built-in two do. */
+  readonly worlds = new Map<string, World>();
   readonly furnaces = new Map<string, FurnaceState>();
   /** Chest contents, keyed like furnaces: "dim:x,y". */
   readonly chests = new Map<string, { dimension: Dimension; x: number; y: number; slots: (ItemStack | null)[] }>();
   readonly entities = new Map<EntityId, Entity>();
-  /** Known portal interiors (bottom-left of interior), per dimension. */
-  readonly portals: Record<Dimension, Map<string, { x: number; y: number }>> = {
-    overworld: new Map(),
-    nether: new Map(),
-  };
+  /** Known portal interiors (bottom-left of interior), per dimension -
+   * use portalsOf(dimension) rather than indexing this directly. */
+  readonly portals = new Map<string, Map<string, { x: number; y: number }>>();
   tickCount = 0;
   /** Time of day in ticks, 0..DAY_LENGTH (writable, e.g. for tests). */
   timeOfDay = 0;
   /** Liquid tiles that may need to flow, per dimension ("x,y"). */
-  private readonly liquidActive: Record<Dimension, Set<string>> = {
-    overworld: new Set(),
-    nether: new Set(),
-  };
+  private readonly liquidActive = new Map<string, Set<string>>();
 
   private readonly rng: Rng;
   private readonly rngState: RngState;
@@ -187,10 +220,11 @@ export class Simulation {
   readonly lastGear = new Map<PlayerId, { facing: "left" | "right"; main: string | null; off: string | null }>();
 
   constructor(seed: number) {
-    this.worlds = {
-      overworld: new World(seed, "overworld"),
-      nether: new World(seed, "nether"),
-    };
+    for (const dim of allDimensionIds()) {
+      this.worlds.set(dim, new World(seed, dim));
+      this.portals.set(dim, new Map());
+      this.liquidActive.set(dim, new Set());
+    }
     this.rngState = { s: seed >>> 0 };
     this.rng = () => rngNext(this.rngState);
   }
@@ -229,23 +263,17 @@ export class Simulation {
       blockPalette[def.id] = def.name;
     }
     return {
-      version: 5,
+      version: 6,
       blockPalette,
       seed: this.world.seed,
       tickCount: this.tickCount,
       timeOfDay: this.timeOfDay,
       rng: this.rngState.s,
       nextId: this.nextId,
-      worlds: {
-        overworld: this.worlds.overworld.serializeChunks(),
-        nether: this.worlds.nether.serializeChunks(),
-      },
+      worlds: [...this.worlds.entries()].map(([dim, world]) => ({ dim, chunks: world.serializeChunks() })),
       furnaces: [...this.furnaces.values()].map((f) => structuredClone(f)),
       chests: [...this.chests.values()].map((c) => structuredClone(c)),
-      portals: {
-        overworld: [...this.portals.overworld.values()],
-        nether: [...this.portals.nether.values()],
-      },
+      portals: [...this.portals.entries()].map(([dim, positions]) => ({ dim, positions: [...positions.values()] })),
       // Players live in `entities` too, but are saved separately below.
       entities: [...this.entities.values()].filter((e) => !isPlayerEntity(e)).map((e) => structuredClone(e)),
       // Both connected and previously saved players, by name.
@@ -274,8 +302,11 @@ export class Simulation {
     // than on the raw run arrays here - those alternate id/count, and
     // remapping every element would corrupt the counts too.
     const remap = buildBlockRemap(save.blockPalette);
-    for (const dim of ["overworld", "nether"] as const) {
-      sim.worlds[dim].loadChunks(save.worlds[dim], remap);
+    // Every registered dimension's chunks/portals, whether it's already
+    // in this run's registry or not - a dimension no longer registered
+    // (a removed mod) is simply skipped below, not an error.
+    for (const { dim, chunks } of normalizeWorldsField(save.worlds)) {
+      sim.worlds.get(dim)?.loadChunks(chunks, remap);
     }
     for (const f of save.furnaces) {
       // Saves from before per-block furnace speed lack the field.
@@ -284,9 +315,11 @@ export class Simulation {
     for (const c of save.chests ?? []) {
       sim.chests.set(furnaceKey(c.dimension, c.x, c.y), structuredClone(c));
     }
-    for (const dim of ["overworld", "nether"] as const) {
-      for (const pos of save.portals[dim]) {
-        sim.portals[dim].set(`${pos.x},${pos.y}`, { ...pos });
+    for (const { dim, positions } of normalizePortalsField(save.portals)) {
+      const portals = sim.portals.get(dim);
+      if (!portals) continue;
+      for (const pos of positions) {
+        portals.set(`${pos.x},${pos.y}`, { ...pos });
       }
     }
     for (const e of save.entities) {
@@ -312,11 +345,21 @@ export class Simulation {
 
   /** The overworld (kept for compatibility; use worldOf for others). */
   get world(): World {
-    return this.worlds.overworld;
+    return this.worldOf("overworld");
   }
 
   worldOf(dimension: Dimension): World {
-    return this.worlds[dimension];
+    const world = this.worlds.get(dimension);
+    if (!world) throw new Error(`unknown dimension "${dimension}"`);
+    return world;
+  }
+
+  /** Like worldOf, for the per-dimension known-portal-position index -
+   * see the `portals` field's doc comment. */
+  portalsOf(dimension: Dimension): Map<string, { x: number; y: number }> {
+    const portals = this.portals.get(dimension);
+    if (!portals) throw new Error(`unknown dimension "${dimension}"`);
+    return portals;
   }
 
   /** Drops chunks that have gone unused for CHUNK_IDLE_EVICT_TICKS and
@@ -329,8 +372,8 @@ export class Simulation {
    * host-side logging. */
   evictIdleChunks(): number {
     let evicted = 0;
-    for (const dimension of ["overworld", "nether"] as const) {
-      evicted += this.worldOf(dimension).evictIdle(CHUNK_IDLE_EVICT_TICKS);
+    for (const world of this.worlds.values()) {
+      evicted += world.evictIdle(CHUNK_IDLE_EVICT_TICKS);
     }
     return evicted;
   }
@@ -344,8 +387,8 @@ export class Simulation {
 
   tick(commands: readonly PlayerCommand[]): OutboundEvent[] {
     const out: OutboundEvent[] = [];
-    for (const dimension of ["overworld", "nether"] as const) {
-      this.worldOf(dimension).setCurrentTick(this.tickCount);
+    for (const world of this.worlds.values()) {
+      world.setCurrentTick(this.tickCount);
     }
     for (const pc of commands) {
       this.apply(pc, out);
@@ -457,7 +500,7 @@ export class Simulation {
       [x, y + 1],
     ] as const) {
       if (blockDef(world.getBlockGenerating(nx, ny)).liquid) {
-        this.liquidActive[dimension].add(`${nx},${ny}`);
+        this.liquidActive.get(dimension)?.add(`${nx},${ny}`);
       }
     }
   }
@@ -473,8 +516,7 @@ export class Simulation {
     // No liquid kind is due this tick (water every 3, lava every 10):
     // skip the scan entirely, active cells just stay queued.
     if (this.tickCount % 3 !== 0 && this.tickCount % 10 !== 0) return;
-    for (const dimension of ["overworld", "nether"] as const) {
-      const active = this.liquidActive[dimension];
+    for (const [dimension, active] of this.liquidActive) {
       if (active.size === 0) continue;
       const world = this.worldOf(dimension);
 
@@ -1257,7 +1299,7 @@ export class Simulation {
 
     // Reuse a known portal nearby, otherwise build one.
     let arrival: { x: number; y: number } | null = null;
-    for (const pos of this.portals[targetDim].values()) {
+    for (const pos of this.portalsOf(targetDim).values()) {
       if (Math.abs(pos.x - xt) <= 16 && (!arrival || Math.abs(pos.x - xt) < Math.abs(arrival.x - xt))) {
         arrival = pos;
       }
@@ -1285,7 +1327,7 @@ export class Simulation {
         out.push({ event: { type: "block_changed", dim: targetDim, x: c.x, y: c.y, block: c.block } });
       }
       arrival = { x: xt, y: by };
-      this.portals[targetDim].set(`${xt},${by}`, arrival);
+      this.portalsOf(targetDim).set(`${xt},${by}`, arrival);
     }
 
     p.dimension = targetDim;

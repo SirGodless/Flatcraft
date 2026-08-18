@@ -3,6 +3,7 @@ import { fbm2, hash01, smoothstep01, valueNoise1, valueNoise2 } from "../math/no
 import { createRng, hashSeed } from "../math/rng.js";
 import { BlockId } from "./block.js";
 import { Chunk } from "./chunk.js";
+import { registerDimensionGenerator } from "./dimension.js";
 
 /**
  * Overworld generation: biome-shaped heightmap terrain, lakes at sea level,
@@ -321,3 +322,8 @@ export function generateChunk(seed: number, cx: number, cy: number): Chunk {
   stampTrees(seed, chunk);
   return chunk;
 }
+
+// Registered under data/dimensions/overworld.json's "generator" id - see
+// world/dimension.ts for why generation is referenced by id rather than
+// the overworld dimension calling this function directly.
+registerDimensionGenerator("flatcraft:overworld", generateChunk);

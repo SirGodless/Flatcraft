@@ -95,7 +95,7 @@ describe("portals", () => {
     sim.tick([{ player, command: { type: "place_block", x: bx, y: by - 1 } }]);
     expect(sim.world.getBlock(bx, by)).toBe(BlockId.NetherPortal);
     expect(sim.world.getBlock(bx + 1, by - 2)).toBe(BlockId.NetherPortal);
-    expect(sim.portals.overworld.size).toBe(1);
+    expect(sim.portalsOf("overworld").size).toBe(1);
   });
 
   it("rejects lighting without a frame", () => {
@@ -128,8 +128,8 @@ describe("portals", () => {
     }
     expect(switched).toBe(true);
     expect(state.dimension).toBe("nether");
-    expect(sim.portals.nether.size).toBe(1);
-    const netherPortal = [...sim.portals.nether.values()][0]!;
+    expect(sim.portalsOf("nether").size).toBe(1);
+    const netherPortal = [...sim.portalsOf("nether").values()][0]!;
     // Arrived at 1:8 scaled coordinates, standing beside a fresh portal.
     expect(Math.abs(netherPortal.x - Math.round((bx + 0.5) / 8))).toBeLessThanOrEqual(2);
     expect(state.x).toBeCloseTo(netherPortal.x - 2.5);
@@ -155,7 +155,7 @@ describe("portals", () => {
     expect(returned).toBe(true);
     expect(state.dimension).toBe("overworld");
     // Reuses the original portal instead of building a second one.
-    expect(sim.portals.overworld.size).toBe(1);
+    expect(sim.portalsOf("overworld").size).toBe(1);
   });
 
   it("keeps block edits in each dimension separate", () => {

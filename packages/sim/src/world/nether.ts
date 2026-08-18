@@ -3,6 +3,7 @@ import { fbm2, hash01 } from "../math/noise.js";
 import { hashSeed } from "../math/rng.js";
 import { BlockId } from "./block.js";
 import { Chunk } from "./chunk.js";
+import { registerDimensionGenerator } from "./dimension.js";
 
 /**
  * Nether generation: a bedrock-capped slab of netherrack with huge
@@ -56,3 +57,7 @@ export function generateNetherChunk(seed: number, cx: number, cy: number): Chunk
   }
   return chunk;
 }
+
+// Registered under data/dimensions/nether.json's "generator" id - see
+// world/dimension.ts.
+registerDimensionGenerator("flatcraft:nether", generateNetherChunk);

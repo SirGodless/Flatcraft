@@ -124,7 +124,7 @@ registerMultiblockHandler("flatcraft:nether_portal", {
     for (const change of convertFrame(world, interior)) {
       broadcast({ type: "block_changed", dim: dimension, x: change.x, y: change.y, block: change.block });
     }
-    sim.portals[dimension].set(`${interior.left},${interior.bottom}`, { x: interior.left, y: interior.bottom });
+    sim.portalsOf(dimension).set(`${interior.left},${interior.bottom}`, { x: interior.left, y: interior.bottom });
     return true;
   },
 });

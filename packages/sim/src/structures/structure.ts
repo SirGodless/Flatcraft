@@ -75,8 +75,8 @@ function stripNs(raw: string): string {
 }
 
 export function parseStructure(id: string, json: StructureJson): Structure {
-  if (json.dimension !== "overworld" && json.dimension !== "nether") {
-    throw new Error(`structure ${id}: unknown dimension "${json.dimension}"`);
+  if (typeof json.dimension !== "string" || json.dimension.length === 0) {
+    throw new Error(`structure ${id}: "dimension" is required`);
   }
   if (json.placement.type !== "surface" && json.placement.type !== "underground") {
     throw new Error(`structure ${id}: unknown placement type "${json.placement.type}"`);
