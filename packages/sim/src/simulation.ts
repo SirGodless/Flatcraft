@@ -95,7 +95,7 @@ import { placementsNear, structureLootAt } from "./structures/place.js";
 import { TRADES } from "./data/trades/index.js";
 import { DAY_LENGTH, daylightFactor, isNight } from "./time.js";
 import { allBlocks, blockByName, blockDef, blockDrops, BlockId, liquidBlock } from "./world/block.js";
-import { Biome, biomeAt, findSpawnX, surfaceHeight } from "./world/gen.js";
+import { biomeAt, findSpawnX, surfaceHeight } from "./world/gen.js";
 import { LAVA_LEVEL } from "./world/nether.js";
 import { allDimensionIds } from "./world/dimension.js";
 import { World, type Dimension } from "./world/world.js";
@@ -1047,7 +1047,7 @@ export class Simulation {
       }
       if (world.getBlockGenerating(x, surface) !== BlockId.Grass) return;
       const biome = biomeAt(world.seed, x);
-      if (biome !== Biome.Plains && biome !== Biome.Forest) return;
+      if (biome !== "plains" && biome !== "forest") return;
       this.spawnMob(pickMob(spawnPool("grass_day")), x + 0.5, surface, out);
     } else {
       const yStart = surface + 6 + Math.floor(this.rng() * 40);

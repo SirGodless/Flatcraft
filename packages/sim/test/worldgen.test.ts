@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   BEDROCK_Y,
-  Biome,
   biomeAt,
   BlockId,
   CHUNK_HEIGHT,
@@ -97,7 +96,7 @@ describe("world generation", () => {
     // Find a forest tree on dry land.
     let tree = null;
     for (let x = 0; x < 4096 && !tree; x++) {
-      if (biomeAt(SEED, x) === Biome.Forest) {
+      if (biomeAt(SEED, x) === "forest") {
         tree = treeAt(SEED, x);
       }
     }
@@ -122,11 +121,11 @@ describe("world generation", () => {
       const surface = surfaceHeight(SEED, x);
       if (surface > SEA_LEVEL - 1) continue; // skip beaches/underwater
       const biome = biomeAt(SEED, x);
-      if (!desertChecked && biome === Biome.Desert) {
+      if (!desertChecked && biome === "desert") {
         expect(world.getBlockGenerating(x, surface)).toBe(BlockId.Sand);
         desertChecked = true;
       }
-      if (!snowChecked && biome === Biome.Mountains && surface <= -14) {
+      if (!snowChecked && biome === "mountains" && surface <= -14) {
         expect(world.getBlockGenerating(x, surface)).toBe(BlockId.Snow);
         snowChecked = true;
       }

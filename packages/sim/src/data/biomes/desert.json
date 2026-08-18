@@ -1,0 +1,11 @@
+{
+  "id": "desert",
+  "noise_max": 0.22,
+  "layers": [
+    { "to_depth": 3, "block": "sand" },
+    { "to_depth": 7, "block": "sandstone" }
+  ],
+  "floor": "stone",
+  "wall_layer": { "to_depth": 7, "block": "sandstone" },
+  "tree_chance": 0
+}

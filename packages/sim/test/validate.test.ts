@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  allBiomeIds,
   allDimensionIds,
+  parseBiome,
   parseDimension,
   parseMultiblock,
+  registerBiome,
   registerCommandHandler,
   registerDimension,
   registerMultiblock,
   validateAllContent,
+  validateBiomeReferences,
   validateCommandHandlers,
   validateDimensionGenerators,
   validateMultiblockHandlers,
@@ -82,5 +86,48 @@ describe("dimension registry", () => {
     expect(() => registerDimension(parseDimension("overworld", { id: "overworld", generator: "flatcraft:overworld" }))).toThrow(
       /already registered/,
     );
+  });
+});
+
+describe("biome registry", () => {
+  it("the built-in biomes are registered, with every wood/vein reference resolving", () => {
+    expect(allBiomeIds()).toEqual(expect.arrayContaining(["desert", "plains", "forest", "mountains"]));
+    expect(validateBiomeReferences()).toEqual([]);
+  });
+
+  it("reports a biome referencing an unregistered wood or vein", () => {
+    registerBiome(
+      parseBiome("test_validate_biome_missing", {
+        id: "test_validate_biome_missing",
+        noise_max: 0.01,
+        layers: [],
+        floor: "stone",
+        tree_chance: 0.1,
+        tree_woods: [{ wood: "nobody_registered_this_wood", weight: 1 }],
+        extra_veins: ["nobody_registered_this_vein"],
+      }),
+    );
+    const problems = validateBiomeReferences();
+    expect(problems).toContain('biome "test_validate_biome_missing" references unknown wood "nobody_registered_this_wood"');
+    expect(problems).toContain('biome "test_validate_biome_missing" references unknown vein "nobody_registered_this_vein"');
+    expect(validateAllContent().length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("rejects registering a biome id that's already taken", () => {
+    expect(() =>
+      registerBiome(parseBiome("plains", { id: "plains", noise_max: 0.55, layers: [], floor: "stone", tree_chance: 0 })),
+    ).toThrow(/already registered/);
+  });
+
+  it("rejects a biome layer/floor/wall/snow block name that doesn't exist", () => {
+    expect(() =>
+      parseBiome("test_validate_biome_badblock", {
+        id: "test_validate_biome_badblock",
+        noise_max: 0.01,
+        layers: [],
+        floor: "not_a_real_block",
+        tree_chance: 0,
+      }),
+    ).toThrow(/unknown floor block/);
   });
 });

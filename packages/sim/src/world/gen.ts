@@ -1,9 +1,13 @@
 import { CHUNK_HEIGHT, CHUNK_WIDTH } from "../constants.js";
+import { GLOBAL_VEIN_IDS } from "../data/veins/index.js";
 import { fbm2, hash01, smoothstep01, valueNoise1, valueNoise2 } from "../math/noise.js";
 import { createRng, hashSeed } from "../math/rng.js";
+import { biomeForNoise, type BiomeDef } from "./biome.js";
 import { BlockId } from "./block.js";
 import { Chunk } from "./chunk.js";
 import { registerDimensionGenerator } from "./dimension.js";
+import { veinDef, type VeinDef } from "./vein.js";
+import { woodDef } from "./wood.js";
 
 /**
  * Overworld generation: biome-shaped heightmap terrain, lakes at sea level,
@@ -15,30 +19,33 @@ import { registerDimensionGenerator } from "./dimension.js";
  *
  * Coordinate convention: y grows downward. The surface sits around y = 0,
  * negative y is sky/mountain tops, positive y is underground.
+ *
+ * What's data (data/biomes/*.json, data/veins/*.json, data/woods/*.json,
+ * see world/biome.ts, world/vein.ts, world/wood.ts) vs what stays code
+ * here: which layers/trees/veins a biome has is data: a mod adds a
+ * biome by dropping a JSON file, no code. The placement algorithm itself
+ * (noise formulas, cave carving, the surface-height amplitude blend)
+ * stays generic engine code that consumes that data - same "data
+ * composes trusted behavior" split as multiblocks/dimensions/commands,
+ * not because it *could* be data too, but because turning noise math
+ * into a JSON DSL would just be a worse programming language.
  */
 
 export const SEA_LEVEL = 6;
 export const BEDROCK_Y = 256;
-const DIRT_DEPTH = 4;
-const SNOW_LINE = -14;
-
-export enum Biome {
-  Desert = 0,
-  Plains = 1,
-  Forest = 2,
-  Mountains = 3,
-}
 
 function biomeNoise(seed: number, x: number): number {
   return valueNoise1(hashSeed(seed, 0xb107e), x, 192);
 }
 
-export function biomeAt(seed: number, x: number): Biome {
-  const b = biomeNoise(seed, x);
-  if (b < 0.22) return Biome.Desert;
-  if (b < 0.55) return Biome.Plains;
-  if (b < 0.8) return Biome.Forest;
-  return Biome.Mountains;
+function biomeDefAt(seed: number, x: number): BiomeDef {
+  return biomeForNoise(biomeNoise(seed, x));
+}
+
+/** The registered biome id at column x - e.g. for structure placement
+ * rules (structures/place.ts) or mob spawn gating (simulation.ts). */
+export function biomeAt(seed: number, x: number): string {
+  return biomeDefAt(seed, x).id;
 }
 
 /** Surface height (the y of the topmost solid block) at column x. */
@@ -46,6 +53,9 @@ export function surfaceHeight(seed: number, x: number): number {
   const b = biomeNoise(seed, x);
   // Blend amplitude by the same noise that picks biomes, so terrain
   // character changes smoothly instead of stepping at biome borders.
+  // This blend is deliberately generic rather than per-biome data - it's
+  // about smoothing the transition *between* biomes, not a property of
+  // any one of them.
   const mountain = smoothstep01((b - 0.78) / 0.22);
   const flat = smoothstep01((0.26 - b) / 0.26);
   const coarse = (valueNoise1(seed, x, 64) - 0.5) * 2;
@@ -67,7 +77,7 @@ export function findSpawnX(seed: number): number {
 interface ColumnInfo {
   x: number;
   surface: number;
-  biome: Biome;
+  biome: BiomeDef;
 }
 
 /** Patchy clay pockets in the sand layer right at the waterline. */
@@ -89,18 +99,11 @@ function terrainBlock(seed: number, y: number, col: ColumnInfo): BlockId {
     if (depth <= 5) return BlockId.Sandstone;
     return BlockId.Stone;
   }
-  if (biome === Biome.Desert) {
-    if (depth <= 3) return BlockId.Sand;
-    if (depth <= 7) return BlockId.Sandstone;
-    return BlockId.Stone;
+  if (biome.snow && depth === 0 && surface <= biome.snow.atOrBelowSurface) return biome.snow.block;
+  for (const layer of biome.layers) {
+    if (depth <= layer.toDepth) return layer.block;
   }
-  if (biome === Biome.Mountains) {
-    if (depth === 0 && surface <= SNOW_LINE) return BlockId.Snow;
-    return BlockId.Stone;
-  }
-  if (depth === 0) return BlockId.Grass;
-  if (depth <= DIRT_DEPTH) return BlockId.Dirt;
-  return BlockId.Stone;
+  return biome.floor;
 }
 
 /** Spaghetti tunnels (ridged noise) plus deep caverns.
@@ -129,40 +132,7 @@ function carveCaves(seed: number, chunk: Chunk, cols: readonly ColumnInfo[]): vo
   }
 }
 
-interface VeinSpec {
-  block: BlockId;
-  attempts: number;
-  sizeMin: number;
-  sizeMax: number;
-  minY: number;
-  maxY: number;
-}
-
-const VEINS: readonly VeinSpec[] = [
-  { block: BlockId.Obsidian, attempts: 2, sizeMin: 3, sizeMax: 6, minY: 236, maxY: 255 },
-  // Rarer than gravel: small clay pockets buried away from any shore.
-  { block: BlockId.Clay, attempts: 1, sizeMin: 4, sizeMax: 8, minY: 4, maxY: 120 },
-  { block: BlockId.Gravel, attempts: 3, sizeMin: 6, sizeMax: 12, minY: 12, maxY: 255 },
-  { block: BlockId.CoalOre, attempts: 5, sizeMin: 4, sizeMax: 10, minY: 2, maxY: 255 },
-  { block: BlockId.CopperOre, attempts: 3, sizeMin: 3, sizeMax: 7, minY: 8, maxY: 140 },
-  { block: BlockId.IronOre, attempts: 4, sizeMin: 3, sizeMax: 6, minY: 24, maxY: 255 },
-  { block: BlockId.LapisOre, attempts: 1, sizeMin: 2, sizeMax: 5, minY: 48, maxY: 160 },
-  { block: BlockId.GoldOre, attempts: 2, sizeMin: 2, sizeMax: 5, minY: 80, maxY: 255 },
-  { block: BlockId.RedstoneOre, attempts: 2, sizeMin: 3, sizeMax: 6, minY: 176, maxY: 255 },
-  { block: BlockId.DiamondOre, attempts: 1, sizeMin: 2, sizeMax: 5, minY: 192, maxY: 255 },
-];
-
-/** Emerald appears only under mountain biomes, in small veins. */
-const EMERALD: VeinSpec = {
-  block: BlockId.EmeraldOre,
-  attempts: 2,
-  sizeMin: 1,
-  sizeMax: 2,
-  minY: 8,
-  maxY: 96,
-};
-
-function placeVeins(chunk: Chunk, rng: () => number, spec: VeinSpec): void {
+function placeVeins(chunk: Chunk, rng: () => number, spec: VeinDef): void {
   for (let a = 0; a < spec.attempts; a++) {
     // Always draw the same number of samples so the rng stream stays
     // aligned regardless of whether this chunk intersects the y-range.
@@ -190,43 +160,40 @@ function placeVeins(chunk: Chunk, rng: () => number, spec: VeinSpec): void {
 
 function placeOres(seed: number, chunk: Chunk): void {
   const rng = createRng(hashSeed(seed, chunk.cx, chunk.cy, 0x03e5));
-  for (const spec of VEINS) {
-    placeVeins(chunk, rng, spec);
+  // Placement order (global veins in their registered order, then this
+  // column's biome's own extra veins) is part of world generation
+  // determinism - each vein consumes a fixed slice of this rng stream,
+  // see placeVeins - so it must stay stable for existing worlds to keep
+  // generating identically.
+  for (const id of GLOBAL_VEIN_IDS) {
+    placeVeins(chunk, rng, veinDef(id)!);
   }
   const centerX = chunk.cx * CHUNK_WIDTH + CHUNK_WIDTH / 2;
-  if (biomeAt(seed, centerX) === Biome.Mountains) {
-    placeVeins(chunk, rng, EMERALD);
+  for (const veinId of biomeDefAt(seed, centerX).extraVeins) {
+    placeVeins(chunk, rng, veinDef(veinId)!);
   }
 }
 
 const TREE_HASH = 0x7ee;
 const TREE_CANOPY_RADIUS = 2;
 
-function treeChance(biome: Biome): number {
-  if (biome === Biome.Forest) return 0.16;
-  if (biome === Biome.Plains) return 0.04;
-  if (biome === Biome.Mountains) return 0.05;
-  return 0;
+/** Which wood grows at this column, weighted-picked from the biome's
+ * tree_woods list in order - matches the pre-data-driven behavior
+ * exactly when a biome has one dominant wood plus optional minority
+ * woods before it (see data/biomes/forest.json). */
+function treeWood(seed: number, x: number, biome: BiomeDef): string {
+  const roll = hash01(seed, x, 0x7ee3);
+  let cumulative = 0;
+  for (const tw of biome.treeWoods) {
+    cumulative += tw.weight;
+    if (roll < cumulative) return tw.wood;
+  }
+  return biome.treeWoods[biome.treeWoods.length - 1]!.wood;
 }
-
-export type TreeWood = "oak" | "birch" | "spruce";
-
-/** Which wood grows at this column: spruce on mountains, forests mix
- * oak and birch, plains grow oak. */
-function treeWood(seed: number, x: number, biome: Biome): TreeWood {
-  if (biome === Biome.Mountains) return "spruce";
-  if (biome === Biome.Forest && hash01(seed, x, 0x7ee3) < 0.4) return "birch";
-  return "oak";
-}
-
-const TREE_BLOCKS: Record<TreeWood, { log: BlockId; leaves: BlockId }> = {
-  oak: { log: BlockId.OakLog, leaves: BlockId.OakLeaves },
-  birch: { log: BlockId.BirchLog, leaves: BlockId.BirchLeaves },
-  spruce: { log: BlockId.SpruceLog, leaves: BlockId.SpruceLeaves },
-};
 
 function hasTreeSeed(seed: number, x: number): boolean {
-  const p = treeChance(biomeAt(seed, x));
+  const biome = biomeDefAt(seed, x);
+  const p = biome.treeChance;
   if (p === 0) return false;
   if (surfaceHeight(seed, x) >= SEA_LEVEL - 1) return false; // no beach/underwater trees
   return hash01(seed, x, TREE_HASH) < p;
@@ -237,7 +204,8 @@ export interface Tree {
   surface: number;
   /** Total height above the surface, trunk plus canopy. */
   height: number;
-  wood: TreeWood;
+  /** Wood id, see data/woods/*.json. */
+  wood: string;
 }
 
 /** The tree rooted at column x, if any. Column-deterministic. */
@@ -245,7 +213,7 @@ export function treeAt(seed: number, x: number): Tree | null {
   if (!hasTreeSeed(seed, x)) return null;
   // Keep at least two columns between trunks (left neighbor wins).
   if (hasTreeSeed(seed, x - 1) || hasTreeSeed(seed, x - 2)) return null;
-  const biome = biomeAt(seed, x);
+  const biome = biomeDefAt(seed, x);
   const wood = treeWood(seed, x, biome);
   // Spruces grow a bit taller.
   const extra = wood === "spruce" ? 2 : 0;
@@ -267,7 +235,7 @@ function stampTrees(seed: number, chunk: Chunk): void {
   for (let x = x0 - TREE_CANOPY_RADIUS; x < x0 + CHUNK_WIDTH + TREE_CANOPY_RADIUS; x++) {
     const tree = treeAt(seed, x);
     if (!tree) continue;
-    const { log, leaves } = TREE_BLOCKS[tree.wood];
+    const { log, leaves } = woodDef(tree.wood)!;
     const topY = tree.surface - tree.height;
     for (let y = tree.surface - 1; y > topY; y--) {
       stampIfAir(chunk, x, y, log);
@@ -295,7 +263,7 @@ export function generateChunk(seed: number, cx: number, cy: number): Chunk {
   const cols: ColumnInfo[] = [];
   for (let lx = 0; lx < CHUNK_WIDTH; lx++) {
     const x = cx * CHUNK_WIDTH + lx;
-    cols.push({ x, surface: surfaceHeight(seed, x), biome: biomeAt(seed, x) });
+    cols.push({ x, surface: surfaceHeight(seed, x), biome: biomeDefAt(seed, x) });
   }
 
   for (let lx = 0; lx < CHUNK_WIDTH; lx++) {
@@ -307,11 +275,7 @@ export function generateChunk(seed: number, cx: number, cy: number): Chunk {
       if (y >= col.surface && y < BEDROCK_Y) {
         const depth = y - col.surface;
         const wall =
-          col.biome === Biome.Desert && depth <= 7
-            ? BlockId.Sandstone
-            : depth <= DIRT_DEPTH && col.biome !== Biome.Mountains
-              ? BlockId.Dirt
-              : BlockId.Stone;
+          col.biome.wallLayer && depth <= col.biome.wallLayer.toDepth ? col.biome.wallLayer.block : BlockId.Stone;
         chunk.setWall(lx, ly, wall);
       }
     }

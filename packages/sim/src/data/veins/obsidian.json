@@ -1,0 +1,9 @@
+{
+  "id": "obsidian",
+  "block": "obsidian",
+  "attempts": 2,
+  "size_min": 3,
+  "size_max": 6,
+  "min_y": 236,
+  "max_y": 255
+}

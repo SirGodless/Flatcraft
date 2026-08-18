@@ -1,0 +1,10 @@
+{
+  "id": "mountains",
+  "noise_max": 1,
+  "layers": [],
+  "floor": "stone",
+  "snow": { "at_or_below_surface": -14, "block": "snow" },
+  "tree_chance": 0.05,
+  "tree_woods": [{ "wood": "spruce", "weight": 1 }],
+  "extra_veins": ["emerald_ore"]
+}

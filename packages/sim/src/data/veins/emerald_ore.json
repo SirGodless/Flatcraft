@@ -1,0 +1,9 @@
+{
+  "id": "emerald_ore",
+  "block": "emerald_ore",
+  "attempts": 2,
+  "size_min": 1,
+  "size_max": 2,
+  "min_y": 8,
+  "max_y": 96
+}

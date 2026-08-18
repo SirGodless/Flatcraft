@@ -1,0 +1,9 @@
+{
+  "id": "gold_ore",
+  "block": "gold_ore",
+  "attempts": 2,
+  "size_min": 2,
+  "size_max": 5,
+  "min_y": 80,
+  "max_y": 255
+}

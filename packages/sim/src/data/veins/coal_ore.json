@@ -1,0 +1,9 @@
+{
+  "id": "coal_ore",
+  "block": "coal_ore",
+  "attempts": 5,
+  "size_min": 4,
+  "size_max": 10,
+  "min_y": 2,
+  "max_y": 255
+}
