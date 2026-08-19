@@ -5,9 +5,10 @@ import { createRng, hashSeed } from "../math/rng.js";
 import { biomeForNoise, type BiomeDef } from "./biome.js";
 import { BlockId } from "./block.js";
 import { Chunk } from "./chunk.js";
-import { registerDimensionGenerator } from "./dimension.js";
+import { registerArrivalGenerator, registerDimensionGenerator, registerSpawnPointGenerator } from "./dimension.js";
 import { veinDef, type VeinDef } from "./vein.js";
 import { woodDef } from "./wood.js";
+import type { World } from "./world.js";
 
 /**
  * Overworld generation: biome-shaped heightmap terrain, lakes at sea level,
@@ -287,7 +288,19 @@ export function generateChunk(seed: number, cx: number, cy: number): Chunk {
   return chunk;
 }
 
-// Registered under data/dimensions/overworld.json's "generator" id - see
-// world/dimension.ts for why generation is referenced by id rather than
-// the overworld dimension calling this function directly.
+function overworldArrival(world: World, xt: number): number {
+  return surfaceHeight(world.seed, xt) - 1;
+}
+
+function overworldSpawnPoint(seed: number): { x: number; y: number } {
+  const spawnX = findSpawnX(seed);
+  return { x: spawnX + 0.5, y: surfaceHeight(seed, spawnX) };
+}
+
+// Registered under data/dimensions/overworld.json's "generator"/
+// "arrival"/"spawn_point" ids - see world/dimension.ts for why
+// generation is referenced by id rather than the overworld dimension
+// calling this function directly.
 registerDimensionGenerator("flatcraft:overworld", generateChunk);
+registerArrivalGenerator("flatcraft:overworld_arrival", overworldArrival);
+registerSpawnPointGenerator("flatcraft:overworld_spawn_point", overworldSpawnPoint);

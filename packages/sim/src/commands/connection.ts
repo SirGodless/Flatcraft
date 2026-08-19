@@ -4,7 +4,7 @@ import { isItemEntity, isPlayerEntity, type PlayerEntity } from "../entities.js"
 import { PLAYER_MAX_HUNGER } from "../hunger.js";
 import { createInventory, type ItemStack } from "../inventory.js";
 import { DEFAULT_PLAYER_COLOR, MAX_AIR_TICKS, sanitizeColor } from "../simulation.js";
-import { findSpawnX, surfaceHeight } from "../world/gen.js";
+import { defaultDimensionId, generateDefaultSpawnPoint } from "../world/dimension.js";
 import { registerCommandHandler } from "./registry.js";
 
 registerCommandHandler("join", {
@@ -86,15 +86,15 @@ registerCommandHandler("join", {
       }
       return;
     }
-    const spawnX = findSpawnX(sim.world.seed);
-    const x = spawnX + 0.5;
-    const y = surfaceHeight(sim.world.seed, spawnX);
+    const defaultDim = defaultDimensionId();
+    const point = generateDefaultSpawnPoint(sim.worldOf(defaultDim).seed);
+    const { x, y } = point;
     const state: PlayerEntity = {
       id: player,
       kind: "player",
       name: command.name,
       color: chosenColor ?? DEFAULT_PLAYER_COLOR,
-      dimension: "overworld",
+      dimension: defaultDim,
       x,
       y,
       vx: 0,
@@ -133,7 +133,7 @@ registerCommandHandler("join", {
       name: state.name,
       x,
       y,
-      dim: "overworld",
+      dim: defaultDim,
       color: state.color,
       facing: state.facing,
       main: null,

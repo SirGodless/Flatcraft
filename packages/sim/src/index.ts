@@ -32,6 +32,8 @@ export * from "./simulation.js";
 export * from "./math/noise.js";
 export * from "./mining.js";
 export * from "./mobs.js";
+export * from "./spawning.js";
+export * from "./spawns.js";
 export * from "./math/rng.js";
 export * from "./multiblock.js";
 export * from "./data/multiblocks/index.js";

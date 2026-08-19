@@ -5,6 +5,8 @@ import {
   CHUNK_HEIGHT,
   CHUNK_WIDTH,
   daylightFactor,
+  defaultDimensionId,
+  dimensionDef,
   itemDef,
   mobDef,
   PLAYER_HEIGHT,
@@ -135,6 +137,11 @@ interface BlockOverlayView {
 const ANIM_PRIORITY: Record<string, number> = { idle: 0, walk: 0, attack: 1, hurt: 2, death: 3 };
 const ANIM_ONE_SHOT = new Set(["attack", "hurt", "death"]);
 
+/** "#2a0f0f" -> 0x2a0f0f, for a DimensionSky's CSS hex colors. */
+function hexToNumber(hex: string): number {
+  return Number.parseInt(hex.replace("#", ""), 16);
+}
+
 /**
  * Rendering layer. Consumes SimEvents and draws; it never mutates game
  * state. Owns the camera (pure view state) and the client-side world mirror.
@@ -218,7 +225,7 @@ export class Renderer {
   private darkness!: Graphics;
   private timeOfDay = 0;
   /** The dimension the local player is in; everything else is hidden. */
-  private localDim = "overworld";
+  private localDim = defaultDimensionId();
   private readonly playerDims = new Map<PlayerId, string>();
   /** Called when the local player switches dimension (world reset). */
   onDimensionChanged: (() => void) | null = null;
@@ -1173,15 +1180,18 @@ export class Renderer {
     this.reconcileBlockOverlays(now);
 
     // Advance local time between server syncs (1 tick per 50 ms) and
-    // shade the world: sky color blends toward night, plus a veil.
-    // The nether has no sky - fixed gloomy red instead.
+    // shade the world: a "cycle" dimension's sky color blends toward
+    // night plus a darkness veil; a "fixed" one (see world/dimension.ts's
+    // DimensionSky - the nether has no sky) renders a constant look
+    // regardless of time of day.
     this.timeOfDay += dtMs / TICK_MS;
-    if (this.localDim === "nether") {
-      this.app.renderer.background.color = 0x2a0f0f;
+    const sky = dimensionDef(this.localDim)?.sky;
+    if (sky?.type === "fixed") {
+      this.app.renderer.background.color = hexToNumber(sky.background ?? "#000000");
       this.darkness
         .clear()
         .rect(0, 0, this.screenWidth, this.screenHeight)
-        .fill({ color: 0x160606, alpha: 0.25 });
+        .fill({ color: hexToNumber(sky.veilColor ?? "#000000"), alpha: sky.veilAlpha ?? 0 });
     } else {
       const light = daylightFactor(this.timeOfDay);
       const lerp = (a: number, b: number): number => Math.round(a + (b - a) * light);

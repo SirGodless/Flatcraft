@@ -30,7 +30,7 @@ import {
   type MobKind,
   type PlayerEntity,
 } from "./entities.js";
-import { mobDef, mobsNearStructure, sizeOf, spawnPool, type ExplodesDef } from "./mobs.js";
+import { mobDef, sizeOf, type ExplodesDef } from "./mobs.js";
 import {
   attackDamage,
   attackKnockback,
@@ -88,16 +88,22 @@ import {
   WALK_SPEED,
 } from "./physics.js";
 import { tryActivateMultiblock } from "./multiblock.js";
-import { buildPortal, nearPortal, NETHER_SCALE, PORTAL_COOLDOWN, PORTAL_TICKS } from "./portal.js";
+import { buildPortal, nearPortal, PORTAL_COOLDOWN, PORTAL_TICKS } from "./portal.js";
 import type { SimSave } from "./save.js";
 import { clickStack } from "./slots.js";
-import { placementsNear, structureLootAt } from "./structures/place.js";
+import { structureLootAt } from "./structures/place.js";
+import { spawnGenerator } from "./spawning.js";
 import { TRADES } from "./data/trades/index.js";
-import { DAY_LENGTH, daylightFactor, isNight } from "./time.js";
+import { DAY_LENGTH, daylightFactor } from "./time.js";
 import { allBlocks, blockByName, blockDef, blockDrops, BlockId, liquidBlock } from "./world/block.js";
-import { biomeAt, findSpawnX, surfaceHeight } from "./world/gen.js";
-import { LAVA_LEVEL } from "./world/nether.js";
-import { allDimensionIds } from "./world/dimension.js";
+import { surfaceHeight } from "./world/gen.js";
+import {
+  allDimensionIds,
+  defaultDimensionId,
+  dimensionDef,
+  generateArrival,
+  generateDefaultSpawnPoint,
+} from "./world/dimension.js";
 import { World, type Dimension } from "./world/world.js";
 
 /**
@@ -208,7 +214,7 @@ export class Simulation {
   /** Liquid tiles that may need to flow, per dimension ("x,y"). */
   private readonly liquidActive = new Map<string, Set<string>>();
 
-  private readonly rng: Rng;
+  readonly rng: Rng;
   private readonly rngState: RngState;
   /** Single allocator for both player and entity ids - they share one
    * id space, so a player and a mob can never collide. */
@@ -878,10 +884,10 @@ export class Simulation {
 
         const mob = mobDef(entity.kind);
 
-        // Daylight burning for undead (not in the nether).
+        // Daylight burning for undead, only where daylight exists at all.
         if (
           mob?.burnsInDaylight &&
-          entity.dimension === "overworld" &&
+          dimensionDef(entity.dimension)?.hasSky === true &&
           this.tickCount % 40 === 0 &&
           daylightFactor(this.timeOfDay) > 0.5 &&
           entity.y <= surfaceHeight(world.seed, Math.floor(entity.x))
@@ -998,61 +1004,10 @@ export class Simulation {
       return false;
     };
 
-    // Structure-anchored mobs (villagers move into houses): if a
-    // structure with such a mob stands near the player and has no
-    // instance around yet, one appears. Generalizes past just
-    // villagers/houses to whatever a datapack mob declares via
-    // spawn.near_structure.
-    if (anchor.dimension === "overworld" && this.tickCount % 200 === 0) {
-      const pcx = Math.floor(anchor.x / CHUNK_WIDTH);
-      for (let cx = pcx - 2; cx <= pcx + 2; cx++) {
-        for (let cy = -2; cy <= 3; cy++) {
-          for (const placement of placementsNear(world.seed, "overworld", cx, cy)) {
-            const residents = mobsNearStructure(placement.structure.id);
-            if (residents.length === 0) continue;
-            const homeX = placement.originX + 3.5;
-            const homeY = placement.originY + 4;
-            let occupied = false;
-            for (const e of this.entities.values()) {
-              if (residents.includes(e.kind) && Math.abs(e.x - homeX) < 20) occupied = true;
-            }
-            if (!occupied) {
-              this.spawnMob(residents[0]!, homeX, homeY, out);
-              return;
-            }
-          }
-        }
-      }
-    }
-
-    if (anchor.dimension === "nether") {
-      const yStart = 10 + Math.floor(this.rng() * 50);
-      spawnInPocket(yStart, yStart + 16, pickMob(spawnPool("nether_pocket")));
-      return;
-    }
-
-    const surface = surfaceHeight(world.seed, x);
-    const night = isNight(this.timeOfDay);
-    const hostiles = spawnPool("hostile_surface");
-    if (this.rng() < 0.5) {
-      if (night) {
-        // At night, hostile mobs rise on the surface instead of animals.
-        const kind = pickMob(hostiles);
-        const feetFree = world.getBlockGenerating(x, surface - 1) === BlockId.Air;
-        const headFree = world.getBlockGenerating(x, surface - 2) === BlockId.Air;
-        if (feetFree && headFree && blockDef(world.getBlockGenerating(x, surface)).solid) {
-          this.spawnMob(kind, x + 0.5, surface, out);
-        }
-        return;
-      }
-      if (world.getBlockGenerating(x, surface) !== BlockId.Grass) return;
-      const biome = biomeAt(world.seed, x);
-      if (biome !== "plains" && biome !== "forest") return;
-      this.spawnMob(pickMob(spawnPool("grass_day")), x + 0.5, surface, out);
-    } else {
-      const yStart = surface + 6 + Math.floor(this.rng() * 40);
-      spawnInPocket(yStart, yStart + 12, pickMob(hostiles));
-    }
+    const generatorId = dimensionDef(anchor.dimension)!.spawns;
+    const generator = spawnGenerator(generatorId);
+    if (!generator) throw new Error(`dimension "${anchor.dimension}" references unknown spawn generator "${generatorId}"`);
+    generator({ sim: this, out, anchor, world, x, pickMob, spawnInPocket });
   }
 
   stepPlayers(out: OutboundEvent[]): void {
@@ -1293,9 +1248,15 @@ export class Simulation {
   }
 
   private teleportThroughPortal(p: PlayerEntity, out: OutboundEvent[]): void {
-    const targetDim: Dimension = p.dimension === "overworld" ? "nether" : "overworld";
+    const portal = dimensionDef(p.dimension)?.portal;
+    // No outgoing portal link registered from here - a dimension without
+    // one just can't be left this way (a modder's own multiblock could
+    // still move players around through the command/multiblock APIs
+    // directly).
+    if (!portal) return;
+    const targetDim: Dimension = portal.to;
     const targetWorld = this.worldOf(targetDim);
-    const xt = Math.round(p.dimension === "overworld" ? p.x / NETHER_SCALE : p.x * NETHER_SCALE);
+    const xt = Math.round(p.x * portal.scale);
 
     // Reuse a known portal nearby, otherwise build one.
     let arrival: { x: number; y: number } | null = null;
@@ -1305,23 +1266,7 @@ export class Simulation {
       }
     }
     if (!arrival) {
-      let by: number;
-      if (targetDim === "nether") {
-        // Find open floor space in the nether band, else carve at y=40.
-        by = 40;
-        for (let y = 10; y < LAVA_LEVEL - 4; y++) {
-          const floorSolid = blockDef(targetWorld.getBlockGenerating(xt, y + 1)).solid;
-          const space =
-            targetWorld.getBlockGenerating(xt, y) === BlockId.Air &&
-            targetWorld.getBlockGenerating(xt, y - 1) === BlockId.Air;
-          if (floorSolid && space) {
-            by = y;
-            break;
-          }
-        }
-      } else {
-        by = surfaceHeight(targetWorld.seed, xt) - 1;
-      }
+      const by = generateArrival(targetDim, targetWorld, xt);
       const changes = buildPortal(targetWorld, xt, by);
       for (const c of changes) {
         out.push({ event: { type: "block_changed", dim: targetDim, x: c.x, y: c.y, block: c.block } });
@@ -1542,10 +1487,11 @@ export class Simulation {
       }
       p.grapple = null;
       const fromDim = p.dimension;
-      const spawnX = findSpawnX(this.world.seed);
-      p.dimension = "overworld";
-      p.x = spawnX + 0.5;
-      p.y = surfaceHeight(this.world.seed, spawnX);
+      const defaultDim = defaultDimensionId();
+      const point = generateDefaultSpawnPoint(this.worldOf(defaultDim).seed);
+      p.dimension = defaultDim;
+      p.x = point.x;
+      p.y = point.y;
       p.vx = 0;
       p.vy = 0;
       p.kbX = 0;
@@ -1559,8 +1505,8 @@ export class Simulation {
       p.portalTicks = 0;
       p.portalCooldown = 0;
       out.push({ to: p.id, event: { type: "player_hunger", player: p.id, hunger: p.hunger, max: PLAYER_MAX_HUNGER } });
-      if (fromDim !== "overworld") {
-        out.push({ event: { type: "player_dimension", player: p.id, dim: "overworld", x: p.x, y: p.y } });
+      if (fromDim !== defaultDim) {
+        out.push({ event: { type: "player_dimension", player: p.id, dim: defaultDim, x: p.x, y: p.y } });
       } else {
         out.push({ event: { type: "player_moved", player: p.id, x: p.x, y: p.y } });
       }

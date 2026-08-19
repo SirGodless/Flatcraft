@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   allBiomeIds,
   allDimensionIds,
+  defaultDimensionId,
   parseBiome,
   parseDimension,
   parseMultiblock,
@@ -12,8 +13,12 @@ import {
   validateAllContent,
   validateBiomeReferences,
   validateCommandHandlers,
+  validateDefaultDimension,
   validateDimensionGenerators,
   validateMultiblockHandlers,
+  validatePortalLinks,
+  validateSpawnGenerators,
+  allDimensions,
 } from "../src/index.js";
 
 /**
@@ -76,16 +81,45 @@ describe("dimension registry", () => {
   });
 
   it("reports a dimension referencing an unregistered generator", () => {
-    registerDimension(parseDimension("test_validate_dim_missing", { id: "test_validate_dim_missing", generator: "nobody_registered_this_generator" }));
+    registerDimension(
+      parseDimension("test_validate_dim_missing", {
+        id: "test_validate_dim_missing",
+        generator: "nobody_registered_this_generator",
+        spawns: "flatcraft:overworld_spawns",
+        arrival: "flatcraft:overworld_arrival",
+        has_sky: true,
+      }),
+    );
     expect(validateDimensionGenerators()).toContain(
       'dimension "test_validate_dim_missing" references unknown generator "nobody_registered_this_generator"',
     );
   });
 
   it("rejects registering a dimension id that's already taken", () => {
-    expect(() => registerDimension(parseDimension("overworld", { id: "overworld", generator: "flatcraft:overworld" }))).toThrow(
-      /already registered/,
-    );
+    expect(() =>
+      registerDimension(
+        parseDimension("overworld", {
+          id: "overworld",
+          generator: "flatcraft:overworld",
+          spawns: "flatcraft:overworld_spawns",
+          arrival: "flatcraft:overworld_arrival",
+          has_sky: true,
+        }),
+      ),
+    ).toThrow(/already registered/);
+  });
+
+  it("the default respawn dimension is exactly one, with a working spawn point", () => {
+    expect(validateDefaultDimension()).toEqual([]);
+    expect(defaultDimensionId()).toBe("overworld");
+  });
+
+  it("every dimension's portal, if any, links to a registered dimension", () => {
+    expect(validatePortalLinks()).toEqual([]);
+  });
+
+  it("every registered dimension's spawn generator resolves to something registered", () => {
+    expect(validateSpawnGenerators(allDimensions())).toEqual([]);
   });
 });
 

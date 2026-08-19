@@ -1,4 +1,11 @@
 {
   "id": "overworld",
-  "generator": "flatcraft:overworld"
+  "generator": "flatcraft:overworld",
+  "spawns": "flatcraft:overworld_spawns",
+  "arrival": "flatcraft:overworld_arrival",
+  "has_sky": true,
+  "respawn": true,
+  "spawn_point": "flatcraft:overworld_spawn_point",
+  "portal": { "to": "nether", "scale": 0.125 },
+  "sky": { "type": "cycle" }
 }

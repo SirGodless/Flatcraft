@@ -1,9 +1,10 @@
 import { CHUNK_HEIGHT, CHUNK_WIDTH } from "../constants.js";
 import { fbm2, hash01 } from "../math/noise.js";
 import { hashSeed } from "../math/rng.js";
-import { BlockId } from "./block.js";
+import { blockDef, BlockId } from "./block.js";
 import { Chunk } from "./chunk.js";
-import { registerDimensionGenerator } from "./dimension.js";
+import { registerArrivalGenerator, registerDimensionGenerator } from "./dimension.js";
+import type { World } from "./world.js";
 
 /**
  * Nether generation: a bedrock-capped slab of netherrack with huge
@@ -58,6 +59,19 @@ export function generateNetherChunk(seed: number, cx: number, cy: number): Chunk
   return chunk;
 }
 
-// Registered under data/dimensions/nether.json's "generator" id - see
-// world/dimension.ts.
+/** Finds open floor space in the nether band for a portal to arrive on,
+ * else carves one at y=40. */
+function netherArrival(world: World, xt: number): number {
+  for (let y = 10; y < LAVA_LEVEL - 4; y++) {
+    const floorSolid = blockDef(world.getBlockGenerating(xt, y + 1)).solid;
+    const space =
+      world.getBlockGenerating(xt, y) === BlockId.Air && world.getBlockGenerating(xt, y - 1) === BlockId.Air;
+    if (floorSolid && space) return y;
+  }
+  return 40;
+}
+
+// Registered under data/dimensions/nether.json's "generator"/"arrival"
+// ids - see world/dimension.ts.
 registerDimensionGenerator("flatcraft:nether", generateNetherChunk);
+registerArrivalGenerator("flatcraft:nether_arrival", netherArrival);

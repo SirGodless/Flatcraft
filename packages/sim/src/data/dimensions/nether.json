@@ -1,4 +1,9 @@
 {
   "id": "nether",
-  "generator": "flatcraft:nether"
+  "generator": "flatcraft:nether",
+  "spawns": "flatcraft:nether_spawns",
+  "arrival": "flatcraft:nether_arrival",
+  "has_sky": false,
+  "portal": { "to": "overworld", "scale": 8 },
+  "sky": { "type": "fixed", "background": "#2a0f0f", "veil_color": "#160606", "veil_alpha": 0.25 }
 }
