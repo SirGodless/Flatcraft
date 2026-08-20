@@ -1,3 +1,4 @@
+import { registerContentType, validateContentInstance } from "../registry/generic.js";
 import { blockByName, BlockId } from "./block.js";
 import { veinDef } from "./vein.js";
 import { woodDef } from "./wood.js";
@@ -74,43 +75,93 @@ export interface BiomeDef {
   extraVeins: string[];
 }
 
-function parseLayer(context: string, json: BiomeLayerJson): BiomeLayer {
+function parseLayer(context: string, json: { to_depth: number; block: string }): BiomeLayer {
   const block = blockByName(json.block);
   if (block === undefined) throw new Error(`${context}: unknown block "${json.block}"`);
   return { toDepth: json.to_depth, block };
 }
 
+const LAYER_FIELDS = {
+  to_depth: { kind: "number", min: 0, max: 100000, required: true },
+  block: { kind: "ref", ref_type: "block", required: true },
+};
+
+registerContentType(
+  {
+    id: "biome",
+    fields: {
+      id: { kind: "id", required: true },
+      noise_max: { kind: "number", min: -1000, max: 1000, required: true },
+      layers: { kind: "array", required: true, items: { kind: "object", fields: LAYER_FIELDS } },
+      floor: { kind: "ref", ref_type: "block", required: true },
+      wall_layer: { kind: "object", fields: LAYER_FIELDS },
+      beach_layers: { kind: "array", items: { kind: "object", fields: LAYER_FIELDS } },
+      beach_floor: { kind: "ref", ref_type: "block" },
+      snow: {
+        kind: "object",
+        fields: {
+          at_or_below_surface: { kind: "number", min: -100000, max: 100000, required: true },
+          block: { kind: "ref", ref_type: "block", required: true },
+        },
+      },
+      tree_chance: { kind: "number", min: 0, max: 1, required: true },
+      tree_woods: {
+        kind: "array",
+        items: {
+          kind: "object",
+          fields: { wood: { kind: "ref", ref_type: "wood", required: true }, weight: { kind: "number", min: 0, max: 100000, required: true } },
+        },
+      },
+      extra_veins: { kind: "array", items: { kind: "ref", ref_type: "vein" } },
+    },
+  },
+  "engine/types/biome",
+);
+
+/** tree_woods'/extra_veins' wood/vein ids stay unresolved strings after
+ * validation (ref fields are syntax-only, see registry/generic.ts) -
+ * validateBiomeReferences below still does the exhaustive existence
+ * check, unchanged. */
 export function parseBiome(id: string, json: BiomeJson): BiomeDef {
-  if (typeof json.noise_max !== "number") {
-    throw new Error(`biome "${id}": "noise_max" is required`);
-  }
-  const floor = blockByName(json.floor);
-  if (floor === undefined) throw new Error(`biome "${id}": unknown floor block "${json.floor}"`);
+  const v = validateContentInstance("biome", json, `biome "${id}"`) as {
+    noise_max: number;
+    layers: Array<{ to_depth: number; block: string }>;
+    floor: string;
+    wall_layer?: { to_depth: number; block: string };
+    beach_layers?: Array<{ to_depth: number; block: string }>;
+    beach_floor?: string;
+    snow?: { at_or_below_surface: number; block: string };
+    tree_chance: number;
+    tree_woods?: TreeWoodJson[];
+    extra_veins?: string[];
+  };
+  const floor = blockByName(v.floor);
+  if (floor === undefined) throw new Error(`biome "${id}": unknown floor block "${v.floor}"`);
   let beachFloor: BlockId | undefined;
-  if (json.beach_layers) {
-    beachFloor = json.beach_floor ? blockByName(json.beach_floor) : BlockId.Stone;
-    if (beachFloor === undefined) throw new Error(`biome "${id}": unknown beach_floor block "${json.beach_floor}"`);
+  if (v.beach_layers) {
+    beachFloor = v.beach_floor ? blockByName(v.beach_floor) : BlockId.Stone;
+    if (beachFloor === undefined) throw new Error(`biome "${id}": unknown beach_floor block "${v.beach_floor}"`);
   }
   return {
     id,
-    noiseMax: json.noise_max,
-    layers: json.layers.map((l) => parseLayer(`biome "${id}"`, l)),
+    noiseMax: v.noise_max,
+    layers: v.layers.map((l) => parseLayer(`biome "${id}"`, l)),
     floor,
-    ...(json.wall_layer ? { wallLayer: parseLayer(`biome "${id}" wall_layer`, json.wall_layer) } : {}),
-    ...(json.beach_layers
-      ? { beachLayers: json.beach_layers.map((l) => parseLayer(`biome "${id}" beach_layers`, l)), beachFloor: beachFloor! }
+    ...(v.wall_layer ? { wallLayer: parseLayer(`biome "${id}" wall_layer`, v.wall_layer) } : {}),
+    ...(v.beach_layers
+      ? { beachLayers: v.beach_layers.map((l) => parseLayer(`biome "${id}" beach_layers`, l)), beachFloor: beachFloor! }
       : {}),
-    ...(json.snow
+    ...(v.snow
       ? {
           snow: {
-            atOrBelowSurface: json.snow.at_or_below_surface,
-            block: parseLayer(`biome "${id}" snow`, { to_depth: 0, block: json.snow.block }).block,
+            atOrBelowSurface: v.snow.at_or_below_surface,
+            block: parseLayer(`biome "${id}" snow`, { to_depth: 0, block: v.snow.block }).block,
           },
         }
       : {}),
-    treeChance: json.tree_chance,
-    treeWoods: json.tree_woods ?? [],
-    extraVeins: json.extra_veins ?? [],
+    treeChance: v.tree_chance,
+    treeWoods: v.tree_woods ?? [],
+    extraVeins: v.extra_veins ?? [],
   };
 }
 
