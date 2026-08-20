@@ -113,6 +113,26 @@ describe("world generation", () => {
     expect(world.getBlockGenerating(tree!.x - 1, topY)).toBe(leaves);
   });
 
+  it("gives spruce a taller trunk and a narrower canopy than round-canopy woods (data-driven wood shape)", () => {
+    const world = freshWorld();
+    let tree = null;
+    for (let x = 0; x < 4096 && !tree; x++) {
+      if (biomeAt(SEED, x) === "mountains") {
+        const t = treeAt(SEED, x);
+        if (t?.wood === "spruce") tree = t;
+      }
+    }
+    expect(tree).not.toBeNull();
+    // 4 base + spruce's extra_height:2 + 0..2 roll.
+    expect(tree!.height).toBeGreaterThanOrEqual(6);
+    const topY = tree!.surface - tree!.height;
+    // Narrow canopy_shape: the row just below the top (dy=-1) doesn't
+    // reach 2 columns out...
+    expect(world.getBlockGenerating(tree!.x + 2, topY - 1)).not.toBe(BlockId.SpruceLeaves);
+    // ...but the row at the top (dy=0) does.
+    expect(world.getBlockGenerating(tree!.x + 2, topY)).toBe(BlockId.SpruceLeaves);
+  });
+
   it("keeps deserts sandy and snowy peaks snowy", () => {
     const world = freshWorld();
     let desertChecked = false;

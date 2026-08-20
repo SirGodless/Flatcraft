@@ -96,6 +96,12 @@ function terrainBlock(seed: number, y: number, col: ColumnInfo): BlockId {
   const underwater = surface > SEA_LEVEL;
   const beach = !underwater && surface >= SEA_LEVEL - 1;
   if (underwater || beach) {
+    if (biome.beachLayers) {
+      for (const layer of biome.beachLayers) {
+        if (depth <= layer.toDepth) return layer.block;
+      }
+      return biome.beachFloor!;
+    }
     if (depth <= 2) return isClayPatch(seed, col.x, y) ? BlockId.Clay : BlockId.Sand;
     if (depth <= 5) return BlockId.Sandstone;
     return BlockId.Stone;
@@ -147,7 +153,7 @@ function placeVeins(chunk: Chunk, rng: () => number, spec: VeinDef): void {
     let ly = lyMin + Math.floor(ry * (lyMax - lyMin + 1));
     const size = spec.sizeMin + Math.floor(rs * (spec.sizeMax - spec.sizeMin + 1));
     for (let i = 0; i < size; i++) {
-      if (chunk.getBlock(lx, ly) === BlockId.Stone) {
+      if (chunk.getBlock(lx, ly) === spec.host) {
         chunk.setBlock(lx, ly, spec.block);
       }
       const dir = Math.floor(rng() * 4);
@@ -216,8 +222,7 @@ export function treeAt(seed: number, x: number): Tree | null {
   if (hasTreeSeed(seed, x - 1) || hasTreeSeed(seed, x - 2)) return null;
   const biome = biomeDefAt(seed, x);
   const wood = treeWood(seed, x, biome);
-  // Spruces grow a bit taller.
-  const extra = wood === "spruce" ? 2 : 0;
+  const extra = woodDef(wood)?.extraHeight ?? 0;
   const height = 4 + extra + Math.floor(hash01(seed, x, 0x7ee2) * 3);
   return { x, surface: surfaceHeight(seed, x), height, wood };
 }
@@ -236,15 +241,15 @@ function stampTrees(seed: number, chunk: Chunk): void {
   for (let x = x0 - TREE_CANOPY_RADIUS; x < x0 + CHUNK_WIDTH + TREE_CANOPY_RADIUS; x++) {
     const tree = treeAt(seed, x);
     if (!tree) continue;
-    const { log, leaves } = woodDef(tree.wood)!;
+    const { log, leaves, canopyShape } = woodDef(tree.wood)!;
     const topY = tree.surface - tree.height;
     for (let y = tree.surface - 1; y > topY; y--) {
       stampIfAir(chunk, x, y, log);
     }
     for (let dy = -2; dy <= 1; dy++) {
-      // Spruces get a narrow, pointy canopy.
+      // Narrow woods (e.g. spruce) get a pointy canopy.
       const rowRadius =
-        tree.wood === "spruce"
+        canopyShape === "narrow"
           ? dy <= -1
             ? 1
             : TREE_CANOPY_RADIUS

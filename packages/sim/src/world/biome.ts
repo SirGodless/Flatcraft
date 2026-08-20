@@ -1,4 +1,4 @@
-import { blockByName, type BlockId } from "./block.js";
+import { blockByName, BlockId } from "./block.js";
 import { veinDef } from "./vein.js";
 import { woodDef } from "./wood.js";
 
@@ -47,6 +47,11 @@ export interface BiomeJson {
   layers: BiomeLayerJson[];
   floor: string;
   wall_layer?: BiomeLayerJson;
+  /** Beach/underwater columns (see gen.ts's terrainBlock): overrides
+   * the engine's default sand/sandstone/stone shoreline. Omitted =
+   * every biome shares that default, today's behavior. */
+  beach_layers?: BiomeLayerJson[];
+  beach_floor?: string;
   snow?: { at_or_below_surface: number; block: string };
   tree_chance: number;
   tree_woods?: TreeWoodJson[];
@@ -59,6 +64,8 @@ export interface BiomeDef {
   layers: BiomeLayer[];
   floor: BlockId;
   wallLayer?: BiomeLayer;
+  beachLayers?: BiomeLayer[];
+  beachFloor?: BlockId;
   snow?: { atOrBelowSurface: number; block: BlockId };
   treeChance: number;
   /** Wood ids, still unresolved strings - see validateBiomeReferences. */
@@ -79,12 +86,20 @@ export function parseBiome(id: string, json: BiomeJson): BiomeDef {
   }
   const floor = blockByName(json.floor);
   if (floor === undefined) throw new Error(`biome "${id}": unknown floor block "${json.floor}"`);
+  let beachFloor: BlockId | undefined;
+  if (json.beach_layers) {
+    beachFloor = json.beach_floor ? blockByName(json.beach_floor) : BlockId.Stone;
+    if (beachFloor === undefined) throw new Error(`biome "${id}": unknown beach_floor block "${json.beach_floor}"`);
+  }
   return {
     id,
     noiseMax: json.noise_max,
     layers: json.layers.map((l) => parseLayer(`biome "${id}"`, l)),
     floor,
     ...(json.wall_layer ? { wallLayer: parseLayer(`biome "${id}" wall_layer`, json.wall_layer) } : {}),
+    ...(json.beach_layers
+      ? { beachLayers: json.beach_layers.map((l) => parseLayer(`biome "${id}" beach_layers`, l)), beachFloor: beachFloor! }
+      : {}),
     ...(json.snow
       ? {
           snow: {

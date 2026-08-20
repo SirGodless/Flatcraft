@@ -1,5 +1,7 @@
 {
   "id": "spruce",
   "log": "spruce_log",
-  "leaves": "spruce_leaves"
+  "leaves": "spruce_leaves",
+  "extra_height": 2,
+  "canopy_shape": "narrow"
 }
