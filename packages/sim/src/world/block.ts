@@ -1,5 +1,6 @@
 import { BLOCK_JSONS } from "../data/blocks/index.js";
-import { validateBlockJson } from "../registry/schema.js";
+import { registerContentType, validateContentInstance } from "../registry/generic.js";
+import { validateVisualJson, validateBlockFallbackJson, type BlockJson } from "../registry/schema.js";
 import type { BlockVisualDef } from "../registry/visual.js";
 
 /**
@@ -176,10 +177,61 @@ const AIR: BlockDef = { id: BlockId.Air, name: "air", displayName: "Air", solid:
 defs.set(BlockId.Air, AIR);
 byName.set("air", BlockId.Air);
 
+registerContentType(
+  {
+    id: "block",
+    fields: {
+      id: { kind: "id", required: true },
+      name: { kind: "string" },
+      sprite: { kind: "string" },
+      // Validated separately below - see items.ts's registerContentType
+      // call for why (content-type-parameterized fallback shape).
+      visual: { kind: "any" },
+      solid: { kind: "boolean", required: true },
+      hardness: { kind: "number", min: -1, max: 100_000, required: true },
+      tool: { kind: "enum", values: ["pickaxe", "axe", "shovel"] },
+      required_tier: { kind: "number", min: 0, max: 8 },
+      drops: {
+        kind: "oneOf",
+        variants: [
+          { kind: "literal", value: "none" },
+          { kind: "object", fields: { item: { kind: "ref", ref_type: "item", required: true }, amount: { kind: "number", min: 1, max: 64, required: true } } },
+        ],
+      },
+      side_permeable: { kind: "boolean" },
+      slab: { kind: "boolean" },
+      tall: { kind: "boolean" },
+      toggle_to: { kind: "ref", ref_type: "block" },
+      liquid: {
+        kind: "object",
+        fields: { kind: { kind: "enum", values: ["water", "lava"], required: true }, level: { kind: "number", min: 1, max: 8, required: true } },
+      },
+      container: { kind: "object", fields: { slots: { kind: "number", min: 1, max: 54, required: true } } },
+      furnace: { kind: "object", fields: { speed: { kind: "number", min: 0.1, max: 100 } } },
+      station: { kind: "id" },
+      movement_slow: { kind: "number", min: 0, max: 1 },
+      blast_resistance: { kind: "number", min: -1, max: 100_000 },
+      alt_drop: {
+        kind: "object",
+        fields: {
+          item: { kind: "ref", ref_type: "item", required: true },
+          amount: { kind: "number", min: 1, max: 64, required: true },
+          chance: { kind: "number", min: 0, max: 1, required: true },
+        },
+      },
+    },
+  },
+  "engine/types/block",
+);
+
 /** Register a block from datapack JSON. Known names keep their enum id;
  * new names get a dynamic id. Call resolveBlockLinks() after a batch. */
 export function registerBlockJson(raw: unknown, source = "datapack"): BlockDef {
-  const json = validateBlockJson(raw, source);
+  const v = validateContentInstance("block", raw, source) as unknown as BlockJson;
+  const json: BlockJson = {
+    ...v,
+    ...(v.visual !== undefined ? { visual: validateVisualJson(v.visual, source, validateBlockFallbackJson) } : {}),
+  };
   const id = byName.get(json.id) ?? BUILTIN_IDS.get(json.id) ?? (nextDynamicId++ as BlockId);
   const def: BlockDef = {
     id,
