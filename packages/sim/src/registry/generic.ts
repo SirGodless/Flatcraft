@@ -36,6 +36,11 @@ export type FieldDecl =
   | { kind: "string" }
   | { kind: "boolean" }
   | { kind: "id" }
+  /** Opaque passthrough - accepts and returns any JSON value unvalidated.
+   * For fields that are deliberately free-form by design (e.g. a
+   * multiblock's handler-specific `config` blob, see multiblock.ts's
+   * doc comment) - not a shortcut for "haven't written the schema yet". */
+  | { kind: "any" }
   | { kind: "number"; min: number; max: number }
   | { kind: "enum"; values: string[] }
   | { kind: "literal"; value: string }
@@ -56,7 +61,7 @@ export interface TypeDeclaration {
   denseStorage?: { idKind: "uint16" };
 }
 
-const FIELD_KINDS = ["string", "boolean", "id", "number", "enum", "literal", "object", "array", "record", "oneOf", "ref"] as const;
+const FIELD_KINDS = ["string", "boolean", "id", "any", "number", "enum", "literal", "object", "array", "record", "oneOf", "ref"] as const;
 
 function stripRequired(source: string, path: string, raw: Record<string, unknown>): Record<string, unknown> {
   const { required, ...rest } = raw;
@@ -71,6 +76,7 @@ export function parseFieldDecl(raw: unknown, source: string, path: string): Fiel
     case "string":
     case "boolean":
     case "id":
+    case "any":
       checkKeys(source, `${path}.`, value, ["kind"]);
       return { kind };
     case "number": {
@@ -168,6 +174,8 @@ function validateFieldValue(decl: FieldDecl, raw: unknown, source: string, path:
       return need<boolean>(source, path, raw, "boolean");
     case "id":
       return needId(source, path, raw);
+    case "any":
+      return raw;
     case "number":
       return needNumber(source, path, raw, decl.min, decl.max);
     case "enum":

@@ -1,6 +1,7 @@
 import { CHUNK_HEIGHT, CHUNK_WIDTH } from "./constants.js";
 import type { SimEvent } from "./events.js";
 import { itemDef } from "./items.js";
+import { registerContentType, validateContentInstance } from "./registry/generic.js";
 import type { Simulation } from "./simulation.js";
 import { blockByName, type BlockId } from "./world/block.js";
 import type { Dimension, World } from "./world/world.js";
@@ -134,11 +135,56 @@ export interface MultiblockMatch {
   originY: number;
 }
 
-const NAMESPACE = "flatcraft:";
+const MULTIBLOCK_CELL_FIELDS = {
+  block: { kind: "ref", ref_type: "block", required: true },
+  trigger: { kind: "boolean" },
+};
 
-function stripNs(raw: string): string {
-  return raw.startsWith(NAMESPACE) ? raw.slice(NAMESPACE.length) : raw;
-}
+const BUILD_PATTERN_CELL_FIELDS = {
+  block: { kind: "ref", ref_type: "block", required: true },
+};
+
+const PATTERN_STATE_FIELDS = {
+  pattern: { kind: "array", required: true, items: { kind: "string" } },
+  key: { kind: "record", required: true, values: { kind: "object", fields: MULTIBLOCK_CELL_FIELDS } },
+};
+
+registerContentType(
+  {
+    id: "multiblock",
+    fields: {
+      // Not `kind: "id"` - multiblock ids already use the namespaced
+      // modname:funktion convention (e.g. "flatcraft:nether_portal"),
+      // unlike every other type migrated onto this engine so far, which
+      // all use bare snake_case ids. Uniqueness is still enforced by
+      // registerMultiblock's own DEFS.has() check below, unaffected by
+      // this field's format.
+      id: { kind: "string", required: true },
+      handler: { kind: "ref", ref_type: "multiblock_handler", ref_kind: "handler", required: true },
+      trigger_on: {
+        kind: "object",
+        required: true,
+        fields: {
+          type: { kind: "enum", values: ["place_block", "use_block"], required: true },
+          item: { kind: "ref", ref_type: "item" },
+        },
+      },
+      states: { kind: "record", values: { kind: "object", fields: PATTERN_STATE_FIELDS } },
+      fail_reason: { kind: "string" },
+      build_pattern: {
+        kind: "object",
+        fields: {
+          pattern: { kind: "array", required: true, items: { kind: "string" } },
+          key: { kind: "record", required: true, values: { kind: "object", fields: BUILD_PATTERN_CELL_FIELDS } },
+          anchor: { kind: "array", required: true, items: { kind: "number", min: -100000, max: 100000 } },
+        },
+      },
+      // Deliberately opaque - see the module doc comment on `config`.
+      config: { kind: "any" },
+    },
+  },
+  "engine/types/multiblock",
+);
 
 function parseState(id: string, stateName: string, json: MultiblockStateJson): MultiblockState {
   const width = Math.max(...json.pattern.map((r) => r.length));
@@ -154,7 +200,7 @@ function parseState(id: string, stateName: string, json: MultiblockStateJson): M
       if (!entry) {
         throw new Error(`multiblock ${id}/${stateName}: symbol "${char}" missing from key`);
       }
-      const block = blockByName(stripNs(entry.block));
+      const block = blockByName(entry.block);
       if (block === undefined) {
         throw new Error(`multiblock ${id}/${stateName}: unknown block "${entry.block}"`);
       }
@@ -179,7 +225,7 @@ function parseBuildPattern(id: string, json: MultiblockBuildPatternJson): Multib
       if (!entry) {
         throw new Error(`multiblock ${id}: build_pattern symbol "${char}" missing from key`);
       }
-      const block = blockByName(stripNs(entry.block));
+      const block = blockByName(entry.block);
       if (block === undefined) {
         throw new Error(`multiblock ${id}: build_pattern references unknown block "${entry.block}"`);
       }
@@ -194,37 +240,49 @@ function parseBuildPattern(id: string, json: MultiblockBuildPatternJson): Multib
   return { cells, width, height: cells.length, anchor: [ax, ay] };
 }
 
-function parseTrigger(id: string, json: MultiblockJson["trigger_on"]): MultiblockTrigger {
+function parseTrigger(id: string, json: { type: "place_block" | "use_block"; item?: string }): MultiblockTrigger {
   if (json.type === "place_block") {
-    if (typeof json.item !== "string" || !itemDef(stripNs(json.item))) {
+    // ref fields are syntax-checked only (see registry/generic.ts) -
+    // existence still needs this explicit check, same as every other
+    // ref consumer until Stage 6's deferred cross-reference pass lands.
+    if (json.item === undefined || !itemDef(json.item)) {
       throw new Error(`multiblock ${id}: trigger_on needs a valid "item" for type "place_block"`);
     }
-    return { type: "place_block", item: stripNs(json.item) };
+    return { type: "place_block", item: json.item };
   }
-  if (json.type === "use_block") return { type: "use_block" };
-  throw new Error(`multiblock ${id}: unknown trigger_on.type "${json.type}"`);
+  return { type: "use_block" };
 }
 
+/** Building/matching a pattern is real algorithmic work, not schema
+ * validation, so parseState/parseBuildPattern/parseTrigger above stay
+ * hand-written - the generic engine (registered above) only confirms
+ * the raw shape is sound before this function does anything with it,
+ * same split as structures.ts/biome.ts. */
 export function parseMultiblock(id: string, json: MultiblockJson): MultiblockDef {
-  if (typeof json.handler !== "string" || json.handler.length === 0) {
-    throw new Error(`multiblock ${id}: "handler" is required`);
-  }
+  const v = validateContentInstance("multiblock", json, `multiblock "${id}"`) as {
+    handler: string;
+    trigger_on: { type: "place_block" | "use_block"; item?: string };
+    states?: Record<string, MultiblockStateJson>;
+    fail_reason?: string;
+    build_pattern?: MultiblockBuildPatternJson;
+    config?: Record<string, unknown>;
+  };
   let states: Record<string, MultiblockState> | undefined;
-  if (json.states) {
+  if (v.states) {
     states = {};
-    for (const [name, stateJson] of Object.entries(json.states)) {
+    for (const [name, stateJson] of Object.entries(v.states)) {
       states[name] = parseState(id, name, stateJson);
     }
     if (Object.keys(states).length === 0) states = undefined;
   }
   return {
     id,
-    handler: json.handler,
+    handler: v.handler,
     ...(states ? { states } : {}),
-    triggerOn: parseTrigger(id, json.trigger_on),
-    failReason: json.fail_reason ?? "incomplete structure",
-    ...(json.build_pattern ? { buildPattern: parseBuildPattern(id, json.build_pattern) } : {}),
-    ...(json.config ? { config: json.config } : {}),
+    triggerOn: parseTrigger(id, v.trigger_on),
+    failReason: v.fail_reason ?? "incomplete structure",
+    ...(v.build_pattern ? { buildPattern: parseBuildPattern(id, v.build_pattern) } : {}),
+    ...(v.config ? { config: v.config } : {}),
   };
 }
 
