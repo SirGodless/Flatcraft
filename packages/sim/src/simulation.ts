@@ -84,7 +84,7 @@ import {
   WALK_SPEED,
 } from "./physics.js";
 import { tryActivateMultiblock } from "./multiblock.js";
-import { buildPortal, nearPortal, PORTAL_COOLDOWN, PORTAL_TICKS } from "./portal.js";
+import { buildPortal, nearPortal, portalConfig } from "./portal.js";
 import type { SimSave } from "./save.js";
 import { clickStack } from "./slots.js";
 import { structureLootAt } from "./structures/place.js";
@@ -1140,7 +1140,7 @@ export class Simulation {
       if (inPortal) {
         if (p.portalCooldown === 0) {
           p.portalTicks++;
-          if (p.portalTicks >= PORTAL_TICKS) {
+          if (p.portalTicks >= portalConfig().ticks) {
             this.teleportThroughPortal(p, out);
           }
         }
@@ -1288,7 +1288,7 @@ export class Simulation {
     p.kbX = 0;
     p.fallDistance = 0;
     p.portalTicks = 0;
-    p.portalCooldown = PORTAL_COOLDOWN;
+    p.portalCooldown = portalConfig().cooldown;
     p.mining = null;
     out.push({ event: { type: "player_dimension", player: p.id, dim: targetDim, x: p.x, y: p.y } });
   }

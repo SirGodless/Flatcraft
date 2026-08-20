@@ -5,7 +5,7 @@ import {
   LAVA_LEVEL,
   NETHER_CEILING,
   NETHER_FLOOR,
-  PORTAL_TICKS,
+  portalConfig,
   Simulation,
   surfaceHeight,
   World,
@@ -122,7 +122,7 @@ describe("portals", () => {
 
     // Walk into the portal (already standing at bx) and wait.
     let switched = false;
-    for (let i = 0; i < PORTAL_TICKS + 30 && !switched; i++) {
+    for (let i = 0; i < portalConfig().ticks + 30 && !switched; i++) {
       const out = sim.tick([]);
       switched = out.some((o) => o.event.type === "player_dimension");
     }
@@ -146,7 +146,7 @@ describe("portals", () => {
     state.x = netherPortal.x + 1;
     state.y = netherPortal.y;
     let returned = false;
-    for (let i = 0; i < PORTAL_TICKS + 30 && !returned; i++) {
+    for (let i = 0; i < portalConfig().ticks + 30 && !returned; i++) {
       const out = sim.tick([]);
       returned = out.some(
         (o) => o.event.type === "player_dimension" && o.event.dim === "overworld",

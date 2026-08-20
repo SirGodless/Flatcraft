@@ -1,3 +1,4 @@
+import { CHUNK_HEIGHT, CHUNK_WIDTH } from "./constants.js";
 import type { SimEvent } from "./events.js";
 import { itemDef } from "./items.js";
 import type { Simulation } from "./simulation.js";
@@ -52,11 +53,32 @@ import type { Dimension, World } from "./world/world.js";
  * applies and to *what shape*, never inject new behavior of its own -
  * this server can load datapacks, and running code referenced from a
  * data file would make that arbitrary code execution.
+ *
+ * `build_pattern` is the construction-time counterpart to `states`: a
+ * pattern+key grid (same grammar as world Structures, see
+ * structures/structure.ts) a handler can stamp into the world on demand
+ * via stampBuildPattern - e.g. nether portals auto-building a return
+ * portal on first arrival. `anchor: [col, row]` names which pattern cell
+ * lands on the world position passed to stampBuildPattern, exactly like
+ * a Structure's anchor.
+ *
+ * `config` is a free-form data blob, opaque to this engine - only the
+ * `handler` named alongside it knows what's in there (portal tuning
+ * numbers today; some other handler's own tuning tomorrow). Kept generic
+ * rather than typed here because different handlers need different
+ * shapes, the same reason `states`/`build_pattern` don't try to express
+ * per-handler *behavior*, only shape.
  */
 
 export interface MultiblockStateJson {
   pattern: string[];
   key: Record<string, { block: string; trigger?: boolean }>;
+}
+
+export interface MultiblockBuildPatternJson {
+  pattern: string[];
+  key: Record<string, { block: string }>;
+  anchor: number[];
 }
 
 export interface MultiblockJson {
@@ -67,6 +89,9 @@ export interface MultiblockJson {
   /** command_rejected reason when this def's trigger matched but no
    * shape did (default: "incomplete structure"). */
   fail_reason?: string;
+  build_pattern?: MultiblockBuildPatternJson;
+  /** Handler-specific tuning; see the module doc comment. */
+  config?: Record<string, unknown>;
 }
 
 export interface MultiblockCell {
@@ -81,6 +106,14 @@ export interface MultiblockState {
   height: number;
 }
 
+export interface MultiblockBuildPattern {
+  /** rows x cols; null = leave terrain untouched, like Structure. */
+  cells: (BlockId | null)[][];
+  width: number;
+  height: number;
+  anchor: [number, number];
+}
+
 export type MultiblockTrigger = { type: "place_block"; item: string } | { type: "use_block" };
 
 export interface MultiblockDef {
@@ -89,6 +122,8 @@ export interface MultiblockDef {
   triggerOn: MultiblockTrigger;
   states?: Record<string, MultiblockState>;
   failReason: string;
+  buildPattern?: MultiblockBuildPattern;
+  config?: Record<string, unknown>;
 }
 
 export interface MultiblockMatch {
@@ -130,6 +165,35 @@ function parseState(id: string, stateName: string, json: MultiblockStateJson): M
   return { cells, width, height: cells.length };
 }
 
+function parseBuildPattern(id: string, json: MultiblockBuildPatternJson): MultiblockBuildPattern {
+  const width = Math.max(...json.pattern.map((r) => r.length));
+  const cells: (BlockId | null)[][] = json.pattern.map((row) => {
+    const line: (BlockId | null)[] = [];
+    for (let i = 0; i < width; i++) {
+      const char = row[i] ?? " ";
+      if (char === " ") {
+        line.push(null);
+        continue;
+      }
+      const entry = json.key[char];
+      if (!entry) {
+        throw new Error(`multiblock ${id}: build_pattern symbol "${char}" missing from key`);
+      }
+      const block = blockByName(stripNs(entry.block));
+      if (block === undefined) {
+        throw new Error(`multiblock ${id}: build_pattern references unknown block "${entry.block}"`);
+      }
+      line.push(block);
+    }
+    return line;
+  });
+  const [ax = -1, ay = -1] = json.anchor;
+  if (ax < 0 || ax >= width || ay < 0 || ay >= cells.length) {
+    throw new Error(`multiblock ${id}: build_pattern anchor out of bounds`);
+  }
+  return { cells, width, height: cells.length, anchor: [ax, ay] };
+}
+
 function parseTrigger(id: string, json: MultiblockJson["trigger_on"]): MultiblockTrigger {
   if (json.type === "place_block") {
     if (typeof json.item !== "string" || !itemDef(stripNs(json.item))) {
@@ -159,7 +223,40 @@ export function parseMultiblock(id: string, json: MultiblockJson): MultiblockDef
     ...(states ? { states } : {}),
     triggerOn: parseTrigger(id, json.trigger_on),
     failReason: json.fail_reason ?? "incomplete structure",
+    ...(json.build_pattern ? { buildPattern: parseBuildPattern(id, json.build_pattern) } : {}),
+    ...(json.config ? { config: json.config } : {}),
   };
+}
+
+/**
+ * Stamp a def's build_pattern into the world so that its anchor cell
+ * lands on (anchorX, anchorY) - the runtime counterpart to how
+ * structures/place.ts stamps a Structure during chunk generation, but
+ * callable on demand at any world position instead of only at
+ * generation time. Every write goes through World.setBlock/ensureChunk,
+ * so it works whether or not the target chunk is already loaded.
+ */
+export function stampBuildPattern(
+  world: World,
+  pattern: MultiblockBuildPattern,
+  anchorX: number,
+  anchorY: number,
+): Array<{ x: number; y: number; block: BlockId }> {
+  const originX = anchorX - pattern.anchor[0];
+  const originY = anchorY - pattern.anchor[1];
+  const changes: Array<{ x: number; y: number; block: BlockId }> = [];
+  for (let row = 0; row < pattern.height; row++) {
+    for (let col = 0; col < pattern.width; col++) {
+      const block = pattern.cells[row]?.[col];
+      if (block === undefined || block === null) continue;
+      const x = originX + col;
+      const y = originY + row;
+      world.ensureChunk(Math.floor(x / CHUNK_WIDTH), Math.floor(y / CHUNK_HEIGHT));
+      world.setBlock(x, y, block);
+      changes.push({ x, y, block });
+    }
+  }
+  return changes;
 }
 
 /**
