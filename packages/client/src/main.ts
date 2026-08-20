@@ -117,6 +117,7 @@ async function runGame(options: GameOptions): Promise<Renderer> {
   renderer.onTrade = (villager, trade) => connection.send({ type: "trade", entity: villager, trade });
   renderer.onEnchant = () => connection.send({ type: "enchant" });
   renderer.onUiClosed = () => connection.send({ type: "return_grid" });
+  renderer.onDropCursor = () => connection.send({ type: "drop_cursor" });
 
   attachInput(renderer.canvas, {
     camera: renderer.camera,
@@ -172,6 +173,8 @@ async function runGame(options: GameOptions): Promise<Renderer> {
       connection.send({ type: "attack", entity: mob });
       return true;
     },
+    hasCursorItem: () => renderer.hasCursorItem(),
+    onDropCursor: () => renderer.onDropCursor?.(),
     onUiWheel: (deltaY) => renderer.handleWheel(deltaY),
     onHotbarScroll: (direction) =>
       connection.send({ type: "select_slot", index: renderer.hotbarSlotAfter(direction) }),

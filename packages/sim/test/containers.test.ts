@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BlockId,
   countInInventory,
+  isItemEntity,
   Simulation,
   type OutboundEvent,
   type PlayerId,
@@ -78,6 +79,27 @@ describe("chests", () => {
       to: player,
       event: { type: "command_rejected", player, reason: "out of reach" },
     });
+  });
+});
+
+describe("drop_cursor", () => {
+  it("drops the cursor-held stack as an item entity and clears the cursor", () => {
+    const sim = new Simulation(SEED);
+    const { player, state } = joinPlayer(sim);
+    state.cursor = { item: "flatcraft:item:diamond", count: 5 };
+    sim.tick([{ player, command: { type: "drop_cursor" } }]);
+    expect(state.cursor).toBeNull();
+    const dropped = [...sim.entities.values()].filter(isItemEntity);
+    expect(dropped).toHaveLength(1);
+    expect(dropped[0]!.stack).toEqual({ item: "flatcraft:item:diamond", count: 5 });
+  });
+
+  it("does nothing when the cursor is empty", () => {
+    const sim = new Simulation(SEED);
+    const { player, state } = joinPlayer(sim);
+    expect(state.cursor).toBeNull();
+    sim.tick([{ player, command: { type: "drop_cursor" } }]);
+    expect([...sim.entities.values()].filter(isItemEntity)).toHaveLength(0);
   });
 });
 

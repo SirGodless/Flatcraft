@@ -85,6 +85,7 @@ const ALL_COMMAND_TYPES: readonly Command["type"][] = [
   "craft",
   "slot_click",
   "return_grid",
+  "drop_cursor",
   "open_furnace",
   "open_chest",
   "request_chunk",

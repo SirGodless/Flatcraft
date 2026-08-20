@@ -76,6 +76,20 @@ registerCommandHandler("return_grid", {
   },
 });
 
+registerCommandHandler("drop_cursor", {
+  handle({ sim, player, out, reject }) {
+    const p = sim.getPlayer(player);
+    if (!p) {
+      reject("not joined");
+      return;
+    }
+    if (!p.cursor) return;
+    sim.spawnItem(p.dimension, p.x, p.y - 1, p.cursor, out);
+    p.cursor = null;
+    sim.syncInventory(p, out);
+  },
+});
+
 registerCommandHandler("creative_give", {
   handle({ sim, player, command, out, reject }) {
     const p = sim.getPlayer(player);

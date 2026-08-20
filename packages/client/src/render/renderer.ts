@@ -155,6 +155,9 @@ export class Renderer {
   onOpenFurnace: ((x: number, y: number) => void) | null = null;
   /** Called when a UI closes, so the grid/cursor can be returned. */
   onUiClosed: (() => void) | null = null;
+  /** Wired by the bootstrap code: left-click outside any inventory UI
+   * while a cursor item is held - drops it into the world. */
+  onDropCursor: (() => void) | null = null;
 
   private readonly app = new Application();
   private readonly worldContainer = new Container();
@@ -463,6 +466,13 @@ export class Renderer {
       return true;
     }
     return false;
+  }
+
+  /** Whether the player currently holds an item picked up from a slot
+   * (only possible while an inventory-style UI is/was open - see
+   * cursorStack, set from inventory_changed). */
+  hasCursorItem(): boolean {
+    return this.cursorStack !== null;
   }
 
   /** Whether a screen point lands on an open UI surface (blocks world input). */
