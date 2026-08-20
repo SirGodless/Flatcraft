@@ -2,7 +2,7 @@ import { ingredientOptions } from "../crafting/recipe.js";
 import { RECIPES } from "../data/recipes/index.js";
 import { addToInventory, countInInventory, removeFromInventory } from "../inventory.js";
 import { itemDef } from "../items.js";
-import { BlockId } from "../world/block.js";
+import { stationBlock } from "../world/block.js";
 import { registerCommandHandler } from "./registry.js";
 
 registerCommandHandler("craft", {
@@ -17,13 +17,12 @@ registerCommandHandler("craft", {
       reject("unknown recipe");
       return;
     }
-    if (recipe.kind === "brewing" && !sim.blockNearby(p, BlockId.BrewingStand)) {
-      reject("requires brewing stand");
-      return;
-    }
-    if (recipe.kind === "crafting" && recipe.gridSize === 3 && !sim.blockNearby(p, BlockId.CraftingTable)) {
-      reject("requires crafting table");
-      return;
+    if (recipe.station !== "inventory") {
+      const required = stationBlock(recipe.station);
+      if (!required || !sim.blockNearby(p, required)) {
+        reject(`requires ${recipe.station.replace("_", " ")}`);
+        return;
+      }
     }
     // Ingredient keys may be tags ("#planks"): any member counts.
     for (const [key, count] of recipe.ingredients) {

@@ -6,7 +6,8 @@ import { createFurnace, furnaceKey } from "../furnace.js";
 import { PLAYER_MAX_HUNGER } from "../hunger.js";
 import { addToInventory, cloneInventory, removeFromInventory } from "../inventory.js";
 import { itemDef } from "../items.js";
-import { blockDef, BlockId } from "../world/block.js";
+import { mobDef } from "../mobs.js";
+import { blockDef, stationBlock } from "../world/block.js";
 import { registerCommandHandler } from "./registry.js";
 
 registerCommandHandler("trade", {
@@ -17,7 +18,7 @@ registerCommandHandler("trade", {
       return;
     }
     const villager = sim.entities.get(command.entity);
-    if (!villager || villager.kind !== "villager" || villager.dimension !== p.dimension) {
+    if (!villager || !mobDef(villager.kind)?.trades || villager.dimension !== p.dimension) {
       reject("no villager");
       return;
     }
@@ -87,7 +88,8 @@ registerCommandHandler("enchant", {
       reject("not joined");
       return;
     }
-    if (!sim.blockNearby(p, BlockId.EnchantingTable)) {
+    const enchantingTable = stationBlock("enchanting_table");
+    if (!enchantingTable || !sim.blockNearby(p, enchantingTable)) {
       reject("requires enchanting table");
       return;
     }

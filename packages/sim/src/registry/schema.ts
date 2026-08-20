@@ -105,6 +105,20 @@ export interface BlockJson {
   /** Opens a furnace-style cook screen. speed scales burn/cook rate
    * (2 = a blast furnace that burns and cooks twice as fast). */
   furnace?: { speed?: number };
+  /** Marks this block as the one providing a named station (e.g.
+   * "crafting_table", "brewing_stand", "enchanting_table") - recipes/
+   * actions that require that station look this up generically instead
+   * of naming a block id. */
+  station?: string;
+  /** Standing on this block multiplies horizontal speed (< 1 slows,
+   * e.g. soul sand). */
+  movement_slow?: number;
+  /** Survives an explosion whose damage falls below this (default:
+   * hardness, today's behavior). */
+  blast_resistance?: number;
+  /** Replaces the normal drop with this item at this chance instead
+   * (e.g. gravel sometimes drops flint). */
+  alt_drop?: { item: string; amount: number; chance: number };
 }
 
 export interface MobJson {
@@ -126,8 +140,10 @@ export interface MobJson {
   explodes?: { follow_range: number; trigger_range: number; fuse_ticks: number; block_radius: number; damage_radius: number; max_damage: number };
   /** Ambles in a random direction, changing every so often. */
   wanders?: boolean;
-  /** Undead: takes damage standing in daylight (overworld only). */
+  /** Undead: takes damage standing in daylight (dimensions with has_sky). */
   burns_in_daylight?: boolean;
+  /** Can be right-clicked to open the trade panel (see data/trades). */
+  trades?: boolean;
   /** Death drops: item, max count (1..max rolled), chance. */
   loot?: Array<{ item: string; max: number; chance: number }>;
   /** Gear this mob spawns wearing (armor absorbs damage, offhand blocks
@@ -411,6 +427,7 @@ export function validateBlockJson(raw: unknown, source: string): BlockJson {
   checkKeys(source, "", value, [
     "id", "name", "sprite", "visual", "solid", "hardness", "tool", "required_tier", "drops",
     "side_permeable", "slab", "tall", "toggle_to", "liquid", "container", "furnace",
+    "station", "movement_slow", "blast_resistance", "alt_drop",
   ]);
   const out: BlockJson = {
     id: needId(source, "id", value["id"]),
@@ -457,6 +474,22 @@ export function validateBlockJson(raw: unknown, source: string): BlockJson {
     out.furnace = {};
     if (furnace["speed"] !== undefined) out.furnace.speed = needNumber(source, "furnace.speed", furnace["speed"], 0.1, 100);
   }
+  if (value["station"] !== undefined) out.station = needId(source, "station", value["station"]);
+  if (value["movement_slow"] !== undefined) {
+    out.movement_slow = needNumber(source, "movement_slow", value["movement_slow"], 0, 1);
+  }
+  if (value["blast_resistance"] !== undefined) {
+    out.blast_resistance = needNumber(source, "blast_resistance", value["blast_resistance"], -1, 100_000);
+  }
+  if (value["alt_drop"] !== undefined) {
+    const altDrop = need<Record<string, unknown>>(source, "alt_drop", value["alt_drop"], "object");
+    checkKeys(source, "alt_drop.", altDrop, ["item", "amount", "chance"]);
+    out.alt_drop = {
+      item: needId(source, "alt_drop.item", altDrop["item"]),
+      amount: needNumber(source, "alt_drop.amount", altDrop["amount"], 1, 64),
+      chance: needNumber(source, "alt_drop.chance", altDrop["chance"], 0, 1),
+    };
+  }
   return out;
 }
 
@@ -464,7 +497,7 @@ export function validateMobJson(raw: unknown, source: string): MobJson {
   const value = need<Record<string, unknown>>(source, "(root)", raw, "object");
   checkKeys(source, "", value, [
     "id", "name", "sprite", "visual", "health", "speed", "size", "melee", "ranged",
-    "explodes", "wanders", "burns_in_daylight", "loot", "equipment", "spawn",
+    "explodes", "wanders", "burns_in_daylight", "trades", "loot", "equipment", "spawn",
   ]);
   const size = need<Record<string, unknown>>(source, "size", value["size"], "object");
   checkKeys(source, "size.", size, ["width", "height"]);
@@ -516,6 +549,7 @@ export function validateMobJson(raw: unknown, source: string): MobJson {
   if (value["burns_in_daylight"] !== undefined) {
     out.burns_in_daylight = need<boolean>(source, "burns_in_daylight", value["burns_in_daylight"], "boolean");
   }
+  if (value["trades"] !== undefined) out.trades = need<boolean>(source, "trades", value["trades"], "boolean");
   if (value["loot"] !== undefined) {
     const list = need<unknown[]>(source, "loot", value["loot"], "array");
     out.loot = list.map((entry, i) => {

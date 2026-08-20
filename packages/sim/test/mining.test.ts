@@ -4,6 +4,7 @@ import {
   canHarvest,
   countInInventory,
   findSpawnX,
+  isItemEntity,
   miningTicks,
   Simulation,
   surfaceHeight,
@@ -184,5 +185,21 @@ describe("mining via commands", () => {
       event: { type: "mining_progress", player, x, y, progress: 0, total: 0 },
     });
     expect(state.mining).toBeNull();
+  });
+});
+
+describe("alternate drops", () => {
+  it("gravel drops its own item most of the time, flint some of the time (data-driven alt_drop)", () => {
+    const sim = new Simulation(SEED);
+    const { player, state } = joinPlayer(sim);
+    const x = Math.floor(state.x) + 1;
+    const y = Math.floor(state.y);
+    for (let i = 0; i < 60; i++) {
+      setBlock(sim, x, y, BlockId.Gravel);
+      mineOut(sim, player, x, y);
+    }
+    const drops = new Set([...sim.entities.values()].filter(isItemEntity).map((e) => e.stack.item));
+    expect(drops).toContain("gravel");
+    expect(drops).toContain("flint");
   });
 });

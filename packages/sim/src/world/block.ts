@@ -134,6 +134,16 @@ export interface BlockDef {
   readonly container?: number;
   /** Opens a furnace-style cook screen; speed scales burn/cook rate. */
   readonly furnace?: { speed: number };
+  /** Marks this block as the one providing a named station (e.g.
+   * "crafting_table") - see stationBlock(). */
+  readonly station?: string;
+  /** Standing on this block multiplies horizontal speed (< 1 slows). */
+  readonly movementSlow?: number;
+  /** Survives an explosion whose damage falls below this (default:
+   * hardness). */
+  readonly blastResistance?: number;
+  /** Replaces the normal drop with this item at this chance instead. */
+  readonly altDrop?: { item: string; count: number; chance: number };
   /** Sprite path override (default sprites/block/<name>.png). */
   readonly sprite?: string;
   /** Sprite variants/animation/shader. */
@@ -142,6 +152,8 @@ export interface BlockDef {
 
 const defs = new Map<BlockId, BlockDef>();
 const byName = new Map<string, BlockId>();
+/** Named station (e.g. "crafting_table") -> the block providing it. */
+const stations = new Map<string, BlockId>();
 /** toggle_to targets may be registered later; resolved in a second pass. */
 const pendingToggles: Array<{ id: BlockId; target: string; source: string }> = [];
 /** Datapack blocks outside the enum get ids from here. */
@@ -188,11 +200,20 @@ export function registerBlockJson(raw: unknown, source = "datapack"): BlockDef {
     ...(json.liquid !== undefined ? { liquid: json.liquid } : {}),
     ...(json.container !== undefined ? { container: json.container.slots } : {}),
     ...(json.furnace !== undefined ? { furnace: { speed: json.furnace.speed ?? 1 } } : {}),
+    ...(json.station !== undefined ? { station: json.station } : {}),
+    ...(json.movement_slow !== undefined ? { movementSlow: json.movement_slow } : {}),
+    ...(json.blast_resistance !== undefined ? { blastResistance: json.blast_resistance } : {}),
+    ...(json.alt_drop !== undefined
+      ? { altDrop: { item: json.alt_drop.item, count: json.alt_drop.amount, chance: json.alt_drop.chance } }
+      : {}),
     ...(json.sprite !== undefined ? { sprite: json.sprite } : {}),
     ...(json.visual !== undefined ? { visual: json.visual } : {}),
   };
   defs.set(id, def);
   byName.set(json.id, id);
+  if (json.station !== undefined) {
+    stations.set(json.station, id);
+  }
   if (json.toggle_to !== undefined) {
     pendingToggles.push({ id, target: json.toggle_to, source });
   }
@@ -224,6 +245,12 @@ export function blockByName(name: string): BlockId | undefined {
   return byName.get(name);
 }
 
+/** The block registered as the given named station (e.g.
+ * "crafting_table"), if any - see BlockDef.station. */
+export function stationBlock(station: string): BlockId | undefined {
+  return stations.get(station);
+}
+
 export function allBlocks(): Iterable<BlockDef> {
   return defs.values();
 }
@@ -234,6 +261,13 @@ export function blockDrops(id: BlockId): { item: string; count: number } | null 
   if (!def || def.id === BlockId.Air) return null;
   if (def.drops === null) return null;
   return def.drops ?? { item: def.name, count: 1 };
+}
+
+/** Blast resistance: survives an explosion whose damage falls below
+ * this. Defaults to hardness, same threshold mining already uses. */
+export function blastResistanceOf(id: BlockId): number {
+  const def = defs.get(id);
+  return def?.blastResistance ?? def?.hardness ?? 0;
 }
 
 /** The block id representing this liquid kind at the given level 1..8. */

@@ -8,6 +8,7 @@ import {
   chunkKey,
   findSpawnX,
   itemDef,
+  mobDef,
   PLAYER_HEIGHT,
   registerBlockJson,
   registerItemJson,
@@ -127,7 +128,7 @@ async function runGame(options: GameOptions): Promise<Renderer> {
     onRightClickTile: (x, y) => renderer.tryOpenBlockUI(x, y),
     onRightClickMob: (x, y) => {
       const mob = renderer.mobKindAt(x, y);
-      if (mob?.kind === "villager") {
+      if (mob && mobDef(mob.kind)?.trades) {
         renderer.openTrading(mob.id);
         return true;
       }

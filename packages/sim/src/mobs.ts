@@ -63,6 +63,8 @@ export interface MobDef {
   readonly explodes?: ExplodesDef;
   readonly wanders?: boolean;
   readonly burnsInDaylight?: boolean;
+  /** Can be right-clicked to open the trade panel. */
+  readonly trades?: boolean;
   readonly loot?: readonly MobLootEntry[];
   readonly equipment?: MobEquipmentDef;
   readonly spawn?: MobSpawnDef;
@@ -115,6 +117,7 @@ export function registerMobJson(raw: unknown, source = "datapack"): MobDef {
       : {}),
     ...(json.wanders !== undefined ? { wanders: json.wanders } : {}),
     ...(json.burns_in_daylight !== undefined ? { burnsInDaylight: json.burns_in_daylight } : {}),
+    ...(json.trades !== undefined ? { trades: json.trades } : {}),
     ...(json.loot !== undefined ? { loot: json.loot } : {}),
     ...(json.equipment !== undefined
       ? {

@@ -90,7 +90,16 @@ import { structureLootAt } from "./structures/place.js";
 import { spawnGenerator } from "./spawning.js";
 import { TRADES } from "./data/trades/index.js";
 import { DAY_LENGTH, daylightFactor } from "./time.js";
-import { allBlocks, blockByName, blockDef, blockDrops, BlockId, liquidBlock } from "./world/block.js";
+import {
+  allBlocks,
+  blastResistanceOf,
+  blockByName,
+  blockDef,
+  blockDrops,
+  BlockId,
+  liquidBlock,
+  stationBlock,
+} from "./world/block.js";
 import { surfaceHeight } from "./world/gen.js";
 import {
   allDimensionIds,
@@ -780,10 +789,10 @@ export class Simulation {
           }
         }
         if (!p.creative && canHarvest(block, held)) {
-          // Gravel sometimes yields flint instead, like Minecraft.
+          const altDrop = blockDef(block).altDrop;
           const drops =
-            block === BlockId.Gravel && this.rng() < 0.25
-              ? { item: "flint", count: 1 }
+            altDrop && this.rng() < altDrop.chance
+              ? { item: altDrop.item, count: altDrop.count }
               : blockDrops(block);
           if (drops) {
             this.spawnItem(p.dimension, mining.x + 0.5, mining.y + 0.75, drops, out);
@@ -947,9 +956,8 @@ export class Simulation {
         }
 
         entity.vx = dir * (mob?.speed ?? 0);
-        if (world.getBlockGenerating(Math.floor(entity.x), Math.floor(entity.y)) === BlockId.SoulSand) {
-          entity.vx *= 0.4;
-        }
+        const entitySlow = blockDef(world.getBlockGenerating(Math.floor(entity.x), Math.floor(entity.y))).movementSlow;
+        if (entitySlow !== undefined) entity.vx *= entitySlow;
         entity.vy = Math.min(entity.vy + GRAVITY, TERMINAL_VELOCITY);
         stepBody(world, entity, size.width, size.height);
         if (dir !== 0 && entity.vx === 0 && entity.onGround) {
@@ -1067,9 +1075,8 @@ export class Simulation {
         p.vx = p.input.dx * WALK_SPEED * speedFactor + p.kbX;
         p.kbX *= 0.6;
         if (Math.abs(p.kbX) < 0.01) p.kbX = 0;
-        if (world.getBlockGenerating(Math.floor(p.x), Math.floor(p.y)) === BlockId.SoulSand) {
-          p.vx *= 0.4;
-        }
+        const playerSlow = blockDef(world.getBlockGenerating(Math.floor(p.x), Math.floor(p.y))).movementSlow;
+        if (playerSlow !== undefined) p.vx *= playerSlow;
         if (swimming) {
           // Liquids slow and carry: gentle sinking, holding jump swims up.
           const lava = feetBlock.liquid!.kind === "lava";
@@ -1379,8 +1386,7 @@ export class Simulation {
       for (let tx = Math.floor(cx - r); tx <= Math.floor(cx + r); tx++) {
         if (Math.hypot(tx + 0.5 - cx, ty + 0.5 - cy) > r) continue;
         const block = world.getBlockGenerating(tx, ty);
-        const blockInfo = blockDef(block);
-        if (block === BlockId.Air || blockInfo.hardness < 0 || blockInfo.hardness >= 100) continue;
+        if (block === BlockId.Air || blockDef(block).hardness < 0 || blastResistanceOf(block) >= 100) continue;
         world.setBlock(tx, ty, BlockId.Air);
         out.push({ event: { type: "block_changed", dim: creeper.dimension, x: tx, y: ty, block: BlockId.Air } });
       }
@@ -1565,7 +1571,8 @@ export class Simulation {
           reject("invalid slot");
           return;
         }
-        const tableNearby = this.blockNearby(p, BlockId.CraftingTable);
+        const craftingTable = stationBlock("crafting_table");
+        const tableNearby = craftingTable !== undefined && this.blockNearby(p, craftingTable);
         if (!tableNearby && !SMALL_GRID_INDICES.includes(slot.index)) {
           reject("requires crafting table");
           return;
@@ -1576,7 +1583,8 @@ export class Simulation {
         return;
       }
       case "craft_result": {
-        const maxSize = this.blockNearby(p, BlockId.CraftingTable) ? 3 : 2;
+        const craftingTable = stationBlock("crafting_table");
+        const maxSize = craftingTable !== undefined && this.blockNearby(p, craftingTable) ? 3 : 2;
         const recipe = matchGrid(p.craftGrid, RECIPES.values(), maxSize);
         if (!recipe) {
           return;

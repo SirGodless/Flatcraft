@@ -3,5 +3,6 @@
   "name": "Crafting Table",
   "solid": true,
   "hardness": 30,
-  "tool": "axe"
+  "tool": "axe",
+  "station": "crafting_table"
 }

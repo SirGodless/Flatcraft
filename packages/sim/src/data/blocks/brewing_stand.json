@@ -3,5 +3,6 @@
   "name": "Brewing Stand",
   "solid": true,
   "hardness": 20,
-  "tool": "pickaxe"
+  "tool": "pickaxe",
+  "station": "brewing_stand"
 }

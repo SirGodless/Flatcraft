@@ -3,5 +3,6 @@
   "name": "Soul Sand",
   "solid": true,
   "hardness": 10,
-  "tool": "shovel"
+  "tool": "shovel",
+  "movement_slow": 0.4
 }
