@@ -27,7 +27,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { Accounts } from "./accounts.js";
 import { type ChunkExtra, ChunkFileStore } from "./chunkFiles.js";
 import { OidcLogin, type OidcConfig } from "./oidc.js";
-import { runContentScripts } from "./sandbox.js";
+import { compileContentScripts, runCompiledScripts } from "./sandbox.js";
 
 /**
  * The dedicated server: one Node process, one port.
@@ -199,14 +199,21 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
     log(`datapack loaded: ${packBlocks.length} blocks, ${packItems.length} items, ${packMobs.length} mobs`);
   }
 
-  // Content-package scripts (content/<pkg>/scripts/*.ts) run before
-  // validateAllContent below, so a multiblock/dimension JSON referencing
-  // a script-registered handler id resolves during that same validation
-  // pass instead of looking like a dangling reference. A script throwing
-  // at top-level load is a hard boot failure (propagates out of this
-  // call), matching validateAllContent's own "refuse to start rather
-  // than run with broken content" rule.
-  runContentScripts(contentPackages, getSim, log);
+  // Content-package scripts (content/<pkg>/scripts/*.ts) compile once
+  // here - the resulting JS is reused both to run them server-side
+  // (isolated-vm, below) and to serve them to connecting clients'
+  // Worker+iframe sandbox via /api/scripts (Stage 9 - the client never
+  // transpiles TS itself, same asymmetry as /api/datapack already
+  // serving pre-parsed JSON rather than making the client parse
+  // anything mod-shaped on its own). Compiling before validateAllContent
+  // runs so a multiblock/dimension JSON referencing a script-registered
+  // handler id resolves during that same validation pass instead of
+  // looking like a dangling reference. A script that fails to compile or
+  // throws at top-level load is a hard boot failure (propagates out of
+  // these calls), matching validateAllContent's own "refuse to start
+  // rather than run with broken content" rule.
+  const scriptBundles = compileContentScripts(contentPackages);
+  runCompiledScripts(scriptBundles, getSim, log);
 
   // Hard stop, not a warning: every content reference (currently
   // multiblock handlers) must resolve to something actually registered,
@@ -412,6 +419,20 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
       response.end(JSON.stringify({ blocks: packBlocks, items: packItems, mobs: packMobs, sprites: spriteEntries }));
       return;
     }
+    if (urlPath === "/api/scripts") {
+      // { [packageId]: string[] } - already-compiled JS (see
+      // compileContentScripts above), in load order, one entry per
+      // content package that has a scripts/ directory. The client's
+      // Worker+iframe sandbox (Stage 9) evals these directly; it never
+      // sees or transpiles the original TypeScript.
+      const scripts: Record<string, string[]> = {};
+      for (const [packageId, files] of scriptBundles) {
+        scripts[packageId] = files.map((f) => f.code);
+      }
+      response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      response.end(JSON.stringify(scripts));
+      return;
+    }
     if (urlPath === "/sprites/manifest.json") {
       response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
       response.end(JSON.stringify(spriteEntries));
@@ -579,6 +600,18 @@ function serveFile(baseDir: string, relativePath: string, response: ServerRespon
     response.writeHead(200, {
       "content-type": MIME_TYPES[extname(filePath)] ?? "application/octet-stream",
       "cache-control": relativePath.startsWith("assets/") ? "public, max-age=31536000, immutable" : "no-cache",
+      // sandbox.html's own bootstrap module script (and the module
+      // Worker it spawns - see client/src/sandbox/host.ts) load from
+      // inside a deliberately opaque-origin iframe (sandbox="allow-
+      // scripts", no allow-same-origin). A module script/worker always
+      // enforces a CORS check, even for what's nominally "the same
+      // server" - an opaque origin is never same-origin with anything,
+      // itself included, so without this header the sandbox's own
+      // harness code fails to load at all. Every file served here is
+      // public static content already (the whole client bundle,
+      // sprites) with no per-user/cookie-gated access to protect, so a
+      // permissive origin is the correct answer, not a workaround.
+      "access-control-allow-origin": "*",
     });
     response.end(content);
   } catch {

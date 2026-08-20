@@ -103,8 +103,29 @@ export default defineConfig({
   plugins: [spriteManifest(), flatcraftContentManifest()],
   server: {
     port: 5173,
+    // sandbox.html's own bootstrap module script (and the module Worker
+    // it spawns - see src/sandbox/host.ts) load from inside a
+    // deliberately opaque-origin iframe. A module script/worker always
+    // enforces a CORS check, even for what's nominally "the same dev
+    // server" - an opaque origin is never same-origin with anything.
+    // Same reasoning as @flatcraft/dedicated's serveFile in production;
+    // everything the dev server serves is public static content anyway.
+    cors: true,
   },
   build: {
     target: "es2022",
+    // sandbox.html (the Stage 9 script-sandbox iframe host) isn't linked
+    // from index.html - it's only ever loaded by main.ts setting an
+    // <iframe src="/sandbox.html"> at runtime - so it needs its own
+    // explicit build entry or `vite build` would never emit it (worker.ts
+    // gets its own build entry automatically, via src/sandbox/index.ts's
+    // `?worker&url` import - see that file's own comment for why it's a
+    // separately-fetched URL rather than a direct `new Worker(...)`).
+    rollupOptions: {
+      input: {
+        main: join(here, "index.html"),
+        sandbox: join(here, "sandbox.html"),
+      },
+    },
   },
 });

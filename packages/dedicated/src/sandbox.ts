@@ -43,6 +43,20 @@ import {
  * (a later tick, a later multiblock trigger) is caught and logged
  * instead, so one broken mod hook doesn't take the whole server down on
  * every subsequent tick.
+ *
+ * @flatcraft/content's transpileScript (called here indirectly via
+ * compileContentScripts) must never be bundled into dist/server.mjs -
+ * esbuild's own synchronous Node API (transformSync) always spawns a
+ * worker_threads.Worker(__filename) under the hood, and if esbuild's own
+ * code has been inlined into server.mjs by our own build, __filename
+ * inside that worker call resolves to server.mjs itself. Node then
+ * can't tell whether to load that worker entry as CJS or ESM (our
+ * banner's `const require = ...` shim next to genuine top-level await
+ * makes the format ambiguous), and boot fails the moment any content
+ * package's script triggers a real transpile. package.json's build
+ * script marks esbuild `--external` (same reasoning as isolated-vm's
+ * own `--external` - a native/subprocess-backed dependency, not
+ * something meant to be bundled) specifically to avoid this.
  */
 
 const ISOLATE_MEMORY_LIMIT_MB = 128;
@@ -215,31 +229,32 @@ function installBridge(
   );
 }
 
-/** Runs every scripts/*.ts file in every discovered content package that
- * has one, in filename-sorted (deterministic) order, sharing one isolate
- * per package. A script throwing at top-level load is a hard boot
- * failure (thrown onward, same "refuse to start rather than run with
- * broken content" rule validateAllContent already enforces for JSON) -
- * never a swallowed warning, so a broken mod script is caught at boot,
- * not discovered later by a player watching something silently not
- * work. */
-export function runContentScripts(
-  packages: readonly ContentPackage[],
-  getSim: () => Simulation,
-  log: (message: string) => void,
-): void {
+export interface CompiledScript {
+  path: string;
+  code: string;
+}
+
+/** Transpiles every scripts/*.ts file in every discovered content package
+ * that has one, in filename-sorted (deterministic) order, to plain JS
+ * ("iife" format - see transpileScript's own doc comment for why). Shared
+ * by runContentScripts (server-side isolated-vm execution) and by
+ * server.ts's /api/scripts endpoint (the client's Worker+iframe sandbox
+ * - Stage 9 - never transpiles TS itself; it receives already-compiled
+ * JS from the server the same way it already receives already-parsed
+ * JSON content via /api/datapack). Compiling once here and letting both
+ * call sites reuse the result avoids transpiling the same file twice at
+ * boot. Throws on a compile failure - same "refuse to start rather than
+ * run with broken content" rule as every other content-loading path in
+ * this codebase, not a per-caller concern to remember to check. */
+export function compileContentScripts(packages: readonly ContentPackage[]): Map<string, CompiledScript[]> {
+  const decoder = new TextDecoder();
+  const byPackage = new Map<string, CompiledScript[]>();
   for (const pkg of packages) {
     const scriptFiles = [...pkg.files.entries()]
       .filter(([path]) => path.startsWith("scripts/") && path.endsWith(".ts"))
       .sort(([a], [b]) => a.localeCompare(b));
     if (scriptFiles.length === 0) continue;
-
-    const isolate = new ivm.Isolate({ memoryLimit: ISOLATE_MEMORY_LIMIT_MB });
-    const context = isolate.createContextSync();
-    installBridge(context, getSim, pkg.id, log);
-    context.evalSync(BOOTSTRAP_SOURCE);
-
-    const decoder = new TextDecoder();
+    const compiled: CompiledScript[] = [];
     for (const [path, bytes] of scriptFiles) {
       const source = decoder.decode(bytes);
       const transpiled = transpileScript(source, `${pkg.id}/${path}`, { format: "iife" });
@@ -247,8 +262,50 @@ export function runContentScripts(
         const detail = transpiled.errors.map((e) => e.message).join("; ");
         throw new Error(`content package "${pkg.id}": ${path} failed to compile: ${detail}`);
       }
-      isolate.compileScriptSync(transpiled.code, { filename: `${pkg.id}/${path}` }).runSync(context, { timeout: SCRIPT_LOAD_TIMEOUT_MS });
+      compiled.push({ path, code: transpiled.code });
     }
-    log(`content package "${pkg.id}": loaded ${scriptFiles.length} script${scriptFiles.length === 1 ? "" : "s"}`);
+    byPackage.set(pkg.id, compiled);
   }
+  return byPackage;
+}
+
+/** Runs every compiled script bundle (see compileContentScripts) in its
+ * own isolate, one per content package, in the order its scripts were
+ * compiled. A script throwing at top-level load is a hard boot failure
+ * (thrown onward, same "refuse to start rather than run with broken
+ * content" rule validateAllContent already enforces for JSON) - never a
+ * swallowed warning, so a broken mod script is caught at boot, not
+ * discovered later by a player watching something silently not work.
+ * Takes already-compiled bundles rather than packages directly so
+ * server.ts can compile once at boot and reuse the same result both here
+ * and for its /api/scripts endpoint - see compileContentScripts. */
+export function runCompiledScripts(
+  bundles: ReadonlyMap<string, readonly CompiledScript[]>,
+  getSim: () => Simulation,
+  log: (message: string) => void,
+): void {
+  for (const [packageId, scripts] of bundles) {
+    const isolate = new ivm.Isolate({ memoryLimit: ISOLATE_MEMORY_LIMIT_MB });
+    const context = isolate.createContextSync();
+    installBridge(context, getSim, packageId, log);
+    context.evalSync(BOOTSTRAP_SOURCE);
+
+    for (const { path, code } of scripts) {
+      isolate.compileScriptSync(code, { filename: `${packageId}/${path}` }).runSync(context, { timeout: SCRIPT_LOAD_TIMEOUT_MS });
+    }
+    log(`content package "${packageId}": loaded ${scripts.length} script${scripts.length === 1 ? "" : "s"}`);
+  }
+}
+
+/** Convenience wrapper: compile then run in one call, for a caller that
+ * has raw packages and doesn't need the intermediate compiled bundle
+ * (every test in sandbox.test.ts; server.ts itself calls
+ * compileContentScripts + runCompiledScripts separately so it can keep
+ * the compiled bundle around for /api/scripts too). */
+export function runContentScripts(
+  packages: readonly ContentPackage[],
+  getSim: () => Simulation,
+  log: (message: string) => void,
+): void {
+  runCompiledScripts(compileContentScripts(packages), getSim, log);
 }

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      Loaded only inside a `sandbox="allow-scripts"` iframe (no
+      allow-same-origin - see src/sandbox/host.ts and main.ts's
+      loadServerScripts/createScriptSandbox), which already gives this
+      document an opaque origin: no access to the parent page's cookies/
+      localStorage/IndexedDB, and no scriptable access between this frame
+      and the parent beyond postMessage. connect-src 'none' is the actual
+      network cutoff on top of that - fetch/XHR/WebSocket/EventSource
+      from this document AND from the worker.ts it spawns (a CSP a blob:
+      worker with no response headers of its own inherits from the
+      document that created it) are blocked outright, closing the
+      "opaque origin still allows anonymous cross-origin requests" gap
+      origin-isolation alone leaves open. worker-src blob: (not 'self') -
+      the worker is built from a Blob, not fetched from a URL; an opaque-
+      origin document can't construct a Worker over a real URL at all,
+      only over a blob: one that inherits its own (already opaque)
+      origin - see host.ts. unsafe-eval is required and deliberate: the
+      entire point of this document is running a mod's already-compiled
+      JS, which needs Function()/eval to execute dynamically-provided
+      code at all - that's a capability, not a hole, given network
+      access is cut.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' 'unsafe-eval'; worker-src blob:; connect-src 'none'; frame-ancestors 'self';"
+    />
+    <title>FlatCraft mod sandbox</title>
+  </head>
+  <body>
+    <script type="module" src="/src/sandbox/host.ts"></script>
+  </body>
+</html>
