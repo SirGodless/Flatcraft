@@ -34,6 +34,26 @@ describe("generic content-type engine", () => {
     expect(() => validateContentInstance("test_gadget", { id: "widget", rarity: "common", nope: 1 }, "test")).toThrow(/unknown field/);
   });
 
+  it("strips an optional flatcraft: prefix on instance refs, but keeps handler refs verbatim", () => {
+    // Regression test: an earlier version stripped "flatcraft:" from
+    // handler refs too, which broke dimension.ts's generator/spawns/
+    // arrival lookups - those registries are keyed by the full
+    // "flatcraft:overworld"-style modname:funktion string, not the
+    // stripped tail (see world/dimension.ts and world/gen.ts).
+    registerContentType(
+      {
+        id: "test_ref_kinds",
+        fields: {
+          instance_ref: { kind: "ref", ref_type: "item", required: true },
+          handler_ref: { kind: "ref", ref_type: "some_handler", ref_kind: "handler", required: true },
+        },
+      },
+      "test",
+    );
+    const out = validateContentInstance("test_ref_kinds", { instance_ref: "flatcraft:stick", handler_ref: "flatcraft:overworld" }, "test");
+    expect(out).toEqual({ instance_ref: "stick", handler_ref: "flatcraft:overworld" });
+  });
+
   it("validates nested object/array/record/oneOf fields", () => {
     registerContentType(
       {

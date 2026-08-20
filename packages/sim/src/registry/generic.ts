@@ -179,14 +179,22 @@ function validateFieldValue(decl: FieldDecl, raw: unknown, source: string, path:
     }
     case "ref": {
       // Syntax only for now - see the module doc comment on why existence
-      // checking is deferred rather than attempted here. Tolerates (and
-      // strips) an optional "flatcraft:" prefix, matching every other
-      // ref-like field elsewhere in this codebase (needIngredientRef,
-      // multiblock.ts's stripNs) - full <package>:<type>:<name>
-      // namespacing isn't rolled out yet, but some existing content
-      // (recipe ingredients, trades) already writes plain-namespace-
-      // prefixed refs today and this must keep accepting them.
+      // checking is deferred rather than attempted here.
       const s = need<string>(source, path, raw, "string");
+      if (decl.refKind === "handler") {
+        // Handler ids already use the modname:funktion convention (e.g.
+        // "flatcraft:overworld" - see multiblock.ts, and dimension
+        // generators registered the same way) and are stored under that
+        // full string, colon included - returned as-is, never stripped.
+        if (s.length === 0) throw new SchemaError(source, `"${path}" must be a non-empty string`);
+        return s;
+      }
+      // Instance refs (blocks, items, ...) aren't namespaced yet, so
+      // tolerate (and strip) an optional "flatcraft:" prefix, matching
+      // every other ref-like field elsewhere in this codebase
+      // (needIngredientRef, multiblock.ts's stripNs) - some existing
+      // content (recipe ingredients, trades) already writes plain-
+      // namespace-prefixed refs today and this must keep accepting them.
       const stripped = s.startsWith("flatcraft:") ? s.slice("flatcraft:".length) : s;
       if (!ID_PATTERN.test(stripped)) {
         throw new SchemaError(source, `"${path}" must be a lowercase snake_case id (optionally "flatcraft:"-prefixed), got "${s}"`);

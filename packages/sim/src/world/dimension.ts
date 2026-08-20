@@ -1,3 +1,4 @@
+import { registerContentType, validateContentInstance } from "../registry/generic.js";
 import type { World } from "./world.js";
 import type { Chunk } from "./chunk.js";
 
@@ -105,52 +106,73 @@ export type ArrivalGenerator = (world: World, xt: number) => number;
  * death respawn landing back at the default dimension). */
 export type SpawnPointGenerator = (seed: number) => { x: number; y: number };
 
-function requireString(id: string, field: string, value: unknown): string {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new Error(`dimension "${id}": "${field}" is required`);
-  }
-  return value;
-}
+registerContentType(
+  {
+    id: "dimension",
+    fields: {
+      id: { kind: "id", required: true },
+      generator: { kind: "ref", ref_type: "dimension_generator", ref_kind: "handler", required: true },
+      spawns: { kind: "ref", ref_type: "spawn_generator", ref_kind: "handler", required: true },
+      arrival: { kind: "ref", ref_type: "arrival_generator", ref_kind: "handler", required: true },
+      has_sky: { kind: "boolean", required: true },
+      respawn: { kind: "boolean" },
+      spawn_point: { kind: "ref", ref_type: "spawn_point_generator", ref_kind: "handler" },
+      portal: {
+        kind: "object",
+        fields: {
+          to: { kind: "ref", ref_type: "dimension", required: true },
+          scale: { kind: "number", min: -100000, max: 100000, required: true },
+        },
+      },
+      sky: {
+        kind: "object",
+        fields: {
+          type: { kind: "enum", values: ["cycle", "fixed"], required: true },
+          background: { kind: "string" },
+          veil_color: { kind: "string" },
+          veil_alpha: { kind: "number", min: 0, max: 1 },
+        },
+      },
+    },
+  },
+  "engine/types/dimension",
+);
 
 export function parseDimension(id: string, json: DimensionJson): DimensionDef {
-  const generator = requireString(id, "generator", json.generator);
-  const spawns = requireString(id, "spawns", json.spawns);
-  const arrival = requireString(id, "arrival", json.arrival);
-  if (typeof json.has_sky !== "boolean") {
-    throw new Error(`dimension "${id}": "has_sky" is required`);
-  }
-  if (json.portal !== undefined) {
-    requireString(id, "portal.to", json.portal.to);
-    if (typeof json.portal.scale !== "number") {
-      throw new Error(`dimension "${id}": "portal.scale" is required`);
-    }
-  }
-  let sky: DimensionSky | undefined;
-  if (json.sky !== undefined) {
-    const type = json.sky.type;
-    if (type !== "cycle" && type !== "fixed") {
-      throw new Error(`dimension "${id}": sky.type must be "cycle" or "fixed"`);
-    }
-    if (type === "fixed" && typeof json.sky.background !== "string") {
-      throw new Error(`dimension "${id}": sky type "fixed" requires "background"`);
-    }
-    sky = {
-      type,
-      ...(json.sky.background !== undefined ? { background: json.sky.background } : {}),
-      ...(json.sky.veil_color !== undefined ? { veilColor: json.sky.veil_color } : {}),
-      ...(json.sky.veil_alpha !== undefined ? { veilAlpha: json.sky.veil_alpha } : {}),
-    };
+  const v = validateContentInstance("dimension", json, `dimension "${id}"`) as {
+    generator: string;
+    spawns: string;
+    arrival: string;
+    has_sky: boolean;
+    respawn?: boolean;
+    spawn_point?: string;
+    portal?: { to: string; scale: number };
+    sky?: { type: "cycle" | "fixed"; background?: string; veil_color?: string; veil_alpha?: number };
+  };
+  // Cross-field rule the DSL doesn't express yet (see nether_layer's
+  // fbm2 check for the same pattern) - kept as a small residual check.
+  if (v.sky?.type === "fixed" && v.sky.background === undefined) {
+    throw new Error(`dimension "${id}": sky type "fixed" requires "background"`);
   }
   return {
     id,
-    generator,
-    spawns,
-    arrival,
-    hasSky: json.has_sky,
-    respawn: json.respawn === true,
-    ...(json.spawn_point !== undefined ? { spawnPoint: json.spawn_point } : {}),
-    ...(json.portal !== undefined ? { portal: { to: json.portal.to, scale: json.portal.scale } } : {}),
-    ...(sky !== undefined ? { sky } : {}),
+    generator: v.generator,
+    spawns: v.spawns,
+    arrival: v.arrival,
+    hasSky: v.has_sky,
+    respawn: v.respawn === true,
+    ...(v.spawn_point !== undefined ? { spawnPoint: v.spawn_point } : {}),
+    ...(v.portal !== undefined ? { portal: { to: v.portal.to, scale: v.portal.scale } } : {}),
+    ...(v.sky !== undefined
+      ? {
+          sky: {
+            type: v.sky.type,
+            ...(v.sky.background !== undefined ? { background: v.sky.background } : {}),
+            ...(v.sky.veil_color !== undefined ? { veilColor: v.sky.veil_color } : {}),
+            ...(v.sky.veil_alpha !== undefined ? { veilAlpha: v.sky.veil_alpha } : {}),
+          },
+        }
+      : {}),
   };
 }
 
