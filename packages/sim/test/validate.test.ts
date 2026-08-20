@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   allBiomeIds,
   allDimensionIds,
+  allItems,
   defaultDimensionId,
   parseBiome,
   parseDimension,
@@ -15,6 +16,7 @@ import {
   validateCommandHandlers,
   validateDefaultDimension,
   validateDimensionGenerators,
+  validateItemEnchants,
   validateMultiblockHandlers,
   validatePortalLinks,
   validateSpawnGenerators,
@@ -163,5 +165,16 @@ describe("biome registry", () => {
         tree_chance: 0,
       }),
     ).toThrow(/unknown floor block/);
+  });
+});
+
+describe("enchant references", () => {
+  it("every built-in item's enchants list resolves to a registered enchant", () => {
+    expect(validateItemEnchants(allItems())).toEqual([]);
+  });
+
+  it("reports an item referencing an unregistered enchant", () => {
+    const problems = validateItemEnchants([{ id: "test_validate_item", enchants: ["nobody_registered_this_enchant"] }]);
+    expect(problems).toEqual(['item "test_validate_item" references unknown enchant "nobody_registered_this_enchant"']);
   });
 });

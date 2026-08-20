@@ -1,0 +1,5 @@
+{
+  "id": "efficiency",
+  "effect": "mining_speed",
+  "per_level": 0.5
+}

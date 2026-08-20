@@ -1,5 +1,5 @@
 import type { ItemStack } from "./inventory.js";
-import { enchantLevel } from "./effects.js";
+import { enchantBonus } from "./enchants.js";
 import { itemDef, type ToolDef } from "./items.js";
 import { blockDef, BlockId } from "./world/block.js";
 
@@ -35,8 +35,7 @@ export function miningTicks(block: BlockId, held: ItemStack | null): number {
   }
   const tool = heldTool(held);
   if (tool !== undefined && tool.kind === def.tool) {
-    // Efficiency enchantment: +50% speed per level.
-    const efficiency = 1 + 0.5 * enchantLevel(held, "efficiency");
+    const efficiency = 1 + enchantBonus(held, "mining_speed");
     return Math.max(1, Math.ceil(def.hardness / (tool.speed * efficiency)));
   }
   return Math.max(1, def.hardness);
