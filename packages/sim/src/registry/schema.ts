@@ -304,7 +304,7 @@ function validateColorTriple(source: string, path: string, value: unknown): numb
   return arr.map((v, i) => needNumber(source, `${path}[${i}]`, v, 0, 255));
 }
 
-function validateBlockFallbackJson(raw: unknown, source: string): BlockFallbackJson {
+export function validateBlockFallbackJson(raw: unknown, source: string): BlockFallbackJson {
   const value = need<Record<string, unknown>>(source, "visual.fallback", raw, "object");
   checkKeys(source, "visual.fallback.", value, [
     "base", "top", "noise", "alpha", "holes", "stripe", "specks", "opening", "frame", "fill_rows", "shape",
@@ -347,7 +347,7 @@ function validateBlockFallbackJson(raw: unknown, source: string): BlockFallbackJ
   return out;
 }
 
-function validateItemFallbackJson(raw: unknown, source: string): ItemFallbackJson {
+export function validateItemFallbackJson(raw: unknown, source: string): ItemFallbackJson {
   const value = need<Record<string, unknown>>(source, "visual.fallback", raw, "object");
   checkKeys(source, "visual.fallback.", value, ["rows", "palette"]);
   const rowsRaw = need<unknown[]>(source, "visual.fallback.rows", value["rows"], "array");
@@ -360,7 +360,7 @@ function validateItemFallbackJson(raw: unknown, source: string): ItemFallbackJso
   return { rows, palette };
 }
 
-function validateMobFallbackJson(raw: unknown, source: string): MobFallbackJson {
+export function validateMobFallbackJson(raw: unknown, source: string): MobFallbackJson {
   const value = need<Record<string, unknown>>(source, "visual.fallback", raw, "object");
   checkKeys(source, "visual.fallback.", value, ["rects"]);
   const rectsRaw = need<unknown[]>(source, "visual.fallback.rects", value["rects"], "array");
@@ -384,7 +384,7 @@ function validateMobFallbackJson(raw: unknown, source: string): MobFallbackJson 
  * a content type that hasn't defined a fallback shape yet; passing a
  * "fallback" field without one is a schema error, same as any other
  * unsupported field. */
-function validateVisualJson<F>(
+export function validateVisualJson<F>(
   raw: unknown,
   source: string,
   validateFallback?: (raw: unknown, source: string) => F,
@@ -431,7 +431,7 @@ function validateVisualJson<F>(
   return out;
 }
 
-function validateRecipeJson(raw: unknown, source: string, index: number): RecipeJson {
+export function validateRecipeJson(raw: unknown, source: string, index: number): RecipeJson {
   const path = `recipes[${index}].`;
   const value = need<Record<string, unknown>>(source, `recipes[${index}]`, raw, "object");
   checkKeys(source, path, value, ["station", "style", "recipe", "key", "ingredients", "input", "cooking_ticks", "amount"]);

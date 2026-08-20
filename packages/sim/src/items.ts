@@ -1,5 +1,6 @@
 import { ITEM_JSONS } from "./data/items/index.js";
-import { validateItemJson, type RecipeJson } from "./registry/schema.js";
+import { registerContentType, validateContentInstance } from "./registry/generic.js";
+import { validateRecipeJson, validateVisualJson, validateItemFallbackJson, type ItemJson, type RecipeJson } from "./registry/schema.js";
 import type { ItemVisualDef } from "./registry/visual.js";
 import { blockByName, BlockId } from "./world/block.js";
 
@@ -100,9 +101,86 @@ function pretty(id: string): string {
   return id.split("_").map((word) => (word[0] ?? "").toUpperCase() + word.slice(1)).join(" ");
 }
 
+registerContentType(
+  {
+    id: "item",
+    fields: {
+      id: { kind: "id", required: true },
+      name: { kind: "string" },
+      max_stack: { kind: "number", min: 1, max: 64 },
+      sprite: { kind: "string" },
+      // visual/recipes are validated separately below - their shape is
+      // either content-type-parameterized (visual's fallback) or
+      // genuinely algorithmic (a recipe's station-dependent branching),
+      // neither of which the flat field DSL expresses (see multiblock.ts's
+      // `config` for the same "any" pattern, and structures.ts/biome.ts
+      // for the same "generic engine validates the rest, hand code keeps
+      // its own logic" split).
+      visual: { kind: "any" },
+      places_block: { kind: "ref", ref_type: "block" },
+      tool: {
+        kind: "object",
+        fields: {
+          kind: { kind: "enum", values: ["pickaxe", "axe", "shovel", "sword", "hammer"], required: true },
+          tier: { kind: "number", min: 1, max: 8, required: true },
+          mining_speed: { kind: "number", min: 1, max: 100, required: true },
+        },
+      },
+      weapon: {
+        kind: "object",
+        fields: { damage: { kind: "number", min: 0, max: 100, required: true }, knockback: { kind: "number", min: 0, max: 2 } },
+      },
+      ranged: {
+        kind: "object",
+        fields: {
+          damage: { kind: "number", min: 0, max: 100, required: true },
+          cooldown_ticks: { kind: "number", min: 1, max: 1000, required: true },
+          arrow_speed: { kind: "number", min: 0.01, max: 10, required: true },
+          ammo: { kind: "ref", ref_type: "item", required: true },
+        },
+      },
+      food: {
+        kind: "object",
+        fields: {
+          hunger: { kind: "number", min: 0, max: 20, required: true },
+          saturation: { kind: "number", min: 0, max: 20 },
+          eat_ticks: { kind: "number", min: 1, max: 200 },
+          returns: { kind: "ref", ref_type: "item" },
+        },
+      },
+      armor: { kind: "object", fields: { absorb: { kind: "number", min: 0, max: 0.95, required: true } } },
+      shield: { kind: "object", fields: { block: { kind: "number", min: 0, max: 0.95, required: true } } },
+      grapple: { kind: "object", fields: { range: { kind: "number", min: 1, max: 128, required: true } } },
+      glider: {
+        kind: "object",
+        fields: { sink: { kind: "number", min: 0, max: 1, required: true }, glide_boost: { kind: "number", min: 0, max: 10, required: true } },
+      },
+      effect: {
+        kind: "object",
+        fields: {
+          id: { kind: "id", required: true },
+          ticks: { kind: "number", min: 1, max: 1_000_000, required: true },
+          returns: { kind: "ref", ref_type: "item" },
+        },
+      },
+      bucket: { kind: "object", fields: { capacity: { kind: "number", min: 1, max: 64, required: true } } },
+      container: { kind: "object", fields: { slots: { kind: "number", min: 1, max: 54, required: true } } },
+      fuel_ticks: { kind: "number", min: 1, max: 100_000 },
+      enchants: { kind: "array", items: { kind: "ref", ref_type: "enchant" } },
+      recipes: { kind: "array", items: { kind: "any" } },
+    },
+  },
+  "engine/types/item",
+);
+
 /** Register an item from datapack JSON (built-in files or server mods). */
 export function registerItemJson(raw: unknown, source = "datapack"): ItemDef {
-  const json = validateItemJson(raw, source);
+  const v = validateContentInstance("item", raw, source) as unknown as ItemJson;
+  const json: ItemJson = {
+    ...v,
+    ...(v.visual !== undefined ? { visual: validateVisualJson(v.visual, source, validateItemFallbackJson) } : {}),
+    ...(v.recipes !== undefined ? { recipes: v.recipes.map((entry, i) => validateRecipeJson(entry, source, i)) } : {}),
+  };
   let block: BlockId | undefined;
   if (json.places_block !== undefined) {
     block = blockByName(json.places_block);
