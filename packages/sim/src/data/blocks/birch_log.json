@@ -1,7 +1,18 @@
 {
-  "id": "birch_log",
+  "id": "flatcraft:block:birch_log",
   "name": "Birch Log",
   "solid": false,
   "hardness": 25,
-  "tool": "axe"
+  "tool": "axe",
+  "visual": {
+    "fallback": {
+      "base": [
+        204,
+        202,
+        190
+      ],
+      "noise": 0.1,
+      "stripe": true
+    }
+  }
 }

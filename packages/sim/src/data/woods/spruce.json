@@ -1,0 +1,7 @@
+{
+  "id": "flatcraft:wood:spruce",
+  "log": "flatcraft:block:spruce_log",
+  "leaves": "flatcraft:block:spruce_leaves",
+  "extra_height": 2,
+  "canopy_shape": "narrow"
+}

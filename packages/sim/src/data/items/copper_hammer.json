@@ -1,5 +1,5 @@
 {
-  "id": "copper_hammer",
+  "id": "flatcraft:item:copper_hammer",
   "name": "Copper Hammer",
   "max_stack": 1,
   "tool": {
@@ -12,7 +12,7 @@
     "knockback": 0.35
   },
   "enchants": [
-    "efficiency"
+    "flatcraft:enchant:efficiency"
   ],
   "recipes": [
     {
@@ -24,9 +24,27 @@
         " b "
       ],
       "key": {
-        "a": "item:copper_ingot",
-        "b": "item:stick"
+        "a": "item:flatcraft:item:copper_ingot",
+        "b": "item:flatcraft:item:stick"
       }
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        ".HHHHH..",
+        ".HHHHH..",
+        ".HHHHH..",
+        "....S...",
+        "....S...",
+        "....S...",
+        "....S...",
+        "........"
+      ],
+      "palette": {
+        "H": "#d87a4e",
+        "S": "#6b4f2e"
+      }
+    }
+  }
 }

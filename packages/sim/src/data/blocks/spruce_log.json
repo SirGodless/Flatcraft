@@ -1,7 +1,18 @@
 {
-  "id": "spruce_log",
+  "id": "flatcraft:block:spruce_log",
   "name": "Spruce Log",
   "solid": false,
   "hardness": 25,
-  "tool": "axe"
+  "tool": "axe",
+  "visual": {
+    "fallback": {
+      "base": [
+        70,
+        52,
+        32
+      ],
+      "noise": 0.1,
+      "stripe": true
+    }
+  }
 }

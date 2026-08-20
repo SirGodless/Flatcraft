@@ -1,5 +1,5 @@
 {
-  "id": "cooked_beef",
+  "id": "flatcraft:item:cooked_beef",
   "name": "Cooked Beef",
   "food": {
     "hunger": 8,
@@ -9,8 +9,25 @@
   "recipes": [
     {
       "station": "furnace",
-      "input": "item:beef",
+      "input": "item:flatcraft:item:beef",
       "cooking_ticks": 200
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "..XXX...",
+        ".XXXXX..",
+        ".XXXXX..",
+        "..XXXX..",
+        "...XX...",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#7a4a2a"
+      }
+    }
+  }
 }

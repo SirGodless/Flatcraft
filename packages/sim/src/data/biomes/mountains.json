@@ -1,0 +1,20 @@
+{
+  "id": "flatcraft:biome:mountains",
+  "noise_max": 1,
+  "layers": [],
+  "floor": "flatcraft:block:stone",
+  "snow": {
+    "at_or_below_surface": -14,
+    "block": "flatcraft:block:snow"
+  },
+  "tree_chance": 0.05,
+  "tree_woods": [
+    {
+      "wood": "flatcraft:wood:spruce",
+      "weight": 1
+    }
+  ],
+  "extra_veins": [
+    "flatcraft:vein:emerald_ore"
+  ]
+}

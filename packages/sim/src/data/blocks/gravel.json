@@ -1,7 +1,22 @@
 {
-  "id": "gravel",
+  "id": "flatcraft:block:gravel",
   "name": "Gravel",
   "solid": true,
   "hardness": 9,
-  "tool": "shovel"
+  "tool": "shovel",
+  "alt_drop": {
+    "item": "flatcraft:item:flint",
+    "amount": 1,
+    "chance": 0.25
+  },
+  "visual": {
+    "fallback": {
+      "base": [
+        127,
+        124,
+        122
+      ],
+      "noise": 0.3
+    }
+  }
 }

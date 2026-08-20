@@ -1,0 +1,5 @@
+{
+  "id": "flatcraft:wood:oak",
+  "log": "flatcraft:block:oak_log",
+  "leaves": "flatcraft:block:oak_leaves"
+}

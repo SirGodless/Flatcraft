@@ -1,4 +1,21 @@
 {
-  "id": "flint",
-  "name": "Flint"
+  "id": "flatcraft:item:flint",
+  "name": "Flint",
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "...X....",
+        "..XXX...",
+        ".XXXXX..",
+        "..XXX...",
+        "...X....",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#3c3c40"
+      }
+    }
+  }
 }

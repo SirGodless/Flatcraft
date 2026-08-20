@@ -1,5 +1,5 @@
 {
-  "id": "iron_ore",
+  "id": "flatcraft:item:iron_ore",
   "name": "Iron Ore",
-  "places_block": "iron_ore"
+  "places_block": "flatcraft:block:iron_ore"
 }

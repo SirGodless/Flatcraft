@@ -1,4 +1,21 @@
 {
-  "id": "emerald",
-  "name": "Emerald"
+  "id": "flatcraft:item:emerald",
+  "name": "Emerald",
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "...X....",
+        "..XXX...",
+        ".XXXXX..",
+        "..XXX...",
+        "...X....",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#30c85e"
+      }
+    }
+  }
 }

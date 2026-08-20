@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -35,6 +35,7 @@ const SURFACE = surfaceHeight(SEED, SPAWN_X);
 
 class TestClient {
   readonly events: SimEvent[] = [];
+  readonly pongs: number[] = [];
   playerId = 0;
   name = "";
   token = "";
@@ -58,6 +59,8 @@ class TestClient {
           reject(new Error(message.reason));
         } else if (message.type === "events") {
           client.events.push(...message.events);
+        } else if (message.type === "pong") {
+          client.pongs.push(message.sentAt);
         }
       });
       client.socket.on("error", (error) => reject(error));
@@ -66,6 +69,10 @@ class TestClient {
 
   send(command: Command): void {
     this.socket.send(JSON.stringify({ type: "command", command }));
+  }
+
+  ping(sentAt: number): void {
+    this.socket.send(JSON.stringify({ type: "ping", sentAt }));
   }
 
   join(): void {
@@ -84,6 +91,23 @@ class TestClient {
           resolve(found);
         } else if (Date.now() - started > timeoutMs) {
           reject(new Error(`timed out waiting for event; got ${JSON.stringify(this.events.map((e) => e.type))}`));
+        } else {
+          setTimeout(poll, 25);
+        }
+      };
+      poll();
+    });
+  }
+
+  /** Wait until a pong for the given sentAt arrived (or time out). */
+  waitForPong(sentAt: number, timeoutMs = 2000): Promise<void> {
+    const started = Date.now();
+    return new Promise((resolve, reject) => {
+      const poll = (): void => {
+        if (this.pongs.includes(sentAt)) {
+          resolve();
+        } else if (Date.now() - started > timeoutMs) {
+          reject(new Error("timed out waiting for pong"));
         } else {
           setTimeout(poll, 25);
         }
@@ -230,8 +254,8 @@ describe("two players", () => {
     // Seed Alice's inventory white-box, then act over the wire.
     const sim = ded.gameServer.simulation;
     const aliceState = sim.players.get(alice.playerId)!;
-    addToInventory(aliceState.inventory, "chest", 1);
-    addToInventory(aliceState.inventory, "cobblestone", 3);
+    addToInventory(aliceState.inventory, "flatcraft:item:chest", 1);
+    addToInventory(aliceState.inventory, "flatcraft:item:cobblestone", 3);
 
     // Place the chest beside the spawn, resting on the ground (the
     // placement rules require support).
@@ -245,7 +269,7 @@ describe("two players", () => {
 
     // Alice puts cobblestone into the chest: pick up from inventory slot,
     // drop into chest slot 0.
-    const slot = aliceState.inventory.findIndex((s) => s?.item === "cobblestone");
+    const slot = aliceState.inventory.findIndex((s) => s?.item === "flatcraft:item:cobblestone");
     alice.send({ type: "open_chest", x: chestX, y: chestY });
     await alice.waitFor((e) => e.type === "chest_changed");
     alice.send({ type: "slot_click", slot: { container: "inventory", index: slot }, button: "left" });
@@ -260,7 +284,7 @@ describe("two players", () => {
       (e) =>
         e.type === "chest_changed" &&
         e.x === chestX &&
-        e.slots[0]?.item === "cobblestone" &&
+        e.slots[0]?.item === "flatcraft:item:cobblestone" &&
         e.slots[0].count === 3,
     );
     expect(chestUpdate.type).toBe("chest_changed");
@@ -280,7 +304,7 @@ describe("two players", () => {
 
     const sim = ded.gameServer.simulation;
     const aliceState = sim.players.get(alice.playerId)!;
-    sim.spawnMob("zombie", aliceState.x, aliceState.y, []);
+    sim.spawnMob("flatcraft:mob:zombie", aliceState.x, aliceState.y, []);
 
     // Alice sees her own health drop...
     await alice.waitFor((e) => e.type === "player_health");
@@ -303,7 +327,7 @@ describe("persistence", () => {
     alice.join();
     await alice.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
     const sim = ded.gameServer.simulation;
-    addToInventory(sim.players.get(alice.playerId)!.inventory, "diamond", 5);
+    addToInventory(sim.players.get(alice.playerId)!.inventory, "flatcraft:item:diamond", 5);
     await alice.close();
 
     // Wait until the leave is processed by a tick.
@@ -312,7 +336,7 @@ describe("persistence", () => {
     again.join();
     const inventory = await again.waitFor((e) => e.type === "inventory_changed");
     expect(
-      inventory.type === "inventory_changed" && countInInventory(inventory.slots, "diamond"),
+      inventory.type === "inventory_changed" && countInInventory(inventory.slots, "flatcraft:item:diamond"),
     ).toBe(5);
     await again.close();
   });
@@ -324,7 +348,7 @@ describe("persistence", () => {
     alice.join();
     await alice.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
     const sim = ded.gameServer.simulation;
-    addToInventory(sim.players.get(alice.playerId)!.inventory, "emerald", 7);
+    addToInventory(sim.players.get(alice.playerId)!.inventory, "flatcraft:item:emerald", 7);
     sim.world.setBlock(SPAWN_X + 4, SURFACE - 3, BlockId.Glowstone);
     await alice.close();
     await new Promise((r) => setTimeout(r, 200));
@@ -341,7 +365,7 @@ describe("persistence", () => {
     again.join();
     const inventory = await again.waitFor((e) => e.type === "inventory_changed");
     expect(
-      inventory.type === "inventory_changed" && countInInventory(inventory.slots, "emerald"),
+      inventory.type === "inventory_changed" && countInInventory(inventory.slots, "flatcraft:item:emerald"),
     ).toBe(7);
     await again.close();
   });
@@ -353,7 +377,7 @@ describe("persistence", () => {
     alice.join();
     await alice.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
     const sim = ded.gameServer.simulation;
-    addToInventory(sim.players.get(alice.playerId)!.inventory, "emerald", 7);
+    addToInventory(sim.players.get(alice.playerId)!.inventory, "flatcraft:item:emerald", 7);
     sim.world.setBlock(SPAWN_X + 4, SURFACE - 3, BlockId.Glowstone);
     await alice.close();
     await new Promise((r) => setTimeout(r, 200));
@@ -370,7 +394,7 @@ describe("persistence", () => {
     again.join();
     const inventory = await again.waitFor((e) => e.type === "inventory_changed");
     expect(
-      inventory.type === "inventory_changed" && countInInventory(inventory.slots, "emerald"),
+      inventory.type === "inventory_changed" && countInInventory(inventory.slots, "flatcraft:item:emerald"),
     ).toBe(0);
     await again.close();
   });
@@ -414,10 +438,10 @@ describe("persistence", () => {
     expect(meta["worlds"]).toBeUndefined();
     expect(meta["furnaces"]).toBeUndefined();
     expect(meta["chests"]).toBeUndefined();
-    expect(existsSync(join(dir, "world", "overworld"))).toBe(true);
+    expect(existsSync(join(dir, "world", "flatcraft_dimension_overworld"))).toBe(true);
     // Exactly one chunk file - all the merely-visited chunks generated
     // nothing worth saving, only the one containing the edited block did.
-    const chunkFiles = readdirSync(join(dir, "world", "overworld")).filter((f) => f.endsWith(".bin"));
+    const chunkFiles = readdirSync(join(dir, "world", "flatcraft_dimension_overworld")).filter((f) => f.endsWith(".bin"));
     expect(chunkFiles).toHaveLength(1);
     await alice.close();
   });
@@ -430,7 +454,7 @@ describe("persistence", () => {
     await alice.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
     const sim = ded.gameServer.simulation;
     const aliceState = sim.players.get(alice.playerId)!;
-    addToInventory(aliceState.inventory, "chest", 1);
+    addToInventory(aliceState.inventory, "flatcraft:item:chest", 1);
 
     const chestX = SPAWN_X + 5;
     const chestY = SURFACE - 1;
@@ -440,9 +464,9 @@ describe("persistence", () => {
     await alice.waitFor((e) => e.type === "chest_changed");
     // Put an item straight into the sim's chest state (simpler than
     // scripting slot clicks over the wire for this test's purpose).
-    const chest = sim.chests.get(furnaceKey("overworld", chestX, chestY));
+    const chest = sim.chests.get(furnaceKey("flatcraft:dimension:overworld", chestX, chestY));
     expect(chest).toBeDefined();
-    chest!.slots[0] = { item: "diamond", count: 9 };
+    chest!.slots[0] = { item: "flatcraft:item:diamond", count: 9 };
     await alice.close();
     await new Promise((r) => setTimeout(r, 200));
     await server!.close();
@@ -452,8 +476,8 @@ describe("persistence", () => {
     expect(
       restarted.gameServer.simulation.world.getBlockGenerating(chestX, chestY),
     ).toBe(BlockId.Chest);
-    const restoredChest = restarted.gameServer.simulation.chests.get(furnaceKey("overworld", chestX, chestY));
-    expect(restoredChest?.slots[0]).toEqual({ item: "diamond", count: 9 });
+    const restoredChest = restarted.gameServer.simulation.chests.get(furnaceKey("flatcraft:dimension:overworld", chestX, chestY));
+    expect(restoredChest?.slots[0]).toEqual({ item: "flatcraft:item:diamond", count: 9 });
   });
 
   it("an idle chunk is evicted from memory after a save, and reloads identically on next touch", async () => {
@@ -483,6 +507,57 @@ describe("persistence", () => {
     // Reloading it (via the chunk loader, from the file just saved)
     // reproduces the exact same edit - nothing was lost by evicting it.
     expect(sim.world.getBlockGenerating(farX, farY)).toBe(BlockId.Glowstone);
+    await alice.close();
+  });
+
+  it("loads a pre-version-6 world.json (fixed {overworld,nether} portals shape)", async () => {
+    const ded = await startServer();
+    const dir = dataDir!;
+    ded.gameServer.simulation.portalsOf("flatcraft:dimension:nether").set("9,40", { x: 9, y: 40 });
+    ded.save();
+    await server!.close();
+    server = null;
+
+    // Rewrite the just-saved world.json's `portals` field into the old,
+    // pre-version-6 fixed-object shape (see Simulation's
+    // normalizePortalsField) - simulating a save file that predates the
+    // dimension registry.
+    const worldFile = join(dir, "world.json");
+    const meta = JSON.parse(readFileSync(worldFile, "utf8")) as { portals: Array<{ dim: string; positions: unknown }> };
+    const legacyPortals: Record<string, unknown> = {};
+    for (const { dim, positions } of meta.portals) legacyPortals[dim] = positions;
+    writeFileSync(worldFile, JSON.stringify({ ...meta, version: 5, portals: legacyPortals }));
+
+    const restarted = await startServer(dir);
+    expect(restarted.gameServer.simulation.portalsOf("flatcraft:dimension:nether").get("9,40")).toEqual({ x: 9, y: 40 });
+  });
+});
+
+describe("debug overlay", () => {
+  it("broadcasts periodic debug_stats with real tps/tickCount/seed/player+entity counts", async () => {
+    const ded = await startServer();
+    const alice = await connectAs(ded, "Alice");
+    alice.join();
+    await alice.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
+
+    const stats = await alice.waitFor((e) => e.type === "debug_stats", 3000);
+    expect(stats.type === "debug_stats" && stats.tps).toBeGreaterThan(0);
+    expect(stats.type === "debug_stats" && stats.tickCount).toBeGreaterThan(0);
+    expect(stats.type === "debug_stats" && stats.seed).toBe(SEED);
+    expect(stats.type === "debug_stats" && stats.players).toBeGreaterThanOrEqual(1);
+    expect(stats.type === "debug_stats" && stats.entities).toBeGreaterThanOrEqual(stats.players);
+    await alice.close();
+  });
+
+  it("answers a ping probe with a pong carrying the same timestamp back", async () => {
+    const ded = await startServer();
+    const alice = await connectAs(ded, "Alice");
+    alice.join();
+    await alice.waitFor((e) => e.type === "player_joined" && e.player === alice.playerId);
+
+    const sentAt = 123456.789;
+    alice.ping(sentAt);
+    await alice.waitForPong(sentAt);
     await alice.close();
   });
 });

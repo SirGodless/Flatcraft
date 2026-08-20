@@ -1,5 +1,5 @@
 {
-  "id": "lava_1",
+  "id": "flatcraft:block:lava_1",
   "name": "Lava 1",
   "solid": false,
   "hardness": -1,
@@ -7,5 +7,16 @@
   "liquid": {
     "kind": "lava",
     "level": 1
+  },
+  "visual": {
+    "fallback": {
+      "base": [
+        224,
+        80,
+        16
+      ],
+      "noise": 0.2,
+      "fill_rows": 2
+    }
   }
 }

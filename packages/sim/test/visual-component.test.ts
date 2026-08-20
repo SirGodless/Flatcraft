@@ -25,7 +25,7 @@ import {
 describe("visual component (datapack)", () => {
   it("registers item variants/animation/shader and round-trips them onto ItemDef", () => {
     registerItemJson({
-      id: "glimmering_gem",
+      id: "flatcraft:item:glimmering_gem",
       name: "Glimmering Gem",
       visual: {
         variants: 3,
@@ -33,7 +33,7 @@ describe("visual component (datapack)", () => {
         shader: { id: "shimmer", params: { speed: 1.2, color: "#fff2a0" } },
       },
     });
-    const def = itemDef("glimmering_gem");
+    const def = itemDef("flatcraft:item:glimmering_gem");
     expect(def?.visual?.variants).toBe(3);
     expect(def?.visual?.animation?.states["idle"]).toEqual({ frames: 4, frame_width: 16, fps: 6, loop: true });
     expect(def?.visual?.shader).toEqual({ id: "shimmer", params: { speed: 1.2, color: "#fff2a0" } });
@@ -41,21 +41,21 @@ describe("visual component (datapack)", () => {
 
   it("registers block variants and round-trips them onto BlockDef", () => {
     registerBlockJson({
-      id: "sparkling_ore",
+      id: "flatcraft:block:sparkling_ore",
       name: "Sparkling Ore",
       solid: true,
       hardness: 30,
       visual: { variants: 4 },
     });
     resolveBlockLinks();
-    const id = blockByName("sparkling_ore");
+    const id = blockByName("flatcraft:block:sparkling_ore");
     expect(id).toBeDefined();
     expect(blockDef(id!).visual).toEqual({ variants: 4 });
   });
 
   it("registers mob animation states and round-trips them onto MobDef", () => {
     registerMobJson({
-      id: "dancing_slime",
+      id: "flatcraft:mob:dancing_slime",
       name: "Dancing Slime",
       health: 10,
       speed: 0.05,
@@ -70,19 +70,19 @@ describe("visual component (datapack)", () => {
         },
       },
     });
-    const def = mobDef("dancing_slime");
+    const def = mobDef("flatcraft:mob:dancing_slime");
     expect(Object.keys(def?.visual?.animation?.states ?? {})).toEqual(["idle", "walk", "death"]);
     expect(def?.visual?.animation?.states["death"]).toEqual({ frames: 3, frame_width: 16, fps: 10, loop: false });
   });
 
   it("rejects unknown fields and out-of-range values with the field path named", () => {
-    expect(() => registerItemJson({ id: "bad_item_1", visual: { made_up_field: true } })).toThrow(
+    expect(() => registerItemJson({ id: "flatcraft:item:bad_item_1", visual: { made_up_field: true } })).toThrow(
       /visual\.made_up_field/,
     );
-    expect(() => registerItemJson({ id: "bad_item_2", visual: { variants: 0 } })).toThrow(/visual\.variants/);
+    expect(() => registerItemJson({ id: "flatcraft:item:bad_item_2", visual: { variants: 0 } })).toThrow(/visual\.variants/);
     expect(() =>
       registerMobJson({
-        id: "bad_mob",
+        id: "flatcraft:mob:bad_mob",
         health: 10,
         speed: 0.1,
         size: { width: 1, height: 1 },
@@ -90,7 +90,7 @@ describe("visual component (datapack)", () => {
       }),
     ).toThrow(/fps/);
     expect(() =>
-      registerItemJson({ id: "bad_item_3", visual: { shader: { id: "shimmer", params: { bad: {} } } } }),
+      registerItemJson({ id: "flatcraft:item:bad_item_3", visual: { shader: { id: "shimmer", params: { bad: {} } } } }),
     ).toThrow(/visual\.shader\.params\.bad/);
   });
 });

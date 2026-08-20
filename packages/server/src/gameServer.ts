@@ -1,5 +1,8 @@
-import { Simulation, TICK_MS, type PlayerCommand } from "@flatcraft/sim";
+import { Simulation, TICK_MS, type PlayerCommand, type SimEvent } from "@flatcraft/sim";
 import type { ServerConnection } from "./transport.js";
+
+/** How often debug_stats is broadcast - see GameServer.advance. */
+const DEBUG_STATS_INTERVAL_MS = 1000;
 
 /**
  * The authoritative server loop. One instance per world, regardless of how
@@ -19,6 +22,10 @@ export class GameServer {
   private readonly connections = new Set<ServerConnection>();
   private pendingCommands: PlayerCommand[] = [];
   private accumulatorMs = 0;
+  /** Wall-clock time and tick count since the last debug_stats broadcast -
+   * see advance(). */
+  private statsAccumulatorMs = 0;
+  private ticksSinceStats = 0;
 
   constructor(seedOrSimulation: number | Simulation) {
     this.simulation =
@@ -52,7 +59,32 @@ export class GameServer {
     while (this.accumulatorMs >= TICK_MS) {
       this.accumulatorMs -= TICK_MS;
       this.runTick();
+      this.ticksSinceStats++;
     }
+
+    // Real achieved ticks/sec (distinct from the fixed TICK_RATE target -
+    // this is what actually ran, catch-up/skips under load included) can
+    // only be measured against the wall-clock time `advance` was handed,
+    // which is exactly why it lives here and not in Simulation.tick.
+    this.statsAccumulatorMs += elapsedMs;
+    if (this.statsAccumulatorMs >= DEBUG_STATS_INTERVAL_MS) {
+      this.broadcastStats(this.statsAccumulatorMs);
+      this.statsAccumulatorMs = 0;
+      this.ticksSinceStats = 0;
+    }
+  }
+
+  private broadcastStats(windowMs: number): void {
+    if (this.connections.size === 0) return;
+    const event: SimEvent = {
+      type: "debug_stats",
+      tps: (this.ticksSinceStats * 1000) / windowMs,
+      tickCount: this.simulation.tickCount,
+      seed: this.simulation.world.seed,
+      players: this.simulation.players.size,
+      entities: this.simulation.entities.size,
+    };
+    for (const connection of this.connections) connection.send([event]);
   }
 
   private runTick(): void {

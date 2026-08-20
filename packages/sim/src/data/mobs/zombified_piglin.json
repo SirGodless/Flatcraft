@@ -1,13 +1,51 @@
 {
-  "id": "zombified_piglin",
+  "id": "flatcraft:mob:zombified_piglin",
   "name": "Zombified Piglin",
   "health": 20,
   "speed": 0.1,
-  "size": { "width": 0.6, "height": 1.8 },
-  "melee": { "damage": 3, "cooldown": 20, "follow_range": 16 },
+  "size": {
+    "width": 0.6,
+    "height": 1.8
+  },
+  "melee": {
+    "damage": 3,
+    "cooldown": 20,
+    "follow_range": 16
+  },
   "loot": [
-    { "item": "gold_nugget", "max": 2, "chance": 0.6 },
-    { "item": "rotten_flesh", "max": 1, "chance": 0.5 }
+    {
+      "item": "flatcraft:item:gold_nugget",
+      "max": 2,
+      "chance": 0.6
+    },
+    {
+      "item": "flatcraft:item:rotten_flesh",
+      "max": 1,
+      "chance": 0.5
+    }
   ],
-  "spawn": { "group": "nether_pocket", "weight": 1 }
+  "spawn": {
+    "group": "nether_pocket",
+    "weight": 1
+  },
+  "visual": {
+    "fallback": {
+      "rects": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 0.6,
+          "h": 1.8,
+          "color": "#d88a8a"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "w": 0.6,
+          "h": 0.45,
+          "color": "#8a9e4e"
+        }
+      ]
+    }
+  }
 }

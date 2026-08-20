@@ -1,5 +1,5 @@
 {
-  "id": "netherite_bucket",
+  "id": "flatcraft:item:netherite_bucket",
   "name": "Netherite Bucket",
   "max_stack": 1,
   "bucket": {
@@ -14,8 +14,25 @@
         " a "
       ],
       "key": {
-        "a": "item:netherite_ingot"
+        "a": "item:flatcraft:item:netherite_ingot"
       }
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "..HHHH..",
+        ".H....H.",
+        ".H....H.",
+        ".H....H.",
+        "..H..H..",
+        "..HHHH..",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "H": "#4a4048"
+      }
+    }
+  }
 }

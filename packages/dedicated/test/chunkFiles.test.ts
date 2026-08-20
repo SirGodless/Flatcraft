@@ -25,74 +25,74 @@ describe("ChunkFileStore", () => {
   it("round-trips terrain for a single chunk", () => {
     dir = mkdtempSync(join(tmpdir(), "flatcraft-chunkfile-test-"));
     const store = new ChunkFileStore(dir);
-    store.write("overworld", [uniformChunk(0, 0, BlockId.Stone)], new Map());
-    expect(store.load("overworld", 0, 0, null)?.getBlock(0, 0)).toBe(BlockId.Stone);
+    store.write("flatcraft:dimension:overworld", [uniformChunk(0, 0, BlockId.Stone)], new Map());
+    expect(store.load("flatcraft:dimension:overworld", 0, 0, null)?.getBlock(0, 0)).toBe(BlockId.Stone);
   });
 
   it("returns undefined for a chunk that was never written", () => {
     dir = mkdtempSync(join(tmpdir(), "flatcraft-chunkfile-test-"));
     const store = new ChunkFileStore(dir);
-    store.write("overworld", [uniformChunk(0, 0, BlockId.Stone)], new Map());
-    expect(store.load("overworld", 1, 1, null)).toBeUndefined(); // never written at all
+    store.write("flatcraft:dimension:overworld", [uniformChunk(0, 0, BlockId.Stone)], new Map());
+    expect(store.load("flatcraft:dimension:overworld", 1, 1, null)).toBeUndefined(); // never written at all
   });
 
   it("keeps dimensions separate", () => {
     dir = mkdtempSync(join(tmpdir(), "flatcraft-chunkfile-test-"));
     const store = new ChunkFileStore(dir);
-    store.write("overworld", [uniformChunk(0, 0, BlockId.Stone)], new Map());
-    store.write("nether", [uniformChunk(0, 0, BlockId.Netherrack)], new Map());
-    expect(store.load("overworld", 0, 0, null)?.getBlock(0, 0)).toBe(BlockId.Stone);
-    expect(store.load("nether", 0, 0, null)?.getBlock(0, 0)).toBe(BlockId.Netherrack);
+    store.write("flatcraft:dimension:overworld", [uniformChunk(0, 0, BlockId.Stone)], new Map());
+    store.write("flatcraft:dimension:nether", [uniformChunk(0, 0, BlockId.Netherrack)], new Map());
+    expect(store.load("flatcraft:dimension:overworld", 0, 0, null)?.getBlock(0, 0)).toBe(BlockId.Stone);
+    expect(store.load("flatcraft:dimension:nether", 0, 0, null)?.getBlock(0, 0)).toBe(BlockId.Netherrack);
   });
 
   it("handles negative chunk coordinates correctly", () => {
     dir = mkdtempSync(join(tmpdir(), "flatcraft-chunkfile-test-"));
     const store = new ChunkFileStore(dir);
     const chunks = [-1, -8, -9, -20].map((cx) => uniformChunk(cx, -1, BlockId.Sand));
-    store.write("overworld", chunks, new Map());
+    store.write("flatcraft:dimension:overworld", chunks, new Map());
     for (const cx of [-1, -8, -9, -20]) {
-      expect(store.load("overworld", cx, -1, null)?.getBlock(0, 0)).toBe(BlockId.Sand);
+      expect(store.load("flatcraft:dimension:overworld", cx, -1, null)?.getBlock(0, 0)).toBe(BlockId.Sand);
     }
   });
 
   it("applies a block-id remap on load", () => {
     dir = mkdtempSync(join(tmpdir(), "flatcraft-chunkfile-test-"));
     const store = new ChunkFileStore(dir);
-    store.write("overworld", [uniformChunk(0, 0, 999)], new Map());
+    store.write("flatcraft:dimension:overworld", [uniformChunk(0, 0, 999)], new Map());
     const remap = new Map([[999, BlockId.DiamondOre]]);
-    expect(store.load("overworld", 0, 0, remap)?.getBlock(0, 0)).toBe(BlockId.DiamondOre);
+    expect(store.load("flatcraft:dimension:overworld", 0, 0, remap)?.getBlock(0, 0)).toBe(BlockId.DiamondOre);
   });
 
   it("degrades a corrupt chunk file to 'nothing saved' instead of throwing", () => {
     dir = mkdtempSync(join(tmpdir(), "flatcraft-chunkfile-test-"));
     const store = new ChunkFileStore(dir);
-    store.write("overworld", [uniformChunk(0, 0, BlockId.Stone)], new Map());
-    writeFileSync(join(dir, "overworld", "c.0.0.bin"), Buffer.from([1, 2, 3]));
-    expect(() => store.load("overworld", 0, 0, null)).not.toThrow();
-    expect(store.load("overworld", 0, 0, null)).toBeUndefined();
+    store.write("flatcraft:dimension:overworld", [uniformChunk(0, 0, BlockId.Stone)], new Map());
+    writeFileSync(join(dir, "flatcraft_dimension_overworld", "c.0.0.bin"), Buffer.from([1, 2, 3]));
+    expect(() => store.load("flatcraft:dimension:overworld", 0, 0, null)).not.toThrow();
+    expect(store.load("flatcraft:dimension:overworld", 0, 0, null)).toBeUndefined();
   });
 
   it("a later write invalidates the read cache", () => {
     dir = mkdtempSync(join(tmpdir(), "flatcraft-chunkfile-test-"));
     const store = new ChunkFileStore(dir);
-    store.write("overworld", [uniformChunk(0, 0, BlockId.Stone)], new Map());
-    expect(store.load("overworld", 0, 0, null)?.getBlock(0, 0)).toBe(BlockId.Stone);
-    store.write("overworld", [uniformChunk(0, 0, BlockId.Glowstone)], new Map());
-    expect(store.load("overworld", 0, 0, null)?.getBlock(0, 0)).toBe(BlockId.Glowstone);
+    store.write("flatcraft:dimension:overworld", [uniformChunk(0, 0, BlockId.Stone)], new Map());
+    expect(store.load("flatcraft:dimension:overworld", 0, 0, null)?.getBlock(0, 0)).toBe(BlockId.Stone);
+    store.write("flatcraft:dimension:overworld", [uniformChunk(0, 0, BlockId.Glowstone)], new Map());
+    expect(store.load("flatcraft:dimension:overworld", 0, 0, null)?.getBlock(0, 0)).toBe(BlockId.Glowstone);
   });
 
   it("carries chest/furnace state alongside the chunk's terrain", () => {
     dir = mkdtempSync(join(tmpdir(), "flatcraft-chunkfile-test-"));
     const store = new ChunkFileStore(dir);
     const extra: ChunkExtra = {
-      chests: [{ x: 5, y: 5, slots: [{ item: "diamond", count: 3 }, null] }],
+      chests: [{ x: 5, y: 5, slots: [{ item: "flatcraft:item:diamond", count: 3 }, null] }],
       furnaces: [
         {
-          dimension: "overworld",
+          dimension: "flatcraft:dimension:overworld",
           x: 5,
           y: 6,
           input: null,
-          fuel: { item: "coal", count: 1 },
+          fuel: { item: "flatcraft:item:coal", count: 1 },
           output: null,
           burnLeft: 100,
           burnTotal: 1600,
@@ -101,7 +101,7 @@ describe("ChunkFileStore", () => {
         },
       ],
     };
-    store.write("overworld", [uniformChunk(0, 0, BlockId.Stone)], new Map([["0,0", extra]]));
+    store.write("flatcraft:dimension:overworld", [uniformChunk(0, 0, BlockId.Stone)], new Map([["0,0", extra]]));
 
     const scanned = store.scanAll();
     expect(scanned).toHaveLength(1);
@@ -112,8 +112,8 @@ describe("ChunkFileStore", () => {
   it("scanAll finds every chunk file across both dimensions without decoding terrain", () => {
     dir = mkdtempSync(join(tmpdir(), "flatcraft-chunkfile-test-"));
     const store = new ChunkFileStore(dir);
-    store.write("overworld", [uniformChunk(0, 0, BlockId.Stone), uniformChunk(-5, 3, BlockId.Dirt)], new Map());
-    store.write("nether", [uniformChunk(2, 2, BlockId.Netherrack)], new Map());
+    store.write("flatcraft:dimension:overworld", [uniformChunk(0, 0, BlockId.Stone), uniformChunk(-5, 3, BlockId.Dirt)], new Map());
+    store.write("flatcraft:dimension:nether", [uniformChunk(2, 2, BlockId.Netherrack)], new Map());
     const scanned = store.scanAll();
     expect(scanned).toHaveLength(3);
     expect(scanned.every((s) => s.extra.chests.length === 0 && s.extra.furnaces.length === 0)).toBe(true);
@@ -122,12 +122,12 @@ describe("ChunkFileStore", () => {
   it("scanAll pre-warms the cache so a later load() doesn't re-read the file", () => {
     dir = mkdtempSync(join(tmpdir(), "flatcraft-chunkfile-test-"));
     const store = new ChunkFileStore(dir);
-    store.write("overworld", [uniformChunk(0, 0, BlockId.Stone)], new Map());
+    store.write("flatcraft:dimension:overworld", [uniformChunk(0, 0, BlockId.Stone)], new Map());
     store.scanAll();
     // Corrupt the file on disk *after* scanAll cached it - load() should
     // still succeed from the cache, proving it didn't hit the disk again.
-    writeFileSync(join(dir, "overworld", "c.0.0.bin"), Buffer.from([1, 2, 3]));
-    expect(store.load("overworld", 0, 0, null)?.getBlock(0, 0)).toBe(BlockId.Stone);
+    writeFileSync(join(dir, "flatcraft_dimension_overworld", "c.0.0.bin"), Buffer.from([1, 2, 3]));
+    expect(store.load("flatcraft:dimension:overworld", 0, 0, null)?.getBlock(0, 0)).toBe(BlockId.Stone);
   });
 
   it("scanAll on an empty/nonexistent world directory returns nothing", () => {

@@ -57,6 +57,9 @@ export type Command =
   | { type: "slot_click"; slot: SlotRef; button: "left" | "right" }
   /** Return crafting grid + cursor contents to the inventory (UI closed). */
   | { type: "return_grid" }
+  /** Drop the cursor-held stack into the world at the player's position
+   * (left-click outside any inventory UI while holding an item). */
+  | { type: "drop_cursor" }
   /** Open a furnace: validates it and returns its current state. */
   | { type: "open_furnace"; x: number; y: number }
   /** Open a chest: validates it and returns its current contents. */

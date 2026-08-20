@@ -22,10 +22,6 @@ export const JUMP_VELOCITY = -0.5;
 export const PLAYER_WIDTH = 0.6;
 export const PLAYER_HEIGHT = 1.8;
 
-/** Elytra gliding: capped sink rate and boosted horizontal speed. */
-export const ELYTRA_SINK = 0.08;
-export const ELYTRA_GLIDE_BOOST = 2.2;
-
 /** Max distance (tiles) from player center at which blocks can be targeted. */
 export const REACH = 6;
 

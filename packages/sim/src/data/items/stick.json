@@ -1,5 +1,5 @@
 {
-  "id": "stick",
+  "id": "flatcraft:item:stick",
   "name": "Stick",
   "fuel_ticks": 100,
   "recipes": [
@@ -15,5 +15,22 @@
       },
       "amount": 4
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        ".....S..",
+        "....S...",
+        "...S....",
+        "..S.....",
+        ".S......",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "S": "#6b4f2e"
+      }
+    }
+  }
 }

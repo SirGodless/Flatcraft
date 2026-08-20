@@ -53,7 +53,7 @@ describe("day/night cycle", () => {
     const { state } = joinPlayer(sim);
     sim.timeOfDay = 6000; // midday
     const out: OutboundEvent[] = [];
-    const zombie = sim.spawnMob("zombie", state.x + 30, surfaceHeight(SEED, Math.floor(state.x) + 30), out);
+    const zombie = sim.spawnMob("flatcraft:mob:zombie", state.x + 30, surfaceHeight(SEED, Math.floor(state.x) + 30), out);
     const startHealth = zombie.health;
     for (let i = 0; i < 400; i++) sim.tick([]);
     // Either it burned down completely or is well on the way.
@@ -70,7 +70,7 @@ describe("day/night cycle", () => {
     sim.timeOfDay = 18000; // midnight
     const out: OutboundEvent[] = [];
     const x = Math.floor(state.x) + 30;
-    const zombie = sim.spawnMob("zombie", x + 0.5, surfaceHeight(SEED, x), out);
+    const zombie = sim.spawnMob("flatcraft:mob:zombie", x + 0.5, surfaceHeight(SEED, x), out);
     for (let i = 0; i < 200; i++) sim.tick([]);
     if (sim.entities.has(zombie.id)) {
       expect(zombie.health).toBe(20);
@@ -86,7 +86,7 @@ describe("day/night cycle", () => {
       sim.tick([]);
       sim.timeOfDay = 15000; // hold the clock at night
       for (const e of sim.entities.values()) {
-        if (e.kind === "zombie") zombies++;
+        if (e.kind === "flatcraft:mob:zombie") zombies++;
       }
       if (zombies > 0) break;
     }

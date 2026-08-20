@@ -1,5 +1,5 @@
 {
-  "id": "stone_shield",
+  "id": "flatcraft:item:stone_shield",
   "name": "Stone Shield",
   "max_stack": 1,
   "shield": {
@@ -15,8 +15,25 @@
         " a "
       ],
       "key": {
-        "a": "item:cobblestone"
+        "a": "item:flatcraft:item:cobblestone"
       }
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        ".XXXXXX.",
+        ".XXXXXX.",
+        ".XXXXXX.",
+        ".XXXXXX.",
+        "..XXXX..",
+        "...XX...",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#7a7a80"
+      }
+    }
+  }
 }

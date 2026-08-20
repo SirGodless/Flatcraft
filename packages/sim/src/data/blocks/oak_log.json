@@ -1,7 +1,18 @@
 {
-  "id": "oak_log",
+  "id": "flatcraft:block:oak_log",
   "name": "Oak Log",
   "solid": false,
   "hardness": 25,
-  "tool": "axe"
+  "tool": "axe",
+  "visual": {
+    "fallback": {
+      "base": [
+        104,
+        80,
+        48
+      ],
+      "noise": 0.1,
+      "stripe": true
+    }
+  }
 }

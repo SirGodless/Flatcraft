@@ -1,7 +1,7 @@
 {
-  "id": "glowstone",
+  "id": "flatcraft:item:glowstone",
   "name": "Glowstone",
-  "places_block": "glowstone",
+  "places_block": "flatcraft:block:glowstone",
   "recipes": [
     {
       "station": "inventory",
@@ -11,7 +11,7 @@
         "aa"
       ],
       "key": {
-        "a": "item:glowstone_dust"
+        "a": "item:flatcraft:item:glowstone_dust"
       }
     }
   ]

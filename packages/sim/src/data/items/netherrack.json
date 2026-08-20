@@ -1,5 +1,5 @@
 {
-  "id": "netherrack",
+  "id": "flatcraft:item:netherrack",
   "name": "Netherrack",
-  "places_block": "netherrack"
+  "places_block": "flatcraft:block:netherrack"
 }

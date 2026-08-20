@@ -199,13 +199,13 @@ describe("chunk idle eviction", () => {
   it("Simulation.evictIdleChunks sweeps both dimensions and returns the total evicted", () => {
     const sim = new Simulation(SEED);
     sim.world.ensureChunk(0, 0);
-    sim.worldOf("nether").ensureChunk(0, 0);
+    sim.worldOf("flatcraft:dimension:nether").ensureChunk(0, 0);
     // Advance sim.tickCount well past the idle threshold without ever
     // touching those chunks again.
     for (let i = 0; i < CHUNK_IDLE_EVICT_TICKS + 1; i++) sim.tick([]);
     expect(sim.evictIdleChunks()).toBe(2);
     expect(sim.world.getChunk(0, 0)).toBeUndefined();
-    expect(sim.worldOf("nether").getChunk(0, 0)).toBeUndefined();
+    expect(sim.worldOf("flatcraft:dimension:nether").getChunk(0, 0)).toBeUndefined();
   });
 });
 

@@ -1,5 +1,5 @@
 {
-  "id": "netherite_shield",
+  "id": "flatcraft:item:netherite_shield",
   "name": "Netherite Shield",
   "max_stack": 1,
   "shield": {
@@ -15,8 +15,25 @@
         " a "
       ],
       "key": {
-        "a": "item:netherite_ingot"
+        "a": "item:flatcraft:item:netherite_ingot"
       }
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        ".XXXXXX.",
+        ".XXXXXX.",
+        ".XXXXXX.",
+        ".XXXXXX.",
+        "..XXXX..",
+        "...XX...",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#4a4048"
+      }
+    }
+  }
 }

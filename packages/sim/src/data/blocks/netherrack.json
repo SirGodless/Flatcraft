@@ -1,8 +1,18 @@
 {
-  "id": "netherrack",
+  "id": "flatcraft:block:netherrack",
   "name": "Netherrack",
   "solid": true,
   "hardness": 8,
   "tool": "pickaxe",
-  "required_tier": 1
+  "required_tier": 1,
+  "visual": {
+    "fallback": {
+      "base": [
+        122,
+        48,
+        48
+      ],
+      "noise": 0.2
+    }
+  }
 }

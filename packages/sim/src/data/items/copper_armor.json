@@ -1,5 +1,5 @@
 {
-  "id": "copper_armor",
+  "id": "flatcraft:item:copper_armor",
   "name": "Copper Armor",
   "max_stack": 1,
   "armor": {
@@ -15,8 +15,25 @@
         "aaa"
       ],
       "key": {
-        "a": "item:copper_ingot"
+        "a": "item:flatcraft:item:copper_ingot"
       }
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "XX....XX",
+        "XXXXXXXX",
+        "XXXXXXXX",
+        ".XXXXXX.",
+        ".XXXXXX.",
+        ".XXXXXX.",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#d87a4e"
+      }
+    }
+  }
 }

@@ -1,7 +1,17 @@
 {
-  "id": "sand",
+  "id": "flatcraft:block:sand",
   "name": "Sand",
   "solid": true,
   "hardness": 8,
-  "tool": "shovel"
+  "tool": "shovel",
+  "visual": {
+    "fallback": {
+      "base": [
+        218,
+        203,
+        152
+      ],
+      "noise": 0.08
+    }
+  }
 }

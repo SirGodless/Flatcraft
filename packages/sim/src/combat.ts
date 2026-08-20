@@ -1,13 +1,12 @@
-import { enchantLevel } from "./effects.js";
+import { enchantBonus } from "./enchants.js";
 import type { ItemStack } from "./inventory.js";
 import { itemDef } from "./items.js";
 
-/** Attack damage by held item: the weapon component (hand = 1). */
+/** Attack damage by held item: the weapon component (hand = 1) plus any
+ * damage_bonus enchantment (e.g. sharpness). */
 export function attackDamage(held: ItemStack | null): number {
   const weapon = held ? itemDef(held.item)?.weapon : undefined;
-  // Sharpness: +2 damage per level.
-  const sharpness = held ? 2 * enchantLevel(held, "sharpness") : 0;
-  return (weapon?.damage ?? 1) + sharpness;
+  return (weapon?.damage ?? 1) + enchantBonus(held, "damage_bonus");
 }
 
 /** Knockback impulse of the held item (bare hand default). */

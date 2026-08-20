@@ -1,5 +1,5 @@
 {
-  "id": "obsidian",
+  "id": "flatcraft:item:obsidian",
   "name": "Obsidian",
-  "places_block": "obsidian"
+  "places_block": "flatcraft:block:obsidian"
 }

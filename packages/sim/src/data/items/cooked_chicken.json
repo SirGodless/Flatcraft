@@ -1,5 +1,5 @@
 {
-  "id": "cooked_chicken",
+  "id": "flatcraft:item:cooked_chicken",
   "name": "Cooked Chicken",
   "food": {
     "hunger": 6,
@@ -9,8 +9,25 @@
   "recipes": [
     {
       "station": "furnace",
-      "input": "item:chicken",
+      "input": "item:flatcraft:item:chicken",
       "cooking_ticks": 200
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "..XXX...",
+        ".XXXXX..",
+        ".XXXXX..",
+        "..XXXX..",
+        "...XX...",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#d8a050"
+      }
+    }
+  }
 }

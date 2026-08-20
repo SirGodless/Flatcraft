@@ -24,6 +24,10 @@ import type { RecipeJson } from "../registry/schema.js";
 export interface Recipe {
   id: string;
   kind: "crafting" | "smelting" | "brewing";
+  /** Which block (via BlockDef.station) must be nearby, if any - "inventory"
+   * needs none. Carried straight from the JSON rather than re-derived
+   * from kind/gridSize. */
+  station: "inventory" | "crafting_table" | "furnace" | "brewing_stand";
   shaped: boolean;
   /** 2 = craftable in the inventory grid, 3 = needs a crafting table. */
   gridSize: 2 | 3;
@@ -48,9 +52,14 @@ export function fuelTicks(item: string): number {
   return fuelTicksOf(item);
 }
 
-/** Convert a validated ingredient ref to a registry key and check it. */
+/** Convert a validated ingredient ref to a registry key and check it.
+ * "item:<qualified-item-id>" or "tag:<bare-tag-name>" - split on the
+ * first colon only, since a qualified item id carries colons of its
+ * own (see schema.ts's needIngredientRef). */
 function refToKey(ref: string, recipeId: string): string {
-  const [type, name] = ref.split(":") as [string, string];
+  const sep = ref.indexOf(":");
+  const type = ref.slice(0, sep);
+  const name = ref.slice(sep + 1);
   if (type === "tag") {
     if (!TAGS[name]) {
       throw new Error(`recipe ${recipeId}: unknown tag "${name}"`);
@@ -90,6 +99,7 @@ export function parseStationRecipe(id: string, resultItem: string, json: RecipeJ
     return {
       id,
       kind: "smelting",
+      station: "furnace",
       shaped: false,
       gridSize: 3,
       ingredients: new Map([[key, 1]]),
@@ -104,7 +114,7 @@ export function parseStationRecipe(id: string, resultItem: string, json: RecipeJ
       const key = refToKey(ref, id);
       ingredients.set(key, (ingredients.get(key) ?? 0) + 1);
     }
-    return { id, kind: "brewing", shaped: false, gridSize: 3, ingredients, result };
+    return { id, kind: "brewing", station: "brewing_stand", shaped: false, gridSize: 3, ingredients, result };
   }
 
   const stationSize = json.station === "inventory" ? 2 : 3;
@@ -119,7 +129,7 @@ export function parseStationRecipe(id: string, resultItem: string, json: RecipeJ
     if (stationSize === 2 && shapeless.length > 4) {
       throw new Error(`recipe ${id}: station "inventory" fits at most 4 ingredients`);
     }
-    return { id, kind: "crafting", shaped: false, gridSize: stationSize, ingredients, shapeless, result };
+    return { id, kind: "crafting", station: json.station, shaped: false, gridSize: stationSize, ingredients, shapeless, result };
   }
 
   const rows = json.recipe!;
@@ -150,5 +160,5 @@ export function parseStationRecipe(id: string, resultItem: string, json: RecipeJ
   if (ingredients.size === 0) {
     throw new Error(`recipe ${id}: pattern is empty`);
   }
-  return { id, kind: "crafting", shaped: true, gridSize: stationSize, ingredients, pattern, result };
+  return { id, kind: "crafting", station: json.station, shaped: true, gridSize: stationSize, ingredients, pattern, result };
 }

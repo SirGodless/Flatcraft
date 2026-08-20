@@ -1,8 +1,35 @@
 {
-  "id": "enchanting_table",
+  "id": "flatcraft:block:enchanting_table",
   "name": "Enchanting Table",
   "solid": true,
   "hardness": 40,
   "tool": "pickaxe",
-  "required_tier": 1
+  "required_tier": 1,
+  "station": "enchanting_table",
+  "visual": {
+    "fallback": {
+      "base": [
+        40,
+        30,
+        60
+      ],
+      "top": {
+        "color": [
+          180,
+          60,
+          80
+        ],
+        "rows": 3
+      },
+      "noise": 0.12,
+      "specks": {
+        "color": [
+          120,
+          200,
+          255
+        ],
+        "count": 4
+      }
+    }
+  }
 }

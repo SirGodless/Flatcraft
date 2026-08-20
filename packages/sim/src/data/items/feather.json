@@ -1,4 +1,21 @@
 {
-  "id": "feather",
-  "name": "Feather"
+  "id": "flatcraft:item:feather",
+  "name": "Feather",
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "...X....",
+        "..XXX...",
+        ".XXXXX..",
+        "..XXX...",
+        "...X....",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#f0f0ec"
+      }
+    }
+  }
 }

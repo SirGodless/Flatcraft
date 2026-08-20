@@ -169,7 +169,7 @@ describe("player physics", () => {
     // Teleport the player over the shaft (white-box).
     state.x = x + 0.5;
     state.y = colSurface - 1;
-    state.inventory[0] = { item: "cobblestone", count: 5 };
+    state.inventory[0] = { item: "flatcraft:item:cobblestone", count: 5 };
     const events: unknown[] = [];
     for (let i = 0; i < 150; i++) {
       events.push(...sim.tick([]));
@@ -179,7 +179,7 @@ describe("player physics", () => {
     expect(state.onGround).toBe(true);
     expect(state.health).toBeGreaterThanOrEqual(19);
     // ...and the inventory was dropped as item entities down in the shaft.
-    expect(state.inventory.every((s) => s === null || s.item !== "cobblestone")).toBe(true);
+    expect(state.inventory.every((s) => s === null || s.item !== "flatcraft:item:cobblestone")).toBe(true);
     expect(player).toBeGreaterThan(0);
   });
 
@@ -222,7 +222,7 @@ describe("player physics", () => {
     const tileX = Math.floor(state.x);
     const tileY = Math.floor(state.y) - 1; // inside the player's legs
     setBlock(sim, tileX, tileY, BlockId.Air);
-    state.inventory[0] = { item: "cobblestone", count: 1 };
+    state.inventory[0] = { item: "flatcraft:item:cobblestone", count: 1 };
     const result = sim.tick([{ player, command: { type: "place_block", x: tileX, y: tileY } }]);
     expect(result).toContainEqual({
       to: player,

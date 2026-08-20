@@ -1,5 +1,5 @@
 {
-  "id": "flint_and_steel",
+  "id": "flatcraft:item:flint_and_steel",
   "name": "Flint And Steel",
   "max_stack": 1,
   "recipes": [
@@ -7,9 +7,27 @@
       "station": "inventory",
       "style": "shapeless",
       "ingredients": [
-        "item:iron_ingot",
-        "item:flint"
+        "item:flatcraft:item:iron_ingot",
+        "item:flatcraft:item:flint"
       ]
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        ".SS.....",
+        "S..S..Y.",
+        "S....Y..",
+        ".S..Y...",
+        "..SS....",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "S": "#b0b0b8",
+        "Y": "#f5d442"
+      }
+    }
+  }
 }

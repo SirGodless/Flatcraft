@@ -1,7 +1,7 @@
 {
-  "id": "birch_fence",
+  "id": "flatcraft:item:birch_fence",
   "name": "Birch Fence",
-  "places_block": "birch_fence",
+  "places_block": "flatcraft:block:birch_fence",
   "recipes": [
     {
       "station": "crafting_table",
@@ -11,8 +11,8 @@
         "aba"
       ],
       "key": {
-        "a": "item:birch_planks",
-        "b": "item:stick"
+        "a": "item:flatcraft:item:birch_planks",
+        "b": "item:flatcraft:item:stick"
       },
       "amount": 3
     }

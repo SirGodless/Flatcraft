@@ -18,7 +18,17 @@ export interface AnimationClipJson {
   loop?: boolean;
 }
 
-export interface VisualJson {
+/**
+ * `F` is the content-type-specific shape of `fallback` - what to draw
+ * client-side when there's no sprite file at all (no datapack asset,
+ * e.g. a fresh mod, or the built-in procedural look before any sprite
+ * was ever drawn). Blocks, items, and mobs each need a different kind
+ * of fallback description (a tileable procedural pattern; an 8x8
+ * pixel-art grid; a handful of colored rectangles), so this is generic
+ * rather than one fixed shape - see BlockFallbackJson/ItemFallbackJson/
+ * MobFallbackJson below and their validators.
+ */
+export interface VisualJson<F = unknown> {
   /** Declared count of numbered sprite variants at the sprite's base
    * path (sprites/<type>/<id>_0.png .. _<variants-1>.png), for visual
    * variety (e.g. ore that doesn't look identical every tile). Default
@@ -31,6 +41,58 @@ export interface VisualJson {
    * simply render with no effect, same as a missing sprite falls back
    * to the procedural shape - never an error. */
   shader?: { id: string; params?: Record<string, number | string | boolean> };
+  /** No-sprite-file fallback look; see the interface doc comment. */
+  fallback?: F;
+}
+
+/** Block fallback: a small tileable procedural pattern, drawn once into a
+ * 16x16 canvas texture (see client/render/textures.ts). Colors are
+ * [r,g,b] triples (0-255) rather than hex strings, matching how this
+ * data was expressed as TS tuples before the client-side STYLES table
+ * moved here - keeping the same encoding made a mechanical, low-risk
+ * migration (every value copied verbatim, no re-encoding to typo). */
+export interface BlockFallbackJson {
+  base: number[];
+  /** Differently-colored strip at the top (e.g. grass). */
+  top?: { color: number[]; rows: number };
+  /** Per-pixel brightness jitter, 0..1. */
+  noise: number;
+  /** Overall opacity (water). */
+  alpha?: number;
+  /** Probability per pixel of being fully transparent (leaves). */
+  holes?: number;
+  /** Darken vertical bands (logs' bark look). */
+  stripe?: boolean;
+  /** Colored 2x2 speckles on top of the base (ores). */
+  specks?: { color: number[]; count: number };
+  /** Dark opening at the bottom center (furnace mouth). */
+  opening?: boolean;
+  /** 1px border in this color (glass pane look). */
+  frame?: number[];
+  /** Draw only the bottom N pixel rows (slabs, partial liquids). */
+  fill_rows?: number;
+  /** Partial-tile silhouette (stairs, fences, opened doors). */
+  shape?: "stairs" | "fence" | "door_open" | "trapdoor_open";
+}
+
+/** Item fallback: hand-drawn 8x8 pixel art (client renders it at 2x).
+ * `rows` are 8 strings of 8 characters; each character indexes `palette`
+ * (hex color), a space means transparent. Same encoding as the
+ * client-side ARTS table this replaces, for the same low-risk-migration
+ * reason as BlockFallbackJson. */
+export interface ItemFallbackJson {
+  rows: string[];
+  palette: Record<string, string>;
+}
+
+/** Mob fallback: a handful of colored rectangles (a body block, a head
+ * block, ...), positioned in tile units (1.0 = one full tile). Covers
+ * every existing hand-drawn mob shape uniformly - humanoids and animals
+ * used small parametrized helpers client-side, but since each species'
+ * numbers were already fixed constants, baking them into absolute rects
+ * here is lossless and keeps this schema to one simple shape. */
+export interface MobFallbackJson {
+  rects: Array<{ x: number; y: number; w: number; h: number; color: string }>;
 }
 
 export interface RecipeJson {
@@ -59,16 +121,20 @@ export interface ItemJson {
   max_stack?: number;
   /** Sprite path override (default sprites/item/<id>.png). */
   sprite?: string;
-  /** Variants/animation/shader - see VisualJson. */
-  visual?: VisualJson;
+  /** Variants/animation/shader/fallback - see VisualJson. */
+  visual?: VisualJson<ItemFallbackJson>;
   /** Block id (string) this item places. */
   places_block?: string;
   tool?: { kind: "pickaxe" | "axe" | "shovel" | "sword" | "hammer"; tier: number; mining_speed: number };
   weapon?: { damage: number; knockback?: number };
+  /** Fires an ammo item as an arrow entity on the "shoot" command. */
+  ranged?: { damage: number; cooldown_ticks: number; arrow_speed: number; ammo: string };
   food?: { hunger: number; saturation?: number; eat_ticks?: number; returns?: string };
   armor?: { absorb: number };
   shield?: { block: number };
   grapple?: { range: number };
+  /** Held while falling + jump: slows descent, boosts horizontal speed. */
+  glider?: { sink: number; glide_boost: number };
   effect?: { id: string; ticks: number; returns?: string };
   /** Container for scooping/pouring liquids; capacity in whole blocks. */
   bucket?: { capacity: number };
@@ -83,8 +149,8 @@ export interface BlockJson {
   id: string;
   name?: string;
   sprite?: string;
-  /** Variants/animation/shader - see VisualJson. */
-  visual?: VisualJson;
+  /** Variants/animation/shader/fallback - see VisualJson. */
+  visual?: VisualJson<BlockFallbackJson>;
   solid: boolean;
   hardness: number;
   tool?: "pickaxe" | "axe" | "shovel";
@@ -101,14 +167,28 @@ export interface BlockJson {
   /** Opens a furnace-style cook screen. speed scales burn/cook rate
    * (2 = a blast furnace that burns and cooks twice as fast). */
   furnace?: { speed?: number };
+  /** Marks this block as the one providing a named station (e.g.
+   * "crafting_table", "brewing_stand", "enchanting_table") - recipes/
+   * actions that require that station look this up generically instead
+   * of naming a block id. */
+  station?: string;
+  /** Standing on this block multiplies horizontal speed (< 1 slows,
+   * e.g. soul sand). */
+  movement_slow?: number;
+  /** Survives an explosion whose damage falls below this (default:
+   * hardness, today's behavior). */
+  blast_resistance?: number;
+  /** Replaces the normal drop with this item at this chance instead
+   * (e.g. gravel sometimes drops flint). */
+  alt_drop?: { item: string; amount: number; chance: number };
 }
 
 export interface MobJson {
   id: string;
   name?: string;
   sprite?: string;
-  /** Variants/animation/shader - see VisualJson. */
-  visual?: VisualJson;
+  /** Variants/animation/shader/fallback - see VisualJson. */
+  visual?: VisualJson<MobFallbackJson>;
   health: number;
   speed: number;
   size: { width: number; height: number };
@@ -122,8 +202,10 @@ export interface MobJson {
   explodes?: { follow_range: number; trigger_range: number; fuse_ticks: number; block_radius: number; damage_radius: number; max_damage: number };
   /** Ambles in a random direction, changing every so often. */
   wanders?: boolean;
-  /** Undead: takes damage standing in daylight (overworld only). */
+  /** Undead: takes damage standing in daylight (dimensions with has_sky). */
   burns_in_daylight?: boolean;
+  /** Can be right-clicked to open the trade panel (see data/trades). */
+  trades?: boolean;
   /** Death drops: item, max count (1..max rolled), chance. */
   loot?: Array<{ item: string; max: number; chance: number }>;
   /** Gear this mob spawns wearing (armor absorbs damage, offhand blocks
@@ -141,13 +223,18 @@ export interface MobJson {
   };
 }
 
-class SchemaError extends Error {
+// Exported (not just used within this file) so registry/generic.ts's
+// content-defined type-declaration engine can share the exact same
+// primitives and error format instead of a parallel reimplementation -
+// "the JSON schema of a hand-written type" and "the JSON schema of a
+// content-declared type" are the same kind of check either way.
+export class SchemaError extends Error {
   constructor(source: string, message: string) {
     super(`datapack ${source}: ${message}`);
   }
 }
 
-function checkKeys(source: string, path: string, value: object, allowed: readonly string[]): void {
+export function checkKeys(source: string, path: string, value: object, allowed: readonly string[]): void {
   for (const key of Object.keys(value)) {
     if (!allowed.includes(key)) {
       throw new SchemaError(source, `unknown field "${path}${key}"`);
@@ -155,7 +242,7 @@ function checkKeys(source: string, path: string, value: object, allowed: readonl
   }
 }
 
-function need<T>(source: string, path: string, value: unknown, type: string): T {
+export function need<T>(source: string, path: string, value: unknown, type: string): T {
   const actual = Array.isArray(value) ? "array" : typeof value;
   if (actual !== type) {
     throw new SchemaError(source, `"${path}" must be ${type}, got ${actual}`);
@@ -163,7 +250,7 @@ function need<T>(source: string, path: string, value: unknown, type: string): T 
   return value as T;
 }
 
-function needNumber(source: string, path: string, value: unknown, min: number, max: number): number {
+export function needNumber(source: string, path: string, value: unknown, min: number, max: number): number {
   const n = need<number>(source, path, value, "number");
   if (!Number.isFinite(n) || n < min || n > max) {
     throw new SchemaError(source, `"${path}" out of range [${min}, ${max}]`);
@@ -171,7 +258,7 @@ function needNumber(source: string, path: string, value: unknown, min: number, m
   return n;
 }
 
-function needOneOf<T extends string>(source: string, path: string, value: unknown, options: readonly T[]): T {
+export function needOneOf<T extends string>(source: string, path: string, value: unknown, options: readonly T[]): T {
   const s = need<string>(source, path, value, "string");
   if (!options.includes(s as T)) {
     throw new SchemaError(source, `"${path}" must be one of ${options.join("|")}, got "${s}"`);
@@ -179,9 +266,9 @@ function needOneOf<T extends string>(source: string, path: string, value: unknow
   return s as T;
 }
 
-const ID_PATTERN = /^[a-z0-9_]+$/;
+export const ID_PATTERN = /^[a-z0-9_]+$/;
 
-function needId(source: string, path: string, value: unknown): string {
+export function needId(source: string, path: string, value: unknown): string {
   const s = need<string>(source, path, value, "string");
   if (!ID_PATTERN.test(s)) {
     throw new SchemaError(source, `"${path}" must be a lowercase snake_case id, got "${s}"`);
@@ -189,14 +276,52 @@ function needId(source: string, path: string, value: unknown): string {
   return s;
 }
 
-/** "item:stick" or "tag:planks", namespace prefix optional. */
+/** Every content instance/handler id is "<package>:<type>:<name>" - e.g.
+ * "flatcraft:block:stone", "flatcraft:dimension_generator:overworld".
+ * Distinct from ID_PATTERN/needId, which stay bare-snake_case for the
+ * handful of identifiers that are deliberately NOT one of the 13
+ * namespaced content types (a type declaration's own id like "block",
+ * a block's `station` key, an item's potion-effect `effect.id`). */
+export const QUALIFIED_ID_PATTERN = /^[a-z0-9_]+:[a-z0-9_]+:[a-z0-9_]+$/;
+
+export function needQualifiedId(source: string, path: string, value: unknown): string {
+  const s = need<string>(source, path, value, "string");
+  if (!QUALIFIED_ID_PATTERN.test(s)) {
+    throw new SchemaError(source, `"${path}" must be a fully-qualified "package:type:name" id, got "${s}"`);
+  }
+  return s;
+}
+
+/** The bare `<name>` segment of a "<package>:<type>:<name>" qualified id
+ * (e.g. "flatcraft:item:bow" -> "bow") - for purposes that predate
+ * namespacing and were never meant to carry it: default sprite paths
+ * (sprites/item/bow.png, not sprites/item/flatcraft:item:bow.png) and
+ * prettified display-name fallbacks (pretty("bow"), not
+ * pretty("flatcraft:item:bow")). Two different mods' same-named items
+ * would collide under this convention - an acceptable v1 limitation,
+ * not something this rename stage tries to solve. */
+export function localName(qualifiedId: string): string {
+  const i = qualifiedId.lastIndexOf(":");
+  return i === -1 ? qualifiedId : qualifiedId.slice(i + 1);
+}
+
+/** "item:flatcraft:item:stick" or "tag:planks". Distinguished by the
+ * fixed "item:"/"tag:" prefix rather than by splitting on every colon -
+ * a qualified item id has colons of its own, so this only ever consumes
+ * the first one. Tags aren't one of the 13 namespaced content types
+ * (just a recipe-authoring grouping, see data/tags.ts), so they stay a
+ * bare name. */
 function needIngredientRef(source: string, path: string, value: unknown): string {
   const s = need<string>(source, path, value, "string");
-  const cleaned = s.replace(/^flatcraft:/, "");
-  if (!/^(item|tag):[a-z0-9_]+$/.test(cleaned)) {
-    throw new SchemaError(source, `"${path}" must look like "item:stick" or "tag:planks", got "${s}"`);
+  if (s.startsWith("item:")) {
+    needQualifiedId(source, path, s.slice("item:".length));
+    return s;
   }
-  return cleaned;
+  if (s.startsWith("tag:")) {
+    needId(source, path, s.slice("tag:".length));
+    return s;
+  }
+  throw new SchemaError(source, `"${path}" must look like "item:<qualified-id>" or "tag:<name>", got "${s}"`);
 }
 
 function validateAnimationClipJson(raw: unknown, source: string, path: string): AnimationClipJson {
@@ -211,12 +336,100 @@ function validateAnimationClipJson(raw: unknown, source: string, path: string): 
   return out;
 }
 
+function validateColorTriple(source: string, path: string, value: unknown): number[] {
+  const arr = need<unknown[]>(source, path, value, "array");
+  if (arr.length !== 3) throw new SchemaError(source, `"${path}" must be a [r,g,b] array`);
+  return arr.map((v, i) => needNumber(source, `${path}[${i}]`, v, 0, 255));
+}
+
+export function validateBlockFallbackJson(raw: unknown, source: string): BlockFallbackJson {
+  const value = need<Record<string, unknown>>(source, "visual.fallback", raw, "object");
+  checkKeys(source, "visual.fallback.", value, [
+    "base", "top", "noise", "alpha", "holes", "stripe", "specks", "opening", "frame", "fill_rows", "shape",
+  ]);
+  const out: BlockFallbackJson = {
+    base: validateColorTriple(source, "visual.fallback.base", value["base"]),
+    noise: needNumber(source, "visual.fallback.noise", value["noise"], 0, 1),
+  };
+  if (value["top"] !== undefined) {
+    const top = need<Record<string, unknown>>(source, "visual.fallback.top", value["top"], "object");
+    checkKeys(source, "visual.fallback.top.", top, ["color", "rows"]);
+    out.top = {
+      color: validateColorTriple(source, "visual.fallback.top.color", top["color"]),
+      rows: needNumber(source, "visual.fallback.top.rows", top["rows"], 1, 16),
+    };
+  }
+  if (value["alpha"] !== undefined) out.alpha = needNumber(source, "visual.fallback.alpha", value["alpha"], 0, 1);
+  if (value["holes"] !== undefined) out.holes = needNumber(source, "visual.fallback.holes", value["holes"], 0, 1);
+  if (value["stripe"] !== undefined) {
+    out.stripe = need<boolean>(source, "visual.fallback.stripe", value["stripe"], "boolean");
+  }
+  if (value["specks"] !== undefined) {
+    const specks = need<Record<string, unknown>>(source, "visual.fallback.specks", value["specks"], "object");
+    checkKeys(source, "visual.fallback.specks.", specks, ["color", "count"]);
+    out.specks = {
+      color: validateColorTriple(source, "visual.fallback.specks.color", specks["color"]),
+      count: needNumber(source, "visual.fallback.specks.count", specks["count"], 0, 32),
+    };
+  }
+  if (value["opening"] !== undefined) {
+    out.opening = need<boolean>(source, "visual.fallback.opening", value["opening"], "boolean");
+  }
+  if (value["frame"] !== undefined) out.frame = validateColorTriple(source, "visual.fallback.frame", value["frame"]);
+  if (value["fill_rows"] !== undefined) {
+    out.fill_rows = needNumber(source, "visual.fallback.fill_rows", value["fill_rows"], 1, 16);
+  }
+  if (value["shape"] !== undefined) {
+    out.shape = needOneOf(source, "visual.fallback.shape", value["shape"], ["stairs", "fence", "door_open", "trapdoor_open"] as const);
+  }
+  return out;
+}
+
+export function validateItemFallbackJson(raw: unknown, source: string): ItemFallbackJson {
+  const value = need<Record<string, unknown>>(source, "visual.fallback", raw, "object");
+  checkKeys(source, "visual.fallback.", value, ["rows", "palette"]);
+  const rowsRaw = need<unknown[]>(source, "visual.fallback.rows", value["rows"], "array");
+  const rows = rowsRaw.map((r, i) => need<string>(source, `visual.fallback.rows[${i}]`, r, "string"));
+  const paletteRaw = need<Record<string, unknown>>(source, "visual.fallback.palette", value["palette"], "object");
+  const palette: Record<string, string> = {};
+  for (const [ch, color] of Object.entries(paletteRaw)) {
+    palette[ch] = need<string>(source, `visual.fallback.palette.${ch}`, color, "string");
+  }
+  return { rows, palette };
+}
+
+export function validateMobFallbackJson(raw: unknown, source: string): MobFallbackJson {
+  const value = need<Record<string, unknown>>(source, "visual.fallback", raw, "object");
+  checkKeys(source, "visual.fallback.", value, ["rects"]);
+  const rectsRaw = need<unknown[]>(source, "visual.fallback.rects", value["rects"], "array");
+  const rects = rectsRaw.map((r, i) => {
+    const path = `visual.fallback.rects[${i}]`;
+    const rv = need<Record<string, unknown>>(source, path, r, "object");
+    checkKeys(source, `${path}.`, rv, ["x", "y", "w", "h", "color"]);
+    return {
+      x: needNumber(source, `${path}.x`, rv["x"], -2, 2),
+      y: needNumber(source, `${path}.y`, rv["y"], -2, 2),
+      w: needNumber(source, `${path}.w`, rv["w"], 0, 2),
+      h: needNumber(source, `${path}.h`, rv["h"], 0, 2),
+      color: need<string>(source, `${path}.color`, rv["color"], "string"),
+    };
+  });
+  return { rects };
+}
+
 /** Shared `visual` sub-validator, called identically from items/blocks/mobs
- * - see VisualJson for field meanings. */
-function validateVisualJson(raw: unknown, source: string): VisualJson {
+ * - see VisualJson for field meanings. `validateFallback` is undefined for
+ * a content type that hasn't defined a fallback shape yet; passing a
+ * "fallback" field without one is a schema error, same as any other
+ * unsupported field. */
+export function validateVisualJson<F>(
+  raw: unknown,
+  source: string,
+  validateFallback?: (raw: unknown, source: string) => F,
+): VisualJson<F> {
   const value = need<Record<string, unknown>>(source, "visual", raw, "object");
-  checkKeys(source, "visual.", value, ["variants", "animation", "shader"]);
-  const out: VisualJson = {};
+  checkKeys(source, "visual.", value, ["variants", "animation", "shader", "fallback"]);
+  const out: VisualJson<F> = {};
   if (value["variants"] !== undefined) {
     out.variants = needNumber(source, "visual.variants", value["variants"], 1, 16);
   }
@@ -249,10 +462,14 @@ function validateVisualJson(raw: unknown, source: string): VisualJson {
       out.shader.params = outParams;
     }
   }
+  if (value["fallback"] !== undefined) {
+    if (!validateFallback) throw new SchemaError(source, `"visual.fallback" is not supported here`);
+    out.fallback = validateFallback(value["fallback"], source);
+  }
   return out;
 }
 
-function validateRecipeJson(raw: unknown, source: string, index: number): RecipeJson {
+export function validateRecipeJson(raw: unknown, source: string, index: number): RecipeJson {
   const path = `recipes[${index}].`;
   const value = need<Record<string, unknown>>(source, `recipes[${index}]`, raw, "object");
   checkKeys(source, path, value, ["station", "style", "recipe", "key", "ingredients", "input", "cooking_ticks", "amount"]);
@@ -304,14 +521,14 @@ function validateRecipeJson(raw: unknown, source: string, index: number): Recipe
 export function validateItemJson(raw: unknown, source: string): ItemJson {
   const value = need<Record<string, unknown>>(source, "(root)", raw, "object");
   checkKeys(source, "", value, [
-    "id", "name", "max_stack", "sprite", "visual", "places_block", "tool", "weapon", "food",
-    "armor", "shield", "grapple", "effect", "bucket", "container", "fuel_ticks", "enchants", "recipes",
+    "id", "name", "max_stack", "sprite", "visual", "places_block", "tool", "weapon", "ranged", "food",
+    "armor", "shield", "grapple", "glider", "effect", "bucket", "container", "fuel_ticks", "enchants", "recipes",
   ]);
   const out: ItemJson = { id: needId(source, "id", value["id"]) };
   if (value["name"] !== undefined) out.name = need<string>(source, "name", value["name"], "string");
   if (value["max_stack"] !== undefined) out.max_stack = needNumber(source, "max_stack", value["max_stack"], 1, 64);
   if (value["sprite"] !== undefined) out.sprite = need<string>(source, "sprite", value["sprite"], "string");
-  if (value["visual"] !== undefined) out.visual = validateVisualJson(value["visual"], source);
+  if (value["visual"] !== undefined) out.visual = validateVisualJson(value["visual"], source, validateItemFallbackJson);
   if (value["places_block"] !== undefined) out.places_block = needId(source, "places_block", value["places_block"]);
   if (value["tool"] !== undefined) {
     const tool = need<Record<string, unknown>>(source, "tool", value["tool"], "object");
@@ -329,6 +546,16 @@ export function validateItemJson(raw: unknown, source: string): ItemJson {
     if (weapon["knockback"] !== undefined) {
       out.weapon.knockback = needNumber(source, "weapon.knockback", weapon["knockback"], 0, 2);
     }
+  }
+  if (value["ranged"] !== undefined) {
+    const ranged = need<Record<string, unknown>>(source, "ranged", value["ranged"], "object");
+    checkKeys(source, "ranged.", ranged, ["damage", "cooldown_ticks", "arrow_speed", "ammo"]);
+    out.ranged = {
+      damage: needNumber(source, "ranged.damage", ranged["damage"], 0, 100),
+      cooldown_ticks: needNumber(source, "ranged.cooldown_ticks", ranged["cooldown_ticks"], 1, 1000),
+      arrow_speed: needNumber(source, "ranged.arrow_speed", ranged["arrow_speed"], 0.01, 10),
+      ammo: needId(source, "ranged.ammo", ranged["ammo"]),
+    };
   }
   if (value["food"] !== undefined) {
     const food = need<Record<string, unknown>>(source, "food", value["food"], "object");
@@ -352,6 +579,14 @@ export function validateItemJson(raw: unknown, source: string): ItemJson {
     const grapple = need<Record<string, unknown>>(source, "grapple", value["grapple"], "object");
     checkKeys(source, "grapple.", grapple, ["range"]);
     out.grapple = { range: needNumber(source, "grapple.range", grapple["range"], 1, 128) };
+  }
+  if (value["glider"] !== undefined) {
+    const glider = need<Record<string, unknown>>(source, "glider", value["glider"], "object");
+    checkKeys(source, "glider.", glider, ["sink", "glide_boost"]);
+    out.glider = {
+      sink: needNumber(source, "glider.sink", glider["sink"], 0, 1),
+      glide_boost: needNumber(source, "glider.glide_boost", glider["glide_boost"], 0, 10),
+    };
   }
   if (value["effect"] !== undefined) {
     const effect = need<Record<string, unknown>>(source, "effect", value["effect"], "object");
@@ -389,6 +624,7 @@ export function validateBlockJson(raw: unknown, source: string): BlockJson {
   checkKeys(source, "", value, [
     "id", "name", "sprite", "visual", "solid", "hardness", "tool", "required_tier", "drops",
     "side_permeable", "slab", "tall", "toggle_to", "liquid", "container", "furnace",
+    "station", "movement_slow", "blast_resistance", "alt_drop",
   ]);
   const out: BlockJson = {
     id: needId(source, "id", value["id"]),
@@ -397,7 +633,7 @@ export function validateBlockJson(raw: unknown, source: string): BlockJson {
   };
   if (value["name"] !== undefined) out.name = need<string>(source, "name", value["name"], "string");
   if (value["sprite"] !== undefined) out.sprite = need<string>(source, "sprite", value["sprite"], "string");
-  if (value["visual"] !== undefined) out.visual = validateVisualJson(value["visual"], source);
+  if (value["visual"] !== undefined) out.visual = validateVisualJson(value["visual"], source, validateBlockFallbackJson);
   if (value["tool"] !== undefined) out.tool = needOneOf(source, "tool", value["tool"], ["pickaxe", "axe", "shovel"] as const);
   if (value["required_tier"] !== undefined) out.required_tier = needNumber(source, "required_tier", value["required_tier"], 0, 8);
   if (value["drops"] !== undefined) {
@@ -435,6 +671,22 @@ export function validateBlockJson(raw: unknown, source: string): BlockJson {
     out.furnace = {};
     if (furnace["speed"] !== undefined) out.furnace.speed = needNumber(source, "furnace.speed", furnace["speed"], 0.1, 100);
   }
+  if (value["station"] !== undefined) out.station = needId(source, "station", value["station"]);
+  if (value["movement_slow"] !== undefined) {
+    out.movement_slow = needNumber(source, "movement_slow", value["movement_slow"], 0, 1);
+  }
+  if (value["blast_resistance"] !== undefined) {
+    out.blast_resistance = needNumber(source, "blast_resistance", value["blast_resistance"], -1, 100_000);
+  }
+  if (value["alt_drop"] !== undefined) {
+    const altDrop = need<Record<string, unknown>>(source, "alt_drop", value["alt_drop"], "object");
+    checkKeys(source, "alt_drop.", altDrop, ["item", "amount", "chance"]);
+    out.alt_drop = {
+      item: needId(source, "alt_drop.item", altDrop["item"]),
+      amount: needNumber(source, "alt_drop.amount", altDrop["amount"], 1, 64),
+      chance: needNumber(source, "alt_drop.chance", altDrop["chance"], 0, 1),
+    };
+  }
   return out;
 }
 
@@ -442,7 +694,7 @@ export function validateMobJson(raw: unknown, source: string): MobJson {
   const value = need<Record<string, unknown>>(source, "(root)", raw, "object");
   checkKeys(source, "", value, [
     "id", "name", "sprite", "visual", "health", "speed", "size", "melee", "ranged",
-    "explodes", "wanders", "burns_in_daylight", "loot", "equipment", "spawn",
+    "explodes", "wanders", "burns_in_daylight", "trades", "loot", "equipment", "spawn",
   ]);
   const size = need<Record<string, unknown>>(source, "size", value["size"], "object");
   checkKeys(source, "size.", size, ["width", "height"]);
@@ -457,7 +709,7 @@ export function validateMobJson(raw: unknown, source: string): MobJson {
   };
   if (value["name"] !== undefined) out.name = need<string>(source, "name", value["name"], "string");
   if (value["sprite"] !== undefined) out.sprite = need<string>(source, "sprite", value["sprite"], "string");
-  if (value["visual"] !== undefined) out.visual = validateVisualJson(value["visual"], source);
+  if (value["visual"] !== undefined) out.visual = validateVisualJson(value["visual"], source, validateMobFallbackJson);
   if (value["melee"] !== undefined) {
     const melee = need<Record<string, unknown>>(source, "melee", value["melee"], "object");
     checkKeys(source, "melee.", melee, ["damage", "cooldown", "follow_range"]);
@@ -494,6 +746,7 @@ export function validateMobJson(raw: unknown, source: string): MobJson {
   if (value["burns_in_daylight"] !== undefined) {
     out.burns_in_daylight = need<boolean>(source, "burns_in_daylight", value["burns_in_daylight"], "boolean");
   }
+  if (value["trades"] !== undefined) out.trades = need<boolean>(source, "trades", value["trades"], "boolean");
   if (value["loot"] !== undefined) {
     const list = need<unknown[]>(source, "loot", value["loot"], "array");
     out.loot = list.map((entry, i) => {

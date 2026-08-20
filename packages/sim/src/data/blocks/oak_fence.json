@@ -1,7 +1,18 @@
 {
-  "id": "oak_fence",
+  "id": "flatcraft:block:oak_fence",
   "name": "Oak Fence",
   "solid": true,
   "hardness": 30,
-  "tool": "axe"
+  "tool": "axe",
+  "visual": {
+    "fallback": {
+      "base": [
+        166,
+        130,
+        78
+      ],
+      "noise": 0.07,
+      "shape": "fence"
+    }
+  }
 }

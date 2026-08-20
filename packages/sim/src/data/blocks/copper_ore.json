@@ -1,8 +1,26 @@
 {
-  "id": "copper_ore",
+  "id": "flatcraft:block:copper_ore",
   "name": "Copper Ore",
   "solid": true,
   "hardness": 38,
   "tool": "pickaxe",
-  "required_tier": 2
+  "required_tier": 2,
+  "visual": {
+    "fallback": {
+      "base": [
+        122,
+        122,
+        128
+      ],
+      "noise": 0.12,
+      "specks": {
+        "color": [
+          214,
+          122,
+          78
+        ],
+        "count": 5
+      }
+    }
+  }
 }

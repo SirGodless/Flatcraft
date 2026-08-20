@@ -1,4 +1,21 @@
 {
-  "id": "bone",
-  "name": "Bone"
+  "id": "flatcraft:item:bone",
+  "name": "Bone",
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "...X....",
+        "..XXX...",
+        ".XXXXX..",
+        "..XXX...",
+        "...X....",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#e8e8d8"
+      }
+    }
+  }
 }

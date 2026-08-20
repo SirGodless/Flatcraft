@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { Chunk, decodeChunk, type Dimension, type FurnaceState, type ItemStack } from "@flatcraft/sim";
+import { allDimensionIds, Chunk, decodeChunk, type Dimension, type FurnaceState, type ItemStack } from "@flatcraft/sim";
 
 /**
  * Chunk terrain storage: one small binary file per *modified* chunk
@@ -40,8 +40,22 @@ export interface DecodedChunkFile {
   extra: ChunkExtra;
 }
 
+/** Dimension ids are namespaced "package:type:name" (see world/dimension.ts)
+ * but a directory name can't safely contain ":" on every filesystem
+ * (Windows rejects it outright) - swap it for "_" so the on-disk layout
+ * stays portable. Different dimension ids can't collide after this swap
+ * since dimension ids never contain "_" adjacent in a way that maps two
+ * distinct qualified ids to the same sanitized string... actually they
+ * could in principle (a mod could choose "a_b:c:d" vs "a:b_c:d"), but
+ * that's the same "content id collision" class of problem namespacing
+ * already exists to make vanishingly unlikely, not a new one introduced
+ * here. */
+function dimDirName(dim: Dimension): string {
+  return dim.replace(/:/g, "_");
+}
+
 function chunkFilePath(worldDir: string, dim: Dimension, cx: number, cy: number): string {
-  return join(worldDir, dim, `c.${cx}.${cy}.bin`);
+  return join(worldDir, dimDirName(dim), `c.${cx}.${cy}.bin`);
 }
 
 function packRuns(runs: readonly number[]): Buffer {
@@ -142,14 +156,16 @@ export class ChunkFileStore {
     return decodeChunk(cx, cy, decoded.tileRuns, decoded.wallRuns, remap);
   }
 
-  /** Reads every chunk file across both dimensions once, for the boot-
-   * time chest/furnace hydration - see the class doc comment. Returns
-   * each file's dimension/coordinates/extra state; terrain itself isn't
-   * decoded into a Chunk here (that stays lazy, via load()). */
+  /** Reads every chunk file across every registered dimension once, for
+   * the boot-time chest/furnace hydration - see the class doc comment.
+   * Returns each file's dimension/coordinates/extra state; terrain
+   * itself isn't decoded into a Chunk here (that stays lazy, via
+   * load()). Iterates allDimensionIds() rather than a hardcoded pair so
+   * a mod-registered dimension's containers get hydrated too. */
   scanAll(): Array<{ dim: Dimension; cx: number; cy: number; extra: ChunkExtra }> {
     const results: Array<{ dim: Dimension; cx: number; cy: number; extra: ChunkExtra }> = [];
-    for (const dim of ["overworld", "nether"] as const) {
-      const dir = join(this.worldDir, dim);
+    for (const dim of allDimensionIds()) {
+      const dir = join(this.worldDir, dimDirName(dim));
       if (!existsSync(dir)) continue;
       for (const entry of readdirSync(dir)) {
         const match = /^c\.(-?\d+)\.(-?\d+)\.bin$/.exec(entry);

@@ -1,5 +1,5 @@
 {
-  "id": "copper_grappling_hook",
+  "id": "flatcraft:item:copper_grappling_hook",
   "name": "Copper Grappling Hook",
   "max_stack": 1,
   "grapple": {
@@ -10,13 +10,31 @@
       "station": "crafting_table",
       "style": "shapeless",
       "ingredients": [
-        "item:copper_ingot",
-        "item:copper_ingot",
-        "item:copper_ingot",
-        "item:string",
-        "item:string",
-        "item:stick"
+        "item:flatcraft:item:copper_ingot",
+        "item:flatcraft:item:copper_ingot",
+        "item:flatcraft:item:copper_ingot",
+        "item:flatcraft:item:string",
+        "item:flatcraft:item:string",
+        "item:flatcraft:item:stick"
       ]
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "......S.",
+        "......S.",
+        "......S.",
+        "..HHH.S.",
+        ".H...HS.",
+        ".H....H.",
+        "..HH.H..",
+        "........"
+      ],
+      "palette": {
+        "H": "#d87a4e",
+        "S": "#e8e8e0"
+      }
+    }
+  }
 }

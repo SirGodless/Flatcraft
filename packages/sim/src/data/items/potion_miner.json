@@ -1,20 +1,39 @@
 {
-  "id": "potion_miner",
+  "id": "flatcraft:item:potion_miner",
   "name": "Potion Miner",
   "max_stack": 1,
   "effect": {
     "id": "miner",
     "ticks": 1800,
-    "returns": "glass_bottle"
+    "returns": "flatcraft:item:glass_bottle"
   },
   "recipes": [
     {
       "station": "brewing_stand",
       "ingredients": [
-        "item:glass_bottle",
-        "item:coal",
-        "item:glowstone_dust"
+        "item:flatcraft:item:glass_bottle",
+        "item:flatcraft:item:coal",
+        "item:flatcraft:item:glowstone_dust"
       ]
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "...CC...",
+        "...CC...",
+        "..GLLG..",
+        ".GLLLLG.",
+        ".GLLLLG.",
+        ".GLLLLG.",
+        "..GGGG..",
+        "........"
+      ],
+      "palette": {
+        "C": "#c8c8d0",
+        "G": "#dce8f0",
+        "L": "#f0b040"
+      }
+    }
+  }
 }

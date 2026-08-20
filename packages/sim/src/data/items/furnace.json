@@ -1,7 +1,7 @@
 {
-  "id": "furnace",
+  "id": "flatcraft:item:furnace",
   "name": "Furnace",
-  "places_block": "furnace",
+  "places_block": "flatcraft:block:furnace",
   "recipes": [
     {
       "station": "crafting_table",
@@ -12,7 +12,7 @@
         "aaa"
       ],
       "key": {
-        "a": "item:cobblestone"
+        "a": "item:flatcraft:item:cobblestone"
       }
     }
   ]

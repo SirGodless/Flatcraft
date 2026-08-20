@@ -1,8 +1,9 @@
 import { MOB_JSONS } from "./data/mobs/index.js";
 import type { EntitySize } from "./entities.js";
 import { NON_MOB_SIZES } from "./entities.js";
-import { validateMobJson } from "./registry/schema.js";
-import type { VisualDef } from "./registry/visual.js";
+import { registerContentType, validateContentInstance } from "./registry/generic.js";
+import { validateVisualJson, validateMobFallbackJson, localName, type MobJson } from "./registry/schema.js";
+import type { MobVisualDef } from "./registry/visual.js";
 
 /**
  * Mob registry. Every mob kind is defined by a datapack JSON file
@@ -63,24 +64,107 @@ export interface MobDef {
   readonly explodes?: ExplodesDef;
   readonly wanders?: boolean;
   readonly burnsInDaylight?: boolean;
+  /** Can be right-clicked to open the trade panel. */
+  readonly trades?: boolean;
   readonly loot?: readonly MobLootEntry[];
   readonly equipment?: MobEquipmentDef;
   readonly spawn?: MobSpawnDef;
   /** Sprite path override (default sprites/mob/<id>.png). */
   readonly sprite?: string;
   /** Sprite variants/animation/shader. */
-  readonly visual?: VisualDef;
+  readonly visual?: MobVisualDef;
 }
 
 const defs = new Map<string, MobDef>();
 
 function pretty(id: string): string {
-  return id.split("_").map((word) => (word[0] ?? "").toUpperCase() + word.slice(1)).join(" ");
+  return localName(id).split("_").map((word) => (word[0] ?? "").toUpperCase() + word.slice(1)).join(" ");
 }
+
+registerContentType(
+  {
+    id: "mob",
+    fields: {
+      id: { kind: "qualified_id", required: true },
+      name: { kind: "string" },
+      sprite: { kind: "string" },
+      // Validated separately below - see items.ts's registerContentType
+      // call for why (content-type-parameterized fallback shape).
+      visual: { kind: "any" },
+      health: { kind: "number", min: 1, max: 10_000, required: true },
+      speed: { kind: "number", min: 0, max: 10, required: true },
+      size: {
+        kind: "object",
+        required: true,
+        fields: { width: { kind: "number", min: 0.1, max: 10, required: true }, height: { kind: "number", min: 0.1, max: 10, required: true } },
+      },
+      melee: {
+        kind: "object",
+        fields: {
+          damage: { kind: "number", min: 0, max: 1000, required: true },
+          cooldown: { kind: "number", min: 1, max: 1000, required: true },
+          follow_range: { kind: "number", min: 1, max: 256, required: true },
+        },
+      },
+      ranged: {
+        kind: "object",
+        fields: {
+          damage: { kind: "number", min: 0, max: 1000, required: true },
+          range: { kind: "number", min: 1, max: 256, required: true },
+          shoot_cooldown: { kind: "number", min: 1, max: 1000, required: true },
+          kite_near: { kind: "number", min: 0, max: 256, required: true },
+          kite_far: { kind: "number", min: 0, max: 256, required: true },
+        },
+      },
+      explodes: {
+        kind: "object",
+        fields: {
+          follow_range: { kind: "number", min: 0, max: 256, required: true },
+          trigger_range: { kind: "number", min: 0, max: 256, required: true },
+          fuse_ticks: { kind: "number", min: 1, max: 1000, required: true },
+          block_radius: { kind: "number", min: 0, max: 64, required: true },
+          damage_radius: { kind: "number", min: 0, max: 64, required: true },
+          max_damage: { kind: "number", min: 0, max: 1000, required: true },
+        },
+      },
+      wanders: { kind: "boolean" },
+      burns_in_daylight: { kind: "boolean" },
+      trades: { kind: "boolean" },
+      loot: {
+        kind: "array",
+        items: {
+          kind: "object",
+          fields: {
+            item: { kind: "ref", ref_type: "item", required: true },
+            max: { kind: "number", min: 1, max: 64, required: true },
+            chance: { kind: "number", min: 0, max: 1, required: true },
+          },
+        },
+      },
+      equipment: {
+        kind: "object",
+        fields: { armor: { kind: "ref", ref_type: "item" }, offhand: { kind: "ref", ref_type: "item" } },
+      },
+      spawn: {
+        kind: "object",
+        fields: {
+          group: { kind: "enum", values: ["hostile_surface", "grass_day", "nether_pocket"] },
+          weight: { kind: "number", min: 1, max: 100 },
+          near_structure: { kind: "ref", ref_type: "structure" },
+        },
+      },
+    },
+  },
+  "engine/types/mob",
+);
 
 /** Register a mob from datapack JSON (built-in files or server mods). */
 export function registerMobJson(raw: unknown, source = "datapack"): MobDef {
-  const json = validateMobJson(raw, source);
+  const v = validateContentInstance("mob", raw, source) as unknown as MobJson;
+  const json: MobJson = {
+    ...v,
+    ...(v.visual !== undefined ? { visual: validateVisualJson(v.visual, source, validateMobFallbackJson) } : {}),
+  };
   const def: MobDef = {
     id: json.id,
     name: json.name ?? pretty(json.id),
@@ -115,6 +199,7 @@ export function registerMobJson(raw: unknown, source = "datapack"): MobDef {
       : {}),
     ...(json.wanders !== undefined ? { wanders: json.wanders } : {}),
     ...(json.burns_in_daylight !== undefined ? { burnsInDaylight: json.burns_in_daylight } : {}),
+    ...(json.trades !== undefined ? { trades: json.trades } : {}),
     ...(json.loot !== undefined ? { loot: json.loot } : {}),
     ...(json.equipment !== undefined
       ? {

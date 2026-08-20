@@ -1,0 +1,9 @@
+{
+  "id": "flatcraft:vein:diamond_ore",
+  "block": "flatcraft:block:diamond_ore",
+  "attempts": 1,
+  "size_min": 2,
+  "size_max": 5,
+  "min_y": 192,
+  "max_y": 255
+}

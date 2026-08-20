@@ -1,0 +1,9 @@
+{
+  "id": "flatcraft:vein:gravel",
+  "block": "flatcraft:block:gravel",
+  "attempts": 3,
+  "size_min": 6,
+  "size_max": 12,
+  "min_y": 12,
+  "max_y": 255
+}

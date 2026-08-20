@@ -1,7 +1,7 @@
 {
-  "id": "oak_slab",
+  "id": "flatcraft:item:oak_slab",
   "name": "Oak Slab",
-  "places_block": "oak_slab",
+  "places_block": "flatcraft:block:oak_slab",
   "recipes": [
     {
       "station": "crafting_table",
@@ -10,7 +10,7 @@
         "aaa"
       ],
       "key": {
-        "a": "item:oak_planks"
+        "a": "item:flatcraft:item:oak_planks"
       },
       "amount": 6
     }

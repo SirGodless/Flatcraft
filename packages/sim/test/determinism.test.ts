@@ -114,7 +114,7 @@ describe("simulation", () => {
     const player = sim.allocatePlayerId();
     sim.tick([{ player, command: { type: "join", name: "T" } }]);
     const state = sim.players.get(player)!;
-    state.inventory[0] = { item: "dirt", count: 1 };
+    state.inventory[0] = { item: "flatcraft:item:dirt", count: 1 };
     const { x, y } = nearbySurface(1);
     const result = sim.tick([{ player, command: { type: "place_block", x, y: y + 1 } }]);
     expect(result).toContainEqual({
@@ -143,7 +143,7 @@ describe("simulation", () => {
     // Known block + proper tool so the drop (and re-placement) is fixed.
     sim.world.ensureChunk(Math.floor(x / 32), Math.floor(y / 32));
     sim.world.setBlock(x, y, BlockId.Stone);
-    state.inventory[0] = { item: "wooden_pickaxe", count: 1 };
+    state.inventory[0] = { item: "flatcraft:item:wooden_pickaxe", count: 1 };
 
     sim.tick([{ player, command: { type: "start_mining", x, y } }]);
     for (let i = 0; i < 20 && sim.world.getBlock(x, y) !== BlockId.Air; i++) {
@@ -157,7 +157,7 @@ describe("simulation", () => {
     sim.tick([{ player, command: { type: "select_slot", index: 1 } }]);
     const placed = sim.tick([{ player, command: { type: "place_block", x, y } }]);
     expect(placed).toContainEqual({
-      event: { type: "block_changed", dim: "overworld", x, y, block: BlockId.Cobblestone },
+      event: { type: "block_changed", dim: "flatcraft:dimension:overworld", x, y, block: BlockId.Cobblestone },
     });
     expect(sim.world.getBlock(x, y)).toBe(BlockId.Cobblestone);
   });

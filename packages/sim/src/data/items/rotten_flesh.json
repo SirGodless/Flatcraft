@@ -1,9 +1,26 @@
 {
-  "id": "rotten_flesh",
+  "id": "flatcraft:item:rotten_flesh",
   "name": "Rotten Flesh",
   "food": {
     "hunger": 2,
     "saturation": 1,
     "eat_ticks": 32
+  },
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "..XXX...",
+        ".XXXXX..",
+        ".XXXXX..",
+        "..XXXX..",
+        "...XX...",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#6b7d3a"
+      }
+    }
   }
 }

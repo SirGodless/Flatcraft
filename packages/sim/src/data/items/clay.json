@@ -1,5 +1,5 @@
 {
-  "id": "clay",
+  "id": "flatcraft:item:clay",
   "name": "Clay",
-  "places_block": "clay"
+  "places_block": "flatcraft:block:clay"
 }

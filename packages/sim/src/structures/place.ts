@@ -3,7 +3,7 @@ import { STRUCTURES } from "../data/structures/index.js";
 import type { ItemStack } from "../inventory.js";
 import { hash01 } from "../math/noise.js";
 import { createRng, hashSeed } from "../math/rng.js";
-import { Biome, biomeAt, surfaceHeight } from "../world/gen.js";
+import { biomeAt, surfaceHeight } from "../world/gen.js";
 import type { Chunk } from "../world/chunk.js";
 import type { Dimension } from "../world/world.js";
 import type { LootEntry, Structure } from "./structure.js";
@@ -22,13 +22,6 @@ export interface Placement {
   originY: number;
 }
 
-const BIOME_NAMES: Record<Biome, string> = {
-  [Biome.Desert]: "desert",
-  [Biome.Plains]: "plains",
-  [Biome.Forest]: "forest",
-  [Biome.Mountains]: "mountains",
-};
-
 function anchorPlacement(seed: number, structure: Structure, index: number, cx: number, cy: number): Placement | null {
   const roll = hash01(seed, cx, cy, 0x57a0 + index);
   if (roll >= structure.placement.chance) return null;
@@ -43,7 +36,7 @@ function anchorPlacement(seed: number, structure: Structure, index: number, cx: 
     anchorY = surfaceHeight(seed, anchorX) - 1;
     if (Math.floor(anchorY / CHUNK_HEIGHT) !== cy) return null;
     if (structure.placement.biomes) {
-      const biome = BIOME_NAMES[biomeAt(seed, anchorX)];
+      const biome = biomeAt(seed, anchorX);
       if (!structure.placement.biomes.includes(biome)) return null;
     }
   } else {

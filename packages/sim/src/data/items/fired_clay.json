@@ -1,10 +1,10 @@
 {
-  "id": "fired_clay",
+  "id": "flatcraft:item:fired_clay",
   "name": "Fired Clay",
   "recipes": [
     {
       "station": "furnace",
-      "input": "item:clay",
+      "input": "item:flatcraft:item:clay",
       "cooking_ticks": 200
     }
   ]

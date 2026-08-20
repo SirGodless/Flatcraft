@@ -1,5 +1,5 @@
 {
-  "id": "iron_grappling_hook",
+  "id": "flatcraft:item:iron_grappling_hook",
   "name": "Iron Grappling Hook",
   "max_stack": 1,
   "grapple": {
@@ -10,13 +10,31 @@
       "station": "crafting_table",
       "style": "shapeless",
       "ingredients": [
-        "item:iron_ingot",
-        "item:iron_ingot",
-        "item:iron_ingot",
-        "item:string",
-        "item:string",
-        "item:copper_grappling_hook"
+        "item:flatcraft:item:iron_ingot",
+        "item:flatcraft:item:iron_ingot",
+        "item:flatcraft:item:iron_ingot",
+        "item:flatcraft:item:string",
+        "item:flatcraft:item:string",
+        "item:flatcraft:item:copper_grappling_hook"
       ]
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "......S.",
+        "......S.",
+        "......S.",
+        "..HHH.S.",
+        ".H...HS.",
+        ".H....H.",
+        "..HH.H..",
+        "........"
+      ],
+      "palette": {
+        "H": "#d8d8dc",
+        "S": "#e8e8e0"
+      }
+    }
+  }
 }

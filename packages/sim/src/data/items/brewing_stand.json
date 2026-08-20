@@ -1,7 +1,7 @@
 {
-  "id": "brewing_stand",
+  "id": "flatcraft:item:brewing_stand",
   "name": "Brewing Stand",
-  "places_block": "brewing_stand",
+  "places_block": "flatcraft:block:brewing_stand",
   "recipes": [
     {
       "station": "crafting_table",
@@ -11,8 +11,8 @@
         "bbb"
       ],
       "key": {
-        "a": "item:basalt",
-        "b": "item:cobblestone"
+        "a": "item:flatcraft:item:basalt",
+        "b": "item:flatcraft:item:cobblestone"
       }
     }
   ]

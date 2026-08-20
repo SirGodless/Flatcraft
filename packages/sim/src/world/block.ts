@@ -1,6 +1,7 @@
 import { BLOCK_JSONS } from "../data/blocks/index.js";
-import { validateBlockJson } from "../registry/schema.js";
-import type { VisualDef } from "../registry/visual.js";
+import { registerContentType, validateContentInstance } from "../registry/generic.js";
+import { validateVisualJson, validateBlockFallbackJson, localName, type BlockJson } from "../registry/schema.js";
+import type { BlockVisualDef } from "../registry/visual.js";
 
 /**
  * Block registry. The canonical identity of a block is its string id
@@ -134,22 +135,34 @@ export interface BlockDef {
   readonly container?: number;
   /** Opens a furnace-style cook screen; speed scales burn/cook rate. */
   readonly furnace?: { speed: number };
+  /** Marks this block as the one providing a named station (e.g.
+   * "crafting_table") - see stationBlock(). */
+  readonly station?: string;
+  /** Standing on this block multiplies horizontal speed (< 1 slows). */
+  readonly movementSlow?: number;
+  /** Survives an explosion whose damage falls below this (default:
+   * hardness). */
+  readonly blastResistance?: number;
+  /** Replaces the normal drop with this item at this chance instead. */
+  readonly altDrop?: { item: string; count: number; chance: number };
   /** Sprite path override (default sprites/block/<name>.png). */
   readonly sprite?: string;
   /** Sprite variants/animation/shader. */
-  readonly visual?: VisualDef;
+  readonly visual?: BlockVisualDef;
 }
 
 const defs = new Map<BlockId, BlockDef>();
 const byName = new Map<string, BlockId>();
+/** Named station (e.g. "crafting_table") -> the block providing it. */
+const stations = new Map<string, BlockId>();
 /** toggle_to targets may be registered later; resolved in a second pass. */
 const pendingToggles: Array<{ id: BlockId; target: string; source: string }> = [];
 /** Datapack blocks outside the enum get ids from here. */
 let nextDynamicId = 79;
 
-/** "OakDoorOpen" -> "oak_door_open", "Water1" -> "water_1". */
+/** "OakDoorOpen" -> "flatcraft:block:oak_door_open", "Water1" -> "flatcraft:block:water_1". */
 function enumKeyToId(key: string): string {
-  return key.replace(/([a-z])([A-Z0-9])/g, "$1_$2").toLowerCase();
+  return "flatcraft:block:" + key.replace(/([a-z])([A-Z0-9])/g, "$1_$2").toLowerCase();
 }
 
 const BUILTIN_IDS = new Map<string, BlockId>();
@@ -160,19 +173,70 @@ for (const [key, value] of Object.entries(BlockId)) {
 }
 
 /** Air is an engine constant, not a data file. */
-const AIR: BlockDef = { id: BlockId.Air, name: "air", displayName: "Air", solid: false, hardness: 0 };
+const AIR: BlockDef = { id: BlockId.Air, name: "flatcraft:block:air", displayName: "Air", solid: false, hardness: 0 };
 defs.set(BlockId.Air, AIR);
-byName.set("air", BlockId.Air);
+byName.set("flatcraft:block:air", BlockId.Air);
+
+registerContentType(
+  {
+    id: "block",
+    fields: {
+      id: { kind: "qualified_id", required: true },
+      name: { kind: "string" },
+      sprite: { kind: "string" },
+      // Validated separately below - see items.ts's registerContentType
+      // call for why (content-type-parameterized fallback shape).
+      visual: { kind: "any" },
+      solid: { kind: "boolean", required: true },
+      hardness: { kind: "number", min: -1, max: 100_000, required: true },
+      tool: { kind: "enum", values: ["pickaxe", "axe", "shovel"] },
+      required_tier: { kind: "number", min: 0, max: 8 },
+      drops: {
+        kind: "oneOf",
+        variants: [
+          { kind: "literal", value: "none" },
+          { kind: "object", fields: { item: { kind: "ref", ref_type: "item", required: true }, amount: { kind: "number", min: 1, max: 64, required: true } } },
+        ],
+      },
+      side_permeable: { kind: "boolean" },
+      slab: { kind: "boolean" },
+      tall: { kind: "boolean" },
+      toggle_to: { kind: "ref", ref_type: "block" },
+      liquid: {
+        kind: "object",
+        fields: { kind: { kind: "enum", values: ["water", "lava"], required: true }, level: { kind: "number", min: 1, max: 8, required: true } },
+      },
+      container: { kind: "object", fields: { slots: { kind: "number", min: 1, max: 54, required: true } } },
+      furnace: { kind: "object", fields: { speed: { kind: "number", min: 0.1, max: 100 } } },
+      station: { kind: "id" },
+      movement_slow: { kind: "number", min: 0, max: 1 },
+      blast_resistance: { kind: "number", min: -1, max: 100_000 },
+      alt_drop: {
+        kind: "object",
+        fields: {
+          item: { kind: "ref", ref_type: "item", required: true },
+          amount: { kind: "number", min: 1, max: 64, required: true },
+          chance: { kind: "number", min: 0, max: 1, required: true },
+        },
+      },
+    },
+  },
+  "engine/types/block",
+);
 
 /** Register a block from datapack JSON. Known names keep their enum id;
  * new names get a dynamic id. Call resolveBlockLinks() after a batch. */
 export function registerBlockJson(raw: unknown, source = "datapack"): BlockDef {
-  const json = validateBlockJson(raw, source);
+  const v = validateContentInstance("block", raw, source) as unknown as BlockJson;
+  const json: BlockJson = {
+    ...v,
+    ...(v.visual !== undefined ? { visual: validateVisualJson(v.visual, source, validateBlockFallbackJson) } : {}),
+  };
   const id = byName.get(json.id) ?? BUILTIN_IDS.get(json.id) ?? (nextDynamicId++ as BlockId);
   const def: BlockDef = {
     id,
     name: json.id,
-    displayName: json.name ?? json.id,
+    displayName: json.name ?? localName(json.id),
     solid: json.solid,
     hardness: json.hardness,
     ...(json.tool !== undefined ? { tool: json.tool } : {}),
@@ -188,11 +252,20 @@ export function registerBlockJson(raw: unknown, source = "datapack"): BlockDef {
     ...(json.liquid !== undefined ? { liquid: json.liquid } : {}),
     ...(json.container !== undefined ? { container: json.container.slots } : {}),
     ...(json.furnace !== undefined ? { furnace: { speed: json.furnace.speed ?? 1 } } : {}),
+    ...(json.station !== undefined ? { station: json.station } : {}),
+    ...(json.movement_slow !== undefined ? { movementSlow: json.movement_slow } : {}),
+    ...(json.blast_resistance !== undefined ? { blastResistance: json.blast_resistance } : {}),
+    ...(json.alt_drop !== undefined
+      ? { altDrop: { item: json.alt_drop.item, count: json.alt_drop.amount, chance: json.alt_drop.chance } }
+      : {}),
     ...(json.sprite !== undefined ? { sprite: json.sprite } : {}),
     ...(json.visual !== undefined ? { visual: json.visual } : {}),
   };
   defs.set(id, def);
   byName.set(json.id, id);
+  if (json.station !== undefined) {
+    stations.set(json.station, id);
+  }
   if (json.toggle_to !== undefined) {
     pendingToggles.push({ id, target: json.toggle_to, source });
   }
@@ -224,6 +297,12 @@ export function blockByName(name: string): BlockId | undefined {
   return byName.get(name);
 }
 
+/** The block registered as the given named station (e.g.
+ * "crafting_table"), if any - see BlockDef.station. */
+export function stationBlock(station: string): BlockId | undefined {
+  return stations.get(station);
+}
+
 export function allBlocks(): Iterable<BlockDef> {
   return defs.values();
 }
@@ -233,7 +312,14 @@ export function blockDrops(id: BlockId): { item: string; count: number } | null 
   const def = defs.get(id);
   if (!def || def.id === BlockId.Air) return null;
   if (def.drops === null) return null;
-  return def.drops ?? { item: def.name, count: 1 };
+  return def.drops ?? { item: `flatcraft:item:${localName(def.name)}`, count: 1 };
+}
+
+/** Blast resistance: survives an explosion whose damage falls below
+ * this. Defaults to hardness, same threshold mining already uses. */
+export function blastResistanceOf(id: BlockId): number {
+  const def = defs.get(id);
+  return def?.blastResistance ?? def?.hardness ?? 0;
 }
 
 /** The block id representing this liquid kind at the given level 1..8. */

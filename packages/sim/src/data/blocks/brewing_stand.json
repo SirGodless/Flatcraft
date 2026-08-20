@@ -1,7 +1,34 @@
 {
-  "id": "brewing_stand",
+  "id": "flatcraft:block:brewing_stand",
   "name": "Brewing Stand",
   "solid": true,
   "hardness": 20,
-  "tool": "pickaxe"
+  "tool": "pickaxe",
+  "station": "brewing_stand",
+  "visual": {
+    "fallback": {
+      "base": [
+        96,
+        96,
+        100
+      ],
+      "top": {
+        "color": [
+          74,
+          74,
+          82
+        ],
+        "rows": 6
+      },
+      "noise": 0.1,
+      "specks": {
+        "color": [
+          230,
+          140,
+          40
+        ],
+        "count": 3
+      }
+    }
+  }
 }

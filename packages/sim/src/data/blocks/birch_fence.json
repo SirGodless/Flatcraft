@@ -1,7 +1,18 @@
 {
-  "id": "birch_fence",
+  "id": "flatcraft:block:birch_fence",
   "name": "Birch Fence",
   "solid": true,
   "hardness": 30,
-  "tool": "axe"
+  "tool": "axe",
+  "visual": {
+    "fallback": {
+      "base": [
+        198,
+        180,
+        130
+      ],
+      "noise": 0.07,
+      "shape": "fence"
+    }
+  }
 }

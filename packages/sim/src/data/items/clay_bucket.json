@@ -1,5 +1,5 @@
 {
-  "id": "clay_bucket",
+  "id": "flatcraft:item:clay_bucket",
   "name": "Clay Bucket",
   "max_stack": 1,
   "bucket": {
@@ -14,8 +14,25 @@
         " a "
       ],
       "key": {
-        "a": "item:fired_clay"
+        "a": "item:flatcraft:item:fired_clay"
       }
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "..HHHH..",
+        ".H....H.",
+        ".H....H.",
+        ".H....H.",
+        "..H..H..",
+        "..HHHH..",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "H": "#c17a4a"
+      }
+    }
+  }
 }

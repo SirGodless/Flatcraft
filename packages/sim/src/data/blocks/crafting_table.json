@@ -1,7 +1,26 @@
 {
-  "id": "crafting_table",
+  "id": "flatcraft:block:crafting_table",
   "name": "Crafting Table",
   "solid": true,
   "hardness": 30,
-  "tool": "axe"
+  "tool": "axe",
+  "station": "crafting_table",
+  "visual": {
+    "fallback": {
+      "base": [
+        150,
+        116,
+        68
+      ],
+      "top": {
+        "color": [
+          120,
+          92,
+          56
+        ],
+        "rows": 3
+      },
+      "noise": 0.1
+    }
+  }
 }

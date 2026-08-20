@@ -1,5 +1,5 @@
 {
-  "id": "netherite_grappling_hook",
+  "id": "flatcraft:item:netherite_grappling_hook",
   "name": "Netherite Grappling Hook",
   "max_stack": 1,
   "grapple": {
@@ -10,13 +10,31 @@
       "station": "crafting_table",
       "style": "shapeless",
       "ingredients": [
-        "item:netherite_ingot",
-        "item:netherite_ingot",
-        "item:netherite_ingot",
-        "item:string",
-        "item:string",
-        "item:emerald_grappling_hook"
+        "item:flatcraft:item:netherite_ingot",
+        "item:flatcraft:item:netherite_ingot",
+        "item:flatcraft:item:netherite_ingot",
+        "item:flatcraft:item:string",
+        "item:flatcraft:item:string",
+        "item:flatcraft:item:emerald_grappling_hook"
       ]
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "......S.",
+        "......S.",
+        "......S.",
+        "..HHH.S.",
+        ".H...HS.",
+        ".H....H.",
+        "..HH.H..",
+        "........"
+      ],
+      "palette": {
+        "H": "#4a4048",
+        "S": "#e8e8e0"
+      }
+    }
+  }
 }

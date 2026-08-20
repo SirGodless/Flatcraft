@@ -1,0 +1,9 @@
+{
+  "id": "flatcraft:vein:redstone_ore",
+  "block": "flatcraft:block:redstone_ore",
+  "attempts": 2,
+  "size_min": 3,
+  "size_max": 6,
+  "min_y": 176,
+  "max_y": 255
+}

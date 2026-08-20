@@ -1,12 +1,30 @@
 {
-  "id": "coal_ore",
+  "id": "flatcraft:block:coal_ore",
   "name": "Coal Ore",
   "solid": true,
   "hardness": 35,
   "tool": "pickaxe",
   "required_tier": 1,
   "drops": {
-    "item": "coal",
+    "item": "flatcraft:item:coal",
     "amount": 1
+  },
+  "visual": {
+    "fallback": {
+      "base": [
+        122,
+        122,
+        128
+      ],
+      "noise": 0.12,
+      "specks": {
+        "color": [
+          44,
+          44,
+          46
+        ],
+        "count": 5
+      }
+    }
   }
 }

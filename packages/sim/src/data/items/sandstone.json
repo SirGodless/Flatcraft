@@ -1,7 +1,7 @@
 {
-  "id": "sandstone",
+  "id": "flatcraft:item:sandstone",
   "name": "Sandstone",
-  "places_block": "sandstone",
+  "places_block": "flatcraft:block:sandstone",
   "recipes": [
     {
       "station": "inventory",
@@ -11,7 +11,7 @@
         "aa"
       ],
       "key": {
-        "a": "item:sand"
+        "a": "item:flatcraft:item:sand"
       }
     }
   ]

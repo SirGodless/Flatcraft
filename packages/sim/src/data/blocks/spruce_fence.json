@@ -1,7 +1,18 @@
 {
-  "id": "spruce_fence",
+  "id": "flatcraft:block:spruce_fence",
   "name": "Spruce Fence",
   "solid": true,
   "hardness": 30,
-  "tool": "axe"
+  "tool": "axe",
+  "visual": {
+    "fallback": {
+      "base": [
+        116,
+        86,
+        50
+      ],
+      "noise": 0.07,
+      "shape": "fence"
+    }
+  }
 }

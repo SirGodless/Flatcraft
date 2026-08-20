@@ -1,7 +1,7 @@
 {
-  "id": "birch_door",
+  "id": "flatcraft:item:birch_door",
   "name": "Birch Door",
-  "places_block": "birch_door",
+  "places_block": "flatcraft:block:birch_door",
   "recipes": [
     {
       "station": "crafting_table",
@@ -12,7 +12,7 @@
         "aa"
       ],
       "key": {
-        "a": "item:birch_planks"
+        "a": "item:flatcraft:item:birch_planks"
       },
       "amount": 3
     }

@@ -23,6 +23,10 @@ export interface InputOptions {
   onRightClickMob(x: number, y: number): boolean;
   /** Left-click at world coords (tile units, fractional); true = attacked a mob. */
   onAttackAt(x: number, y: number): boolean;
+  /** True while the player holds an item picked up from an inventory slot. */
+  hasCursorItem(): boolean;
+  /** Left-click outside any inventory UI while hasCursorItem() - drops it. */
+  onDropCursor(): void;
   /** Wheel while UI is open; true = consumed (no hotbar scroll). */
   onUiWheel(deltaY: number): boolean;
   /** Wheel over the world: cycle the hotbar selection (+1 = next slot). */
@@ -33,6 +37,8 @@ export interface InputOptions {
   onToggleBackground(): void;
   /** Hidden keybind (F8): toggle creative mode. */
   onToggleCreative(): void;
+  /** F3: toggle the debug overlay (FPS/TPS/coords/ping/...). */
+  onToggleDebug(): void;
   /** Raw pointer position for the cursor-stack overlay. */
   onPointerMove(x: number, y: number): void;
 }
@@ -111,6 +117,12 @@ export function attachInput(target: HTMLElement, opts: InputOptions): InputHandl
       opts.onToggleCreative();
       return;
     }
+    if (e.code === "F3") {
+      // Browsers bind F3 to "find in page" by default - suppress that.
+      e.preventDefault();
+      opts.onToggleDebug();
+      return;
+    }
     if (e.code === "Equal" || e.code === "NumpadAdd") {
       zoomBy(1.15);
       return;
@@ -152,6 +164,10 @@ export function attachInput(target: HTMLElement, opts: InputOptions): InputHandl
     if (opts.isOverUI(e.offsetX, e.offsetY)) return; // Pixi handles UI clicks
     const tile = tileAt(e);
     if (e.button === 0) {
+      if (opts.hasCursorItem()) {
+        opts.onDropCursor();
+        return;
+      }
       const { width, height } = opts.screenSize();
       const world = opts.camera.screenToWorld(e.offsetX, e.offsetY, width, height);
       if (opts.onAttackAt(world.x / TILE_PX, world.y / TILE_PX)) return;

@@ -1,11 +1,47 @@
 {
-  "id": "zombie",
+  "id": "flatcraft:mob:zombie",
   "name": "Zombie",
   "health": 20,
   "speed": 0.1,
-  "size": { "width": 0.6, "height": 1.8 },
-  "melee": { "damage": 3, "cooldown": 20, "follow_range": 16 },
+  "size": {
+    "width": 0.6,
+    "height": 1.8
+  },
+  "melee": {
+    "damage": 3,
+    "cooldown": 20,
+    "follow_range": 16
+  },
   "burns_in_daylight": true,
-  "loot": [{ "item": "rotten_flesh", "max": 2, "chance": 0.8 }],
-  "spawn": { "group": "hostile_surface", "weight": 2 }
+  "loot": [
+    {
+      "item": "flatcraft:item:rotten_flesh",
+      "max": 2,
+      "chance": 0.8
+    }
+  ],
+  "spawn": {
+    "group": "hostile_surface",
+    "weight": 2
+  },
+  "visual": {
+    "fallback": {
+      "rects": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 0.6,
+          "h": 1.8,
+          "color": "#4e9e4e"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "w": 0.6,
+          "h": 0.45,
+          "color": "#3c7a3c"
+        }
+      ]
+    }
+  }
 }

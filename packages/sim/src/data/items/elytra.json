@@ -1,5 +1,26 @@
 {
-  "id": "elytra",
+  "id": "flatcraft:item:elytra",
   "name": "Elytra",
-  "max_stack": 1
+  "max_stack": 1,
+  "glider": {
+    "sink": 0.08,
+    "glide_boost": 2.2
+  },
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "W......W",
+        "WW....WW",
+        "WWW..WWW",
+        "WWW..WWW",
+        ".WW..WW.",
+        ".W....W.",
+        "........"
+      ],
+      "palette": {
+        "W": "#b8b8c8"
+      }
+    }
+  }
 }

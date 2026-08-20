@@ -1,5 +1,5 @@
 {
-  "id": "emerald_bucket",
+  "id": "flatcraft:item:emerald_bucket",
   "name": "Emerald Bucket",
   "max_stack": 1,
   "bucket": {
@@ -14,9 +14,26 @@
         " b "
       ],
       "key": {
-        "a": "item:emerald",
-        "b": "item:iron_bucket"
+        "a": "item:flatcraft:item:emerald",
+        "b": "item:flatcraft:item:iron_bucket"
       }
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "..HHHH..",
+        ".H....H.",
+        ".H....H.",
+        ".H....H.",
+        "..H..H..",
+        "..HHHH..",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "H": "#30c85e"
+      }
+    }
+  }
 }

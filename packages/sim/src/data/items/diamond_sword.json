@@ -1,5 +1,5 @@
 {
-  "id": "diamond_sword",
+  "id": "flatcraft:item:diamond_sword",
   "name": "Diamond Sword",
   "max_stack": 1,
   "tool": {
@@ -12,7 +12,7 @@
     "knockback": 0.35
   },
   "enchants": [
-    "sharpness"
+    "flatcraft:enchant:sharpness"
   ],
   "recipes": [
     {
@@ -24,9 +24,27 @@
         "b"
       ],
       "key": {
-        "a": "item:diamond",
-        "b": "item:stick"
+        "a": "item:flatcraft:item:diamond",
+        "b": "item:flatcraft:item:stick"
       }
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "......H.",
+        ".....H..",
+        "....H...",
+        "...H....",
+        "..H.....",
+        ".S......",
+        "S.......",
+        "........"
+      ],
+      "palette": {
+        "H": "#5fd8d2",
+        "S": "#6b4f2e"
+      }
+    }
+  }
 }

@@ -25,7 +25,16 @@ function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerEntity } 
 
 describe("new mobs", () => {
   it("every mob kind has stats and loot", () => {
-    const kinds: MobKind[] = ["zombie", "skeleton", "creeper", "zombified_piglin", "pig", "cow", "sheep", "chicken"];
+    const kinds: MobKind[] = [
+      "flatcraft:mob:zombie",
+      "flatcraft:mob:skeleton",
+      "flatcraft:mob:creeper",
+      "flatcraft:mob:zombified_piglin",
+      "flatcraft:mob:pig",
+      "flatcraft:mob:cow",
+      "flatcraft:mob:sheep",
+      "flatcraft:mob:chicken",
+    ];
     for (const kind of kinds) {
       expect(mobDef(kind)!.health).toBeGreaterThan(0);
       expect(mobDef(kind)!.loot).toBeDefined();
@@ -37,7 +46,7 @@ describe("new mobs", () => {
     const { state } = joinPlayer(sim);
     sim.timeOfDay = 18000; // night: no burning
     const out: OutboundEvent[] = [];
-    sim.spawnMob("skeleton", state.x + 7, state.y, out);
+    sim.spawnMob("flatcraft:mob:skeleton", state.x + 7, state.y, out);
 
     let arrowSeen = false;
     let hurt = false;
@@ -57,11 +66,11 @@ describe("new mobs", () => {
     const { state } = joinPlayer(sim);
     sim.timeOfDay = 18000;
     const out: OutboundEvent[] = [];
-    const creeper = sim.spawnMob("creeper", state.x + 1, state.y, out);
+    const creeper = sim.spawnMob("flatcraft:mob:creeper", state.x + 1, state.y, out);
 
     let exploded = false;
     let blocksDestroyed = 0;
-    const fuseTicks = mobDef("creeper")!.explodes!.fuseTicks;
+    const fuseTicks = mobDef("flatcraft:mob:creeper")!.explodes!.fuseTicks;
     for (let i = 0; i < fuseTicks + 60 && !exploded; i++) {
       const events = sim.tick([]);
       for (const o of events) {
@@ -78,21 +87,21 @@ describe("new mobs", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
     const out: OutboundEvent[] = [];
-    const cow = sim.spawnMob("cow", state.x + 1.5, state.y, out);
-    state.inventory[0] = { item: "diamond_sword", count: 1 };
+    const cow = sim.spawnMob("flatcraft:mob:cow", state.x + 1.5, state.y, out);
+    state.inventory[0] = { item: "flatcraft:item:diamond_sword", count: 1 };
     for (let i = 0; i < 100 && sim.entities.has(cow.id); i++) {
       sim.tick([{ player, command: { type: "attack", entity: cow.id } }]);
     }
     expect(sim.entities.has(cow.id)).toBe(false);
     const drops = [...sim.entities.values()].filter(isItemEntity);
     const items = drops.map((d) => d.stack.item);
-    expect(items).toContain("beef");
+    expect(items).toContain("flatcraft:item:beef");
   });
 
   it("zombified piglins spawn naturally in the nether", () => {
     const sim = new Simulation(SEED);
     const { state } = joinPlayer(sim);
-    state.dimension = "nether";
+    state.dimension = "flatcraft:dimension:nether";
     state.x = 8;
     state.y = 30;
     let piglins = 0;
@@ -103,7 +112,7 @@ describe("new mobs", () => {
       state.y = 30;
       state.health = 20;
       for (const e of sim.entities.values()) {
-        if (e.kind === "zombified_piglin") piglins++;
+        if (e.kind === "flatcraft:mob:zombified_piglin") piglins++;
       }
     }
     expect(piglins).toBeGreaterThan(0);
@@ -121,7 +130,7 @@ describe("new mobs", () => {
     for (let y = surface - 6; y <= surface; y++) {
       sim.world.setBlock(wallX, y, BlockId.Obsidian);
     }
-    sim.spawnMob("skeleton", state.x + 6, state.y, out);
+    sim.spawnMob("flatcraft:mob:skeleton", state.x + 6, state.y, out);
     for (let i = 0; i < 200; i++) sim.tick([]);
     // No arrow lives forever against the wall.
     const arrows = [...sim.entities.values()].filter((e) => e.kind === "arrow");
@@ -136,34 +145,34 @@ describe("new mobs", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
     sim.timeOfDay = 18000; // night: no burning
-    state.inventory[0] = { item: "diamond_sword", count: 1 }; // 7 raw damage
+    state.inventory[0] = { item: "flatcraft:item:diamond_sword", count: 1 }; // 7 raw damage
     const out: OutboundEvent[] = [];
-    const zombie = sim.spawnMob("zombie", state.x + 1, state.y, out);
-    zombie.armor = { item: "iron_armor", count: 1 }; // 30% absorption
+    const zombie = sim.spawnMob("flatcraft:mob:zombie", state.x + 1, state.y, out);
+    zombie.armor = { item: "flatcraft:item:iron_armor", count: 1 }; // 30% absorption
 
     sim.tick([{ player, command: { type: "attack", entity: zombie.id } }]);
 
     const hurtZombie = sim.entities.get(zombie.id);
-    expect(hurtZombie && isMobEntity(hurtZombie) ? hurtZombie.health : undefined).toBe(mobDef("zombie")!.health - 5);
+    expect(hurtZombie && isMobEntity(hurtZombie) ? hurtZombie.health : undefined).toBe(mobDef("flatcraft:mob:zombie")!.health - 5);
   });
 
   it("a mob carrying an inventory drops it on death, like a player would", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
     sim.timeOfDay = 18000;
-    state.inventory[0] = { item: "diamond_sword", count: 1 };
+    state.inventory[0] = { item: "flatcraft:item:diamond_sword", count: 1 };
     const out: OutboundEvent[] = [];
-    const zombie = sim.spawnMob("zombie", state.x + 1, state.y, out);
+    const zombie = sim.spawnMob("flatcraft:mob:zombie", state.x + 1, state.y, out);
     zombie.health = 1; // one hit kills
     zombie.inventory = createInventory();
-    zombie.inventory[0] = { item: "emerald", count: 3 };
-    zombie.offhand = { item: "wooden_shield", count: 1 };
+    zombie.inventory[0] = { item: "flatcraft:item:emerald", count: 3 };
+    zombie.offhand = { item: "flatcraft:item:wooden_shield", count: 1 };
 
     sim.tick([{ player, command: { type: "attack", entity: zombie.id } }]);
 
     expect(sim.entities.has(zombie.id)).toBe(false);
     const drops = [...sim.entities.values()].filter(isItemEntity).map((e) => e.stack.item);
-    expect(drops).toContain("emerald");
-    expect(drops).toContain("wooden_shield");
+    expect(drops).toContain("flatcraft:item:emerald");
+    expect(drops).toContain("flatcraft:item:wooden_shield");
   });
 });

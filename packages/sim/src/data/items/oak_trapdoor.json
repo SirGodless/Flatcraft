@@ -1,7 +1,7 @@
 {
-  "id": "oak_trapdoor",
+  "id": "flatcraft:item:oak_trapdoor",
   "name": "Oak Trapdoor",
-  "places_block": "oak_trapdoor",
+  "places_block": "flatcraft:block:oak_trapdoor",
   "recipes": [
     {
       "station": "crafting_table",
@@ -11,7 +11,7 @@
         "aaa"
       ],
       "key": {
-        "a": "item:oak_planks"
+        "a": "item:flatcraft:item:oak_planks"
       },
       "amount": 2
     }

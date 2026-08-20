@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   BEDROCK_Y,
-  Biome,
   biomeAt,
   BlockId,
   CHUNK_HEIGHT,
@@ -97,14 +96,14 @@ describe("world generation", () => {
     // Find a forest tree on dry land.
     let tree = null;
     for (let x = 0; x < 4096 && !tree; x++) {
-      if (biomeAt(SEED, x) === Biome.Forest) {
+      if (biomeAt(SEED, x) === "flatcraft:biome:forest") {
         tree = treeAt(SEED, x);
       }
     }
     expect(tree).not.toBeNull();
     // Forests mix oak and birch; the trunk/canopy match the tree's wood.
-    const log = tree!.wood === "birch" ? BlockId.BirchLog : BlockId.OakLog;
-    const leaves = tree!.wood === "birch" ? BlockId.BirchLeaves : BlockId.OakLeaves;
+    const log = tree!.wood === "flatcraft:wood:birch" ? BlockId.BirchLog : BlockId.OakLog;
+    const leaves = tree!.wood === "flatcraft:wood:birch" ? BlockId.BirchLeaves : BlockId.OakLeaves;
     // Trunk occupies the column above the surface...
     expect(world.getBlockGenerating(tree!.x, tree!.surface - 1)).toBe(log);
     // ...and the canopy reaches into neighboring columns (and possibly the
@@ -112,6 +111,26 @@ describe("world generation", () => {
     const topY = tree!.surface - tree!.height;
     expect(world.getBlockGenerating(tree!.x + 1, topY)).toBe(leaves);
     expect(world.getBlockGenerating(tree!.x - 1, topY)).toBe(leaves);
+  });
+
+  it("gives spruce a taller trunk and a narrower canopy than round-canopy woods (data-driven wood shape)", () => {
+    const world = freshWorld();
+    let tree = null;
+    for (let x = 0; x < 4096 && !tree; x++) {
+      if (biomeAt(SEED, x) === "flatcraft:biome:mountains") {
+        const t = treeAt(SEED, x);
+        if (t?.wood === "flatcraft:wood:spruce") tree = t;
+      }
+    }
+    expect(tree).not.toBeNull();
+    // 4 base + spruce's extra_height:2 + 0..2 roll.
+    expect(tree!.height).toBeGreaterThanOrEqual(6);
+    const topY = tree!.surface - tree!.height;
+    // Narrow canopy_shape: the row just below the top (dy=-1) doesn't
+    // reach 2 columns out...
+    expect(world.getBlockGenerating(tree!.x + 2, topY - 1)).not.toBe(BlockId.SpruceLeaves);
+    // ...but the row at the top (dy=0) does.
+    expect(world.getBlockGenerating(tree!.x + 2, topY)).toBe(BlockId.SpruceLeaves);
   });
 
   it("keeps deserts sandy and snowy peaks snowy", () => {
@@ -122,11 +141,11 @@ describe("world generation", () => {
       const surface = surfaceHeight(SEED, x);
       if (surface > SEA_LEVEL - 1) continue; // skip beaches/underwater
       const biome = biomeAt(SEED, x);
-      if (!desertChecked && biome === Biome.Desert) {
+      if (!desertChecked && biome === "flatcraft:biome:desert") {
         expect(world.getBlockGenerating(x, surface)).toBe(BlockId.Sand);
         desertChecked = true;
       }
-      if (!snowChecked && biome === Biome.Mountains && surface <= -14) {
+      if (!snowChecked && biome === "flatcraft:biome:mountains" && surface <= -14) {
         expect(world.getBlockGenerating(x, surface)).toBe(BlockId.Snow);
         snowChecked = true;
       }

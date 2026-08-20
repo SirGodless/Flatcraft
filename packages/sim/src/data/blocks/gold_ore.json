@@ -1,8 +1,26 @@
 {
-  "id": "gold_ore",
+  "id": "flatcraft:block:gold_ore",
   "name": "Gold Ore",
   "solid": true,
   "hardness": 40,
   "tool": "pickaxe",
-  "required_tier": 3
+  "required_tier": 3,
+  "visual": {
+    "fallback": {
+      "base": [
+        122,
+        122,
+        128
+      ],
+      "noise": 0.12,
+      "specks": {
+        "color": [
+          250,
+          212,
+          80
+        ],
+        "count": 5
+      }
+    }
+  }
 }

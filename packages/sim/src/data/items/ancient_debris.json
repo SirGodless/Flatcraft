@@ -1,5 +1,5 @@
 {
-  "id": "ancient_debris",
+  "id": "flatcraft:item:ancient_debris",
   "name": "Ancient Debris",
-  "places_block": "ancient_debris"
+  "places_block": "flatcraft:block:ancient_debris"
 }

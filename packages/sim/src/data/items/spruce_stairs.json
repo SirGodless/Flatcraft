@@ -1,7 +1,7 @@
 {
-  "id": "spruce_stairs",
+  "id": "flatcraft:item:spruce_stairs",
   "name": "Spruce Stairs",
-  "places_block": "spruce_stairs",
+  "places_block": "flatcraft:block:spruce_stairs",
   "recipes": [
     {
       "station": "crafting_table",
@@ -12,7 +12,7 @@
         "aaa"
       ],
       "key": {
-        "a": "item:spruce_planks"
+        "a": "item:flatcraft:item:spruce_planks"
       },
       "amount": 4
     }

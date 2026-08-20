@@ -1,7 +1,18 @@
 {
-  "id": "oak_planks",
+  "id": "flatcraft:block:oak_planks",
   "name": "Oak Planks",
   "solid": true,
   "hardness": 30,
-  "tool": "axe"
+  "tool": "axe",
+  "visual": {
+    "fallback": {
+      "base": [
+        166,
+        130,
+        78
+      ],
+      "noise": 0.07,
+      "stripe": true
+    }
+  }
 }

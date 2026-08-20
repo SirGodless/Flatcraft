@@ -1,5 +1,5 @@
 {
-  "id": "water_6",
+  "id": "flatcraft:block:water_6",
   "name": "Water 6",
   "solid": false,
   "hardness": -1,
@@ -7,5 +7,17 @@
   "liquid": {
     "kind": "water",
     "level": 6
+  },
+  "visual": {
+    "fallback": {
+      "base": [
+        58,
+        118,
+        196
+      ],
+      "noise": 0.05,
+      "alpha": 0.65,
+      "fill_rows": 12
+    }
   }
 }

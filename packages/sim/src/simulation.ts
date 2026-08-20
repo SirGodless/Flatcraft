@@ -1,4 +1,6 @@
 import type { PlayerCommand, PlayerId, SlotRef } from "./commands.js";
+import { dispatchCommand } from "./commands/registry.js";
+import { runTickSystems } from "./systems/registry.js";
 import type { OutboundEvent, SimEvent } from "./events.js";
 import { CHUNK_HEIGHT, CHUNK_IDLE_EVICT_TICKS, CHUNK_WIDTH } from "./constants.js";
 import { CRAFT_GRID_SIZE, matchGrid, SMALL_GRID_INDICES } from "./crafting/match.js";
@@ -8,9 +10,6 @@ import { createFurnace, furnaceIdle, furnaceKey, stepFurnace, type FurnaceState 
 import {
   ARROW_TTL,
   ATTACK_REACH,
-  BOW_ARROW_SPEED,
-  BOW_COOLDOWN,
-  BOW_DAMAGE,
   ITEM_DESPAWN_TICKS,
   ITEM_PICKUP_DELAY,
   ITEM_PICKUP_RADIUS,
@@ -28,7 +27,7 @@ import {
   type MobKind,
   type PlayerEntity,
 } from "./entities.js";
-import { mobDef, mobsNearStructure, sizeOf, spawnPool, type ExplodesDef } from "./mobs.js";
+import { mobDef, sizeOf, type ExplodesDef } from "./mobs.js";
 import {
   attackDamage,
   attackKnockback,
@@ -50,6 +49,7 @@ import {
   type ItemStack,
 } from "./inventory.js";
 import { itemDef } from "./items.js";
+import { liquidDef } from "./liquids.js";
 import {
   EFFECT_DURATION_TICKS,
   ENCHANT_LAPIS_COST,
@@ -74,8 +74,6 @@ import {
 import { rngNext, type Rng, type RngState } from "./math/rng.js";
 import { canHarvest, miningTicks } from "./mining.js";
 import {
-  ELYTRA_GLIDE_BOOST,
-  ELYTRA_SINK,
   GRAVITY,
   JUMP_VELOCITY,
   PLAYER_HEIGHT,
@@ -86,15 +84,31 @@ import {
   WALK_SPEED,
 } from "./physics.js";
 import { tryActivateMultiblock } from "./multiblock.js";
-import { buildPortal, nearPortal, NETHER_SCALE, PORTAL_COOLDOWN, PORTAL_TICKS } from "./portal.js";
+import { buildPortal, nearPortal, portalConfig } from "./portal.js";
 import type { SimSave } from "./save.js";
 import { clickStack } from "./slots.js";
-import { placementsNear, structureLootAt } from "./structures/place.js";
+import { structureLootAt } from "./structures/place.js";
+import { spawnGenerator } from "./spawning.js";
 import { TRADES } from "./data/trades/index.js";
-import { DAY_LENGTH, daylightFactor, isNight } from "./time.js";
-import { allBlocks, blockByName, blockDef, blockDrops, BlockId, liquidBlock } from "./world/block.js";
-import { Biome, biomeAt, findSpawnX, surfaceHeight } from "./world/gen.js";
-import { LAVA_LEVEL } from "./world/nether.js";
+import { DAY_LENGTH, daylightFactor } from "./time.js";
+import {
+  allBlocks,
+  blastResistanceOf,
+  blockByName,
+  blockDef,
+  blockDrops,
+  BlockId,
+  liquidBlock,
+  stationBlock,
+} from "./world/block.js";
+import { surfaceHeight } from "./world/gen.js";
+import {
+  allDimensionIds,
+  defaultDimensionId,
+  dimensionDef,
+  generateArrival,
+  generateDefaultSpawnPoint,
+} from "./world/dimension.js";
 import { World, type Dimension } from "./world/world.js";
 
 /**
@@ -128,11 +142,44 @@ function safeNextId(save: SimSave): number {
   return max + 1;
 }
 
+/**
+ * SimSave.worlds/.portals across the version-6 format change: pre-6
+ * saves stored these as a fixed `{overworld: [...], nether: [...]}`
+ * object (the per-dimension value being the raw chunk/position array
+ * directly); version 6+ stores one `{dim, ...}` entry per registered
+ * dimension instead, so a mod's own dimension round-trips the same way
+ * the built-in two do. `raw` is deliberately untyped here - an on-disk
+ * save's actual shape can predate whatever SimSave currently declares,
+ * exactly like decodeChunk tolerating pre-RLE data elsewhere.
+ */
+function normalizeWorldsField(raw: unknown): SimSave["worlds"] {
+  if (Array.isArray(raw)) return raw as SimSave["worlds"];
+  if (raw && typeof raw === "object") {
+    return Object.entries(raw as Record<string, SimSave["worlds"][number]["chunks"]>).map(([dim, chunks]) => ({
+      dim,
+      chunks,
+    }));
+  }
+  return [];
+}
+
+/** See normalizeWorldsField - same pre-version-6 migration, applied to
+ * `portals` instead. */
+function normalizePortalsField(raw: unknown): SimSave["portals"] {
+  if (Array.isArray(raw)) return raw as SimSave["portals"];
+  if (raw && typeof raw === "object") {
+    return Object.entries(raw as Record<string, SimSave["portals"][number]["positions"]>).map(
+      ([dim, positions]) => ({ dim, positions }),
+    );
+  }
+  return [];
+}
+
 /** Default body color for players who never picked one. */
 export const DEFAULT_PLAYER_COLOR = 0x4868e0;
 
 /** A valid 0xRRGGBB color, or null. */
-function sanitizeColor(value: unknown): number | null {
+export function sanitizeColor(value: unknown): number | null {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 0xffffff
     ? value
     : null;
@@ -145,7 +192,7 @@ export const DROWN_DAMAGE_INTERVAL = 40;
 export const GRAPPLE_SPEED = 0.7;
 
 /** Reject chunk requests absurdly far out (bad client / future cheat guard). */
-const MAX_CHUNK_COORD = 1_000_000;
+export const MAX_CHUNK_COORD = 1_000_000;
 
 /**
  * The authoritative game simulation. Deterministic and tick-based:
@@ -154,41 +201,41 @@ const MAX_CHUNK_COORD = 1_000_000;
  * any other ambient environment - all inputs arrive via commands.
  */
 export class Simulation {
-  readonly worlds: Record<Dimension, World>;
+  /** One World per registered dimension (see world/dimension.ts) -
+   * populated at construction from every dimension currently registered,
+   * not a fixed overworld/nether pair, so a mod's own dimension gets a
+   * World the same way the built-in two do. */
+  readonly worlds = new Map<string, World>();
   readonly furnaces = new Map<string, FurnaceState>();
   /** Chest contents, keyed like furnaces: "dim:x,y". */
   readonly chests = new Map<string, { dimension: Dimension; x: number; y: number; slots: (ItemStack | null)[] }>();
   readonly entities = new Map<EntityId, Entity>();
-  /** Known portal interiors (bottom-left of interior), per dimension. */
-  readonly portals: Record<Dimension, Map<string, { x: number; y: number }>> = {
-    overworld: new Map(),
-    nether: new Map(),
-  };
+  /** Known portal interiors (bottom-left of interior), per dimension -
+   * use portalsOf(dimension) rather than indexing this directly. */
+  readonly portals = new Map<string, Map<string, { x: number; y: number }>>();
   tickCount = 0;
   /** Time of day in ticks, 0..DAY_LENGTH (writable, e.g. for tests). */
   timeOfDay = 0;
   /** Liquid tiles that may need to flow, per dimension ("x,y"). */
-  private readonly liquidActive: Record<Dimension, Set<string>> = {
-    overworld: new Set(),
-    nether: new Set(),
-  };
+  private readonly liquidActive = new Map<string, Set<string>>();
 
-  private readonly rng: Rng;
+  readonly rng: Rng;
   private readonly rngState: RngState;
   /** Single allocator for both player and entity ids - they share one
    * id space, so a player and a mob can never collide. */
   private nextId: EntityId = 1;
   /** Disconnected players' state, by name, adopted on rejoin. */
-  private readonly savedPlayers = new Map<string, PlayerEntity>();
+  readonly savedPlayers = new Map<string, PlayerEntity>();
   /** Last facing/held-item state broadcast per player, to detect changes
    * without hooking every place inventory/offhand/facing can mutate. */
-  private readonly lastGear = new Map<PlayerId, { facing: "left" | "right"; main: string | null; off: string | null }>();
+  readonly lastGear = new Map<PlayerId, { facing: "left" | "right"; main: string | null; off: string | null }>();
 
   constructor(seed: number) {
-    this.worlds = {
-      overworld: new World(seed, "overworld"),
-      nether: new World(seed, "nether"),
-    };
+    for (const dim of allDimensionIds()) {
+      this.worlds.set(dim, new World(seed, dim));
+      this.portals.set(dim, new Map());
+      this.liquidActive.set(dim, new Set());
+    }
     this.rngState = { s: seed >>> 0 };
     this.rng = () => rngNext(this.rngState);
   }
@@ -204,12 +251,12 @@ export class Simulation {
     return map;
   }
 
-  private getPlayer(id: PlayerId): PlayerEntity | undefined {
+  getPlayer(id: PlayerId): PlayerEntity | undefined {
     const e = this.entities.get(id);
     return e && isPlayerEntity(e) ? e : undefined;
   }
 
-  private *playerEntities(): IterableIterator<PlayerEntity> {
+  *playerEntities(): IterableIterator<PlayerEntity> {
     for (const e of this.entities.values()) {
       if (isPlayerEntity(e)) yield e;
     }
@@ -227,23 +274,17 @@ export class Simulation {
       blockPalette[def.id] = def.name;
     }
     return {
-      version: 5,
+      version: 6,
       blockPalette,
       seed: this.world.seed,
       tickCount: this.tickCount,
       timeOfDay: this.timeOfDay,
       rng: this.rngState.s,
       nextId: this.nextId,
-      worlds: {
-        overworld: this.worlds.overworld.serializeChunks(),
-        nether: this.worlds.nether.serializeChunks(),
-      },
+      worlds: [...this.worlds.entries()].map(([dim, world]) => ({ dim, chunks: world.serializeChunks() })),
       furnaces: [...this.furnaces.values()].map((f) => structuredClone(f)),
       chests: [...this.chests.values()].map((c) => structuredClone(c)),
-      portals: {
-        overworld: [...this.portals.overworld.values()],
-        nether: [...this.portals.nether.values()],
-      },
+      portals: [...this.portals.entries()].map(([dim, positions]) => ({ dim, positions: [...positions.values()] })),
       // Players live in `entities` too, but are saved separately below.
       entities: [...this.entities.values()].filter((e) => !isPlayerEntity(e)).map((e) => structuredClone(e)),
       // Both connected and previously saved players, by name.
@@ -272,8 +313,11 @@ export class Simulation {
     // than on the raw run arrays here - those alternate id/count, and
     // remapping every element would corrupt the counts too.
     const remap = buildBlockRemap(save.blockPalette);
-    for (const dim of ["overworld", "nether"] as const) {
-      sim.worlds[dim].loadChunks(save.worlds[dim], remap);
+    // Every registered dimension's chunks/portals, whether it's already
+    // in this run's registry or not - a dimension no longer registered
+    // (a removed mod) is simply skipped below, not an error.
+    for (const { dim, chunks } of normalizeWorldsField(save.worlds)) {
+      sim.worlds.get(dim)?.loadChunks(chunks, remap);
     }
     for (const f of save.furnaces) {
       // Saves from before per-block furnace speed lack the field.
@@ -282,9 +326,11 @@ export class Simulation {
     for (const c of save.chests ?? []) {
       sim.chests.set(furnaceKey(c.dimension, c.x, c.y), structuredClone(c));
     }
-    for (const dim of ["overworld", "nether"] as const) {
-      for (const pos of save.portals[dim]) {
-        sim.portals[dim].set(`${pos.x},${pos.y}`, { ...pos });
+    for (const { dim, positions } of normalizePortalsField(save.portals)) {
+      const portals = sim.portals.get(dim);
+      if (!portals) continue;
+      for (const pos of positions) {
+        portals.set(`${pos.x},${pos.y}`, { ...pos });
       }
     }
     for (const e of save.entities) {
@@ -310,11 +356,21 @@ export class Simulation {
 
   /** The overworld (kept for compatibility; use worldOf for others). */
   get world(): World {
-    return this.worlds.overworld;
+    return this.worldOf("flatcraft:dimension:overworld");
   }
 
   worldOf(dimension: Dimension): World {
-    return this.worlds[dimension];
+    const world = this.worlds.get(dimension);
+    if (!world) throw new Error(`unknown dimension "${dimension}"`);
+    return world;
+  }
+
+  /** Like worldOf, for the per-dimension known-portal-position index -
+   * see the `portals` field's doc comment. */
+  portalsOf(dimension: Dimension): Map<string, { x: number; y: number }> {
+    const portals = this.portals.get(dimension);
+    if (!portals) throw new Error(`unknown dimension "${dimension}"`);
+    return portals;
   }
 
   /** Drops chunks that have gone unused for CHUNK_IDLE_EVICT_TICKS and
@@ -327,8 +383,8 @@ export class Simulation {
    * host-side logging. */
   evictIdleChunks(): number {
     let evicted = 0;
-    for (const dimension of ["overworld", "nether"] as const) {
-      evicted += this.worldOf(dimension).evictIdle(CHUNK_IDLE_EVICT_TICKS);
+    for (const world of this.worlds.values()) {
+      evicted += world.evictIdle(CHUNK_IDLE_EVICT_TICKS);
     }
     return evicted;
   }
@@ -342,19 +398,13 @@ export class Simulation {
 
   tick(commands: readonly PlayerCommand[]): OutboundEvent[] {
     const out: OutboundEvent[] = [];
-    for (const dimension of ["overworld", "nether"] as const) {
-      this.worldOf(dimension).setCurrentTick(this.tickCount);
+    for (const world of this.worlds.values()) {
+      world.setCurrentTick(this.tickCount);
     }
     for (const pc of commands) {
       this.apply(pc, out);
     }
-    this.stepMining(out);
-    this.stepFurnaces(out);
-    this.stepLiquids(out);
-    this.stepEntities(out);
-    this.stepPlayers(out);
-    this.stepGearSync(out);
-    this.stepSpawning(out);
+    runTickSystems(this, out);
     this.tickCount++;
     this.timeOfDay = (this.timeOfDay + 1) % DAY_LENGTH;
     if (this.tickCount % 100 === 0) {
@@ -385,7 +435,7 @@ export class Simulation {
     return entity;
   }
 
-  spawnMob(kind: MobKind, x: number, y: number, out: OutboundEvent[], dimension: Dimension = "overworld"): MobEntity {
+  spawnMob(kind: MobKind, x: number, y: number, out: OutboundEvent[], dimension: Dimension = "flatcraft:dimension:overworld"): MobEntity {
     const def = mobDef(kind);
     if (!def) throw new Error(`spawnMob: unknown mob kind "${kind}"`);
     const entity: MobEntity = {
@@ -416,7 +466,7 @@ export class Simulation {
     }
   }
 
-  private stepFurnaces(out: OutboundEvent[]): void {
+  stepFurnaces(out: OutboundEvent[]): void {
     for (const state of this.furnaces.values()) {
       const changed = stepFurnace(state, RECIPES.values());
       if (changed && (this.tickCount % 4 === 0 || furnaceIdle(state))) {
@@ -425,7 +475,7 @@ export class Simulation {
     }
   }
 
-  private furnaceEvent(state: FurnaceState): SimEvent {
+  furnaceEvent(state: FurnaceState): SimEvent {
     const recipe = state.input
       ? [...RECIPES.values()].find((r) => r.kind === "smelting" && r.ingredients.has(state.input!.item))
       : undefined;
@@ -451,7 +501,7 @@ export class Simulation {
    * Air instead of loading it back in - exactly the kind of stale-read
    * gap eviction reintroduces wherever a World read doesn't force
    * residency. */
-  private wakeLiquids(dimension: Dimension, x: number, y: number): void {
+  wakeLiquids(dimension: Dimension, x: number, y: number): void {
     const world = this.worldOf(dimension);
     for (const [nx, ny] of [
       [x, y],
@@ -461,7 +511,7 @@ export class Simulation {
       [x, y + 1],
     ] as const) {
       if (blockDef(world.getBlockGenerating(nx, ny)).liquid) {
-        this.liquidActive[dimension].add(`${nx},${ny}`);
+        this.liquidActive.get(dimension)?.add(`${nx},${ny}`);
       }
     }
   }
@@ -472,13 +522,12 @@ export class Simulation {
    * below, and equalize sideways one unit at a time. Lava updates on a
    * slower cadence than water. Water touching lava turns it to obsidian.
    */
-  private stepLiquids(out: OutboundEvent[]): void {
+  stepLiquids(out: OutboundEvent[]): void {
     const BUDGET = 200;
     // No liquid kind is due this tick (water every 3, lava every 10):
     // skip the scan entirely, active cells just stay queued.
     if (this.tickCount % 3 !== 0 && this.tickCount % 10 !== 0) return;
-    for (const dimension of ["overworld", "nether"] as const) {
-      const active = this.liquidActive[dimension];
+    for (const [dimension, active] of this.liquidActive) {
       if (active.size === 0) continue;
       const world = this.worldOf(dimension);
 
@@ -627,7 +676,7 @@ export class Simulation {
     }
   }
 
-  private stepMining(out: OutboundEvent[]): void {
+  stepMining(out: OutboundEvent[]): void {
     for (const p of this.playerEntities()) {
       const mining = p.mining;
       if (!mining) continue;
@@ -741,10 +790,10 @@ export class Simulation {
           }
         }
         if (!p.creative && canHarvest(block, held)) {
-          // Gravel sometimes yields flint instead, like Minecraft.
+          const altDrop = blockDef(block).altDrop;
           const drops =
-            block === BlockId.Gravel && this.rng() < 0.25
-              ? { item: "flint", count: 1 }
+            altDrop && this.rng() < altDrop.chance
+              ? { item: altDrop.item, count: altDrop.count }
               : blockDrops(block);
           if (drops) {
             this.spawnItem(p.dimension, mining.x + 0.5, mining.y + 0.75, drops, out);
@@ -755,7 +804,7 @@ export class Simulation {
     }
   }
 
-  private stepEntities(out: OutboundEvent[]): void {
+  stepEntities(out: OutboundEvent[]): void {
     for (const entity of [...this.entities.values()]) {
       // Players are stepped separately (stepPlayers) - very different
       // physics (input-driven, creative flight, ...).
@@ -840,10 +889,10 @@ export class Simulation {
 
         const mob = mobDef(entity.kind);
 
-        // Daylight burning for undead (not in the nether).
+        // Daylight burning for undead, only where daylight exists at all.
         if (
           mob?.burnsInDaylight &&
-          entity.dimension === "overworld" &&
+          dimensionDef(entity.dimension)?.hasSky === true &&
           this.tickCount % 40 === 0 &&
           daylightFactor(this.timeOfDay) > 0.5 &&
           entity.y <= surfaceHeight(world.seed, Math.floor(entity.x))
@@ -908,9 +957,8 @@ export class Simulation {
         }
 
         entity.vx = dir * (mob?.speed ?? 0);
-        if (world.getBlockGenerating(Math.floor(entity.x), Math.floor(entity.y)) === BlockId.SoulSand) {
-          entity.vx *= 0.4;
-        }
+        const entitySlow = blockDef(world.getBlockGenerating(Math.floor(entity.x), Math.floor(entity.y))).movementSlow;
+        if (entitySlow !== undefined) entity.vx *= entitySlow;
         entity.vy = Math.min(entity.vy + GRAVITY, TERMINAL_VELOCITY);
         stepBody(world, entity, size.width, size.height);
         if (dir !== 0 && entity.vx === 0 && entity.onGround) {
@@ -930,7 +978,7 @@ export class Simulation {
     }
   }
 
-  private stepSpawning(out: OutboundEvent[]): void {
+  stepSpawning(out: OutboundEvent[]): void {
     if (this.tickCount % 50 !== 0 || !this.hasPlayers()) return;
     let mobCount = 0;
     for (const e of this.entities.values()) {
@@ -960,64 +1008,13 @@ export class Simulation {
       return false;
     };
 
-    // Structure-anchored mobs (villagers move into houses): if a
-    // structure with such a mob stands near the player and has no
-    // instance around yet, one appears. Generalizes past just
-    // villagers/houses to whatever a datapack mob declares via
-    // spawn.near_structure.
-    if (anchor.dimension === "overworld" && this.tickCount % 200 === 0) {
-      const pcx = Math.floor(anchor.x / CHUNK_WIDTH);
-      for (let cx = pcx - 2; cx <= pcx + 2; cx++) {
-        for (let cy = -2; cy <= 3; cy++) {
-          for (const placement of placementsNear(world.seed, "overworld", cx, cy)) {
-            const residents = mobsNearStructure(placement.structure.id);
-            if (residents.length === 0) continue;
-            const homeX = placement.originX + 3.5;
-            const homeY = placement.originY + 4;
-            let occupied = false;
-            for (const e of this.entities.values()) {
-              if (residents.includes(e.kind) && Math.abs(e.x - homeX) < 20) occupied = true;
-            }
-            if (!occupied) {
-              this.spawnMob(residents[0]!, homeX, homeY, out);
-              return;
-            }
-          }
-        }
-      }
-    }
-
-    if (anchor.dimension === "nether") {
-      const yStart = 10 + Math.floor(this.rng() * 50);
-      spawnInPocket(yStart, yStart + 16, pickMob(spawnPool("nether_pocket")));
-      return;
-    }
-
-    const surface = surfaceHeight(world.seed, x);
-    const night = isNight(this.timeOfDay);
-    const hostiles = spawnPool("hostile_surface");
-    if (this.rng() < 0.5) {
-      if (night) {
-        // At night, hostile mobs rise on the surface instead of animals.
-        const kind = pickMob(hostiles);
-        const feetFree = world.getBlockGenerating(x, surface - 1) === BlockId.Air;
-        const headFree = world.getBlockGenerating(x, surface - 2) === BlockId.Air;
-        if (feetFree && headFree && blockDef(world.getBlockGenerating(x, surface)).solid) {
-          this.spawnMob(kind, x + 0.5, surface, out);
-        }
-        return;
-      }
-      if (world.getBlockGenerating(x, surface) !== BlockId.Grass) return;
-      const biome = biomeAt(world.seed, x);
-      if (biome !== Biome.Plains && biome !== Biome.Forest) return;
-      this.spawnMob(pickMob(spawnPool("grass_day")), x + 0.5, surface, out);
-    } else {
-      const yStart = surface + 6 + Math.floor(this.rng() * 40);
-      spawnInPocket(yStart, yStart + 12, pickMob(hostiles));
-    }
+    const generatorId = dimensionDef(anchor.dimension)!.spawns;
+    const generator = spawnGenerator(generatorId);
+    if (!generator) throw new Error(`dimension "${anchor.dimension}" references unknown spawn generator "${generatorId}"`);
+    generator({ sim: this, out, anchor, world, x, pickMob, spawnInPocket });
   }
 
-  private stepPlayers(out: OutboundEvent[]): void {
+  stepPlayers(out: OutboundEvent[]): void {
     for (const p of this.playerEntities()) {
       const prevX = p.x;
       const prevY = p.y;
@@ -1079,15 +1076,16 @@ export class Simulation {
         p.vx = p.input.dx * WALK_SPEED * speedFactor + p.kbX;
         p.kbX *= 0.6;
         if (Math.abs(p.kbX) < 0.01) p.kbX = 0;
-        if (world.getBlockGenerating(Math.floor(p.x), Math.floor(p.y)) === BlockId.SoulSand) {
-          p.vx *= 0.4;
-        }
+        const playerSlow = blockDef(world.getBlockGenerating(Math.floor(p.x), Math.floor(p.y))).movementSlow;
+        if (playerSlow !== undefined) p.vx *= playerSlow;
         if (swimming) {
           // Liquids slow and carry: gentle sinking, holding jump swims up.
-          const lava = feetBlock.liquid!.kind === "lava";
-          p.vx *= lava ? 0.35 : 0.6;
-          p.vy = Math.min(p.vy + (lava ? 0.02 : 0.03), lava ? 0.08 : 0.15);
-          if (p.input.jump) p.vy = lava ? -0.1 : -0.22;
+          const liquid = liquidDef(feetBlock.liquid!.kind);
+          if (liquid) {
+            p.vx *= liquid.swimSpeed;
+            p.vy = Math.min(p.vy + liquid.sinkAccel, liquid.sinkCap);
+            if (p.input.jump) p.vy = liquid.swimUpVelocity;
+          }
           p.fallDistance = 0;
         } else {
           if (p.input.jump && p.onGround) {
@@ -1096,17 +1094,16 @@ export class Simulation {
           }
           p.vy = Math.min(p.vy + GRAVITY, TERMINAL_VELOCITY);
 
-          // Elytra gliding: hold jump while falling with wings in the
-          // inventory - slow descent, fast horizontal travel, no fall damage.
-          if (
-            !p.onGround &&
-            p.input.jump &&
-            p.vy > 0 &&
-            p.inventory.some((s) => s?.item === "elytra")
-          ) {
-            p.vy = Math.min(p.vy, ELYTRA_SINK);
-            p.vx = p.input.dx * WALK_SPEED * ELYTRA_GLIDE_BOOST * speedFactor + p.kbX;
-            p.fallDistance = 0;
+          // Gliding: hold jump while falling with a glider item (e.g.
+          // elytra) in the inventory - slow descent, fast horizontal
+          // travel, no fall damage.
+          if (!p.onGround && p.input.jump && p.vy > 0) {
+            const glider = p.inventory.map((s) => (s ? itemDef(s.item)?.glider : undefined)).find(Boolean);
+            if (glider) {
+              p.vy = Math.min(p.vy, glider.sink);
+              p.vx = p.input.dx * WALK_SPEED * glider.glideBoost * speedFactor + p.kbX;
+              p.fallDistance = 0;
+            }
           }
         }
       }
@@ -1143,7 +1140,7 @@ export class Simulation {
       if (inPortal) {
         if (p.portalCooldown === 0) {
           p.portalTicks++;
-          if (p.portalTicks >= PORTAL_TICKS) {
+          if (p.portalTicks >= portalConfig().ticks) {
             this.teleportThroughPortal(p, out);
           }
         }
@@ -1238,7 +1235,7 @@ export class Simulation {
   /** Broadcast facing/held-item changes - covers every way the selected
    * slot or offhand can change (crafting, mining, eating, drag-and-drop,
    * ...) without hooking each site individually. */
-  private stepGearSync(out: OutboundEvent[]): void {
+  stepGearSync(out: OutboundEvent[]): void {
     for (const p of this.playerEntities()) {
       const current = {
         facing: p.facing,
@@ -1255,41 +1252,31 @@ export class Simulation {
   }
 
   private teleportThroughPortal(p: PlayerEntity, out: OutboundEvent[]): void {
-    const targetDim: Dimension = p.dimension === "overworld" ? "nether" : "overworld";
+    const portal = dimensionDef(p.dimension)?.portal;
+    // No outgoing portal link registered from here - a dimension without
+    // one just can't be left this way (a modder's own multiblock could
+    // still move players around through the command/multiblock APIs
+    // directly).
+    if (!portal) return;
+    const targetDim: Dimension = portal.to;
     const targetWorld = this.worldOf(targetDim);
-    const xt = Math.round(p.dimension === "overworld" ? p.x / NETHER_SCALE : p.x * NETHER_SCALE);
+    const xt = Math.round(p.x * portal.scale);
 
     // Reuse a known portal nearby, otherwise build one.
     let arrival: { x: number; y: number } | null = null;
-    for (const pos of this.portals[targetDim].values()) {
+    for (const pos of this.portalsOf(targetDim).values()) {
       if (Math.abs(pos.x - xt) <= 16 && (!arrival || Math.abs(pos.x - xt) < Math.abs(arrival.x - xt))) {
         arrival = pos;
       }
     }
     if (!arrival) {
-      let by: number;
-      if (targetDim === "nether") {
-        // Find open floor space in the nether band, else carve at y=40.
-        by = 40;
-        for (let y = 10; y < LAVA_LEVEL - 4; y++) {
-          const floorSolid = blockDef(targetWorld.getBlockGenerating(xt, y + 1)).solid;
-          const space =
-            targetWorld.getBlockGenerating(xt, y) === BlockId.Air &&
-            targetWorld.getBlockGenerating(xt, y - 1) === BlockId.Air;
-          if (floorSolid && space) {
-            by = y;
-            break;
-          }
-        }
-      } else {
-        by = surfaceHeight(targetWorld.seed, xt) - 1;
-      }
+      const by = generateArrival(targetDim, targetWorld, xt);
       const changes = buildPortal(targetWorld, xt, by);
       for (const c of changes) {
         out.push({ event: { type: "block_changed", dim: targetDim, x: c.x, y: c.y, block: c.block } });
       }
       arrival = { x: xt, y: by };
-      this.portals[targetDim].set(`${xt},${by}`, arrival);
+      this.portalsOf(targetDim).set(`${xt},${by}`, arrival);
     }
 
     p.dimension = targetDim;
@@ -1301,7 +1288,7 @@ export class Simulation {
     p.kbX = 0;
     p.fallDistance = 0;
     p.portalTicks = 0;
-    p.portalCooldown = PORTAL_COOLDOWN;
+    p.portalCooldown = portalConfig().cooldown;
     p.mining = null;
     out.push({ event: { type: "player_dimension", player: p.id, dim: targetDim, x: p.x, y: p.y } });
   }
@@ -1328,7 +1315,7 @@ export class Simulation {
   /** Mob armor/offhand absorb damage exactly like a player's would (see
    * hurtPlayer); unset for every built-in mob today, but a datapack mob
    * or Stage-6 equipped spawn can carry them (mobs.ts). */
-  private hurtMob(entity: MobEntity, amount: number, out: OutboundEvent[], fromX?: number, knockback = 0.3): void {
+  hurtMob(entity: MobEntity, amount: number, out: OutboundEvent[], fromX?: number, knockback = 0.3): void {
     const armorAbsorb = entity.armor ? (itemDef(entity.armor.item)?.armor ?? 0) : 0;
     const shieldBlock = entity.offhand ? (itemDef(entity.offhand.item)?.shieldBlock ?? 0) : 0;
     const reduced =
@@ -1392,7 +1379,7 @@ export class Simulation {
   private explode(creeper: MobEntity, def: ExplodesDef, out: OutboundEvent[]): void {
     const world = this.worldOf(creeper.dimension);
     const cx = creeper.x;
-    const cy = creeper.y - sizeOf("creeper").height / 2;
+    const cy = creeper.y - sizeOf(creeper.kind).height / 2;
     out.push({ event: { type: "entity_died", id: creeper.id, kind: creeper.kind } });
     this.removeEntity(creeper.id, out);
 
@@ -1402,8 +1389,7 @@ export class Simulation {
       for (let tx = Math.floor(cx - r); tx <= Math.floor(cx + r); tx++) {
         if (Math.hypot(tx + 0.5 - cx, ty + 0.5 - cy) > r) continue;
         const block = world.getBlockGenerating(tx, ty);
-        const blockInfo = blockDef(block);
-        if (block === BlockId.Air || blockInfo.hardness < 0 || blockInfo.hardness >= 100) continue;
+        if (block === BlockId.Air || blockDef(block).hardness < 0 || blastResistanceOf(block) >= 100) continue;
         world.setBlock(tx, ty, BlockId.Air);
         out.push({ event: { type: "block_changed", dim: creeper.dimension, x: tx, y: ty, block: BlockId.Air } });
       }
@@ -1504,10 +1490,11 @@ export class Simulation {
       }
       p.grapple = null;
       const fromDim = p.dimension;
-      const spawnX = findSpawnX(this.world.seed);
-      p.dimension = "overworld";
-      p.x = spawnX + 0.5;
-      p.y = surfaceHeight(this.world.seed, spawnX);
+      const defaultDim = defaultDimensionId();
+      const point = generateDefaultSpawnPoint(this.worldOf(defaultDim).seed);
+      p.dimension = defaultDim;
+      p.x = point.x;
+      p.y = point.y;
       p.vx = 0;
       p.vy = 0;
       p.kbX = 0;
@@ -1521,8 +1508,8 @@ export class Simulation {
       p.portalTicks = 0;
       p.portalCooldown = 0;
       out.push({ to: p.id, event: { type: "player_hunger", player: p.id, hunger: p.hunger, max: PLAYER_MAX_HUNGER } });
-      if (fromDim !== "overworld") {
-        out.push({ event: { type: "player_dimension", player: p.id, dim: "overworld", x: p.x, y: p.y } });
+      if (fromDim !== defaultDim) {
+        out.push({ event: { type: "player_dimension", player: p.id, dim: defaultDim, x: p.x, y: p.y } });
       } else {
         out.push({ event: { type: "player_moved", player: p.id, x: p.x, y: p.y } });
       }
@@ -1531,7 +1518,7 @@ export class Simulation {
     out.push({ to: p.id, event: { type: "player_health", player: p.id, health: p.health, max: PLAYER_MAX_HEALTH } });
   }
 
-  private syncInventory(p: PlayerEntity, out: OutboundEvent[]): void {
+  syncInventory(p: PlayerEntity, out: OutboundEvent[]): void {
     out.push({
       to: p.id,
       event: {
@@ -1547,6 +1534,10 @@ export class Simulation {
     });
   }
 
+  /** Applies one command by dispatching to its registered handler (see
+   * commands/registry.ts) - every command type, including FlatCraft's
+   * own built-ins, goes through the same registry a plugin's handler
+   * would. */
   private apply({ player, command }: PlayerCommand, out: OutboundEvent[]): void {
     const broadcast = (event: SimEvent): void => {
       out.push({ event });
@@ -1557,874 +1548,10 @@ export class Simulation {
     const reject = (reason: string): void => {
       reply({ type: "command_rejected", player, reason });
     };
-    const syncInventory = (p: PlayerEntity): void => {
-      this.syncInventory(p, out);
-    };
-
-    switch (command.type) {
-      case "join": {
-        // One live player per name (names are identity for saves/rejoins).
-        if ([...this.playerEntities()].some((p) => p.name === command.name)) {
-          reject("name already in use");
-          break;
-        }
-        // Tell the joiner who is already in the world.
-        const replayPlayers = (): void => {
-          for (const other of this.playerEntities()) {
-            if (other.id === player) continue;
-            reply({
-              type: "player_joined",
-              player: other.id,
-              name: other.name,
-              x: other.x,
-              y: other.y,
-              dim: other.dimension,
-              color: other.color,
-              facing: other.facing,
-              main: other.inventory[other.selected]?.item ?? null,
-              off: other.offhand?.item ?? null,
-            });
-          }
-        };
-        const chosenColor = sanitizeColor(command.color);
-        // A returning player (same name) picks up exactly where they left.
-        const saved = this.savedPlayers.get(command.name);
-        if (saved) {
-          this.savedPlayers.delete(command.name);
-          const state: PlayerEntity = { ...structuredClone(saved), id: player };
-          // Older saves lack newer fields; default them on adoption.
-          state.hunger = Number.isFinite(state.hunger) ? state.hunger : PLAYER_MAX_HUNGER;
-          state.exhaustion = Number.isFinite(state.exhaustion) ? state.exhaustion : 0;
-          state.color = chosenColor ?? sanitizeColor(state.color) ?? DEFAULT_PLAYER_COLOR;
-          state.armor = state.armor ?? null;
-          state.offhand = state.offhand ?? null;
-          state.saturation = Number.isFinite(state.saturation) ? state.saturation : 5;
-          state.eating = null;
-          state.grapple = null;
-          state.creative = state.creative === true;
-          state.air = Number.isFinite(state.air) ? state.air : MAX_AIR_TICKS;
-          state.facing = state.facing === "left" ? "left" : "right";
-          this.entities.set(player, state);
-          const rejoinMain = state.inventory[state.selected]?.item ?? null;
-          const rejoinOff = state.offhand?.item ?? null;
-          this.lastGear.set(player, { facing: state.facing, main: rejoinMain, off: rejoinOff });
-          broadcast({
-            type: "player_joined",
-            player,
-            name: state.name,
-            x: state.x,
-            y: state.y,
-            dim: state.dimension,
-            color: state.color,
-            facing: state.facing,
-            main: rejoinMain,
-            off: rejoinOff,
-          });
-          this.syncInventory(state, out);
-          reply({ type: "player_health", player, health: state.health, max: PLAYER_MAX_HEALTH });
-          reply({ type: "player_hunger", player, hunger: state.hunger, max: PLAYER_MAX_HUNGER });
-          reply({ type: "time_changed", time: this.timeOfDay });
-          reply({ type: "player_dimension", player, dim: state.dimension, x: state.x, y: state.y });
-          replayPlayers();
-          for (const entity of this.entities.values()) {
-            if (isPlayerEntity(entity)) continue;
-            reply({
-              type: "entity_spawned",
-              id: entity.id,
-              kind: entity.kind,
-              dim: entity.dimension,
-              x: entity.x,
-              y: entity.y,
-              ...(isItemEntity(entity) ? { stack: { ...entity.stack } } : {}),
-            });
-          }
-          break;
-        }
-        const spawnX = findSpawnX(this.world.seed);
-        const x = spawnX + 0.5;
-        const y = surfaceHeight(this.world.seed, spawnX);
-        const state: PlayerEntity = {
-          id: player,
-          kind: "player",
-          name: command.name,
-          color: chosenColor ?? DEFAULT_PLAYER_COLOR,
-          dimension: "overworld",
-          x,
-          y,
-          vx: 0,
-          vy: 0,
-          onGround: false,
-          input: { dx: 0, jump: false },
-          inventory: createInventory(),
-          selected: 0,
-          cursor: null,
-          craftGrid: new Array<ItemStack | null>(CRAFT_GRID_SIZE).fill(null),
-          mining: null,
-          health: PLAYER_MAX_HEALTH,
-          hunger: PLAYER_MAX_HUNGER,
-          exhaustion: 0,
-          hurtCooldown: 0,
-          attackCooldown: 0,
-          kbX: 0,
-          fallDistance: 0,
-          effects: {},
-          portalTicks: 0,
-          portalCooldown: 0,
-          saturation: 5,
-          eating: null,
-          armor: null,
-          offhand: null,
-          grapple: null,
-          creative: false,
-          air: MAX_AIR_TICKS,
-          facing: "right",
-        };
-        this.entities.set(player, state);
-        this.lastGear.set(player, { facing: state.facing, main: null, off: null });
-        broadcast({
-          type: "player_joined",
-          player,
-          name: state.name,
-          x,
-          y,
-          dim: "overworld",
-          color: state.color,
-          facing: state.facing,
-          main: null,
-          off: null,
-        });
-        syncInventory(state);
-        reply({ type: "player_health", player, health: state.health, max: PLAYER_MAX_HEALTH });
-        reply({ type: "player_hunger", player, hunger: state.hunger, max: PLAYER_MAX_HUNGER });
-        reply({ type: "time_changed", time: this.timeOfDay });
-        replayPlayers();
-        for (const entity of this.entities.values()) {
-          if (isPlayerEntity(entity)) continue;
-          reply({
-            type: "entity_spawned",
-            id: entity.id,
-            kind: entity.kind,
-            dim: entity.dimension,
-            x: entity.x,
-            y: entity.y,
-            ...(isItemEntity(entity) ? { stack: { ...entity.stack } } : {}),
-          });
-        }
-        break;
-      }
-      case "leave": {
-        const p = this.getPlayer(player);
-        if (p && this.entities.delete(player)) {
-          // Keep the state for a future rejoin (and for saves).
-          this.savedPlayers.set(p.name, p);
-          this.lastGear.delete(player);
-          broadcast({ type: "player_left", player });
-        }
-        break;
-      }
-      case "move": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        if (![-1, 0, 1].includes(command.dx) || typeof command.jump !== "boolean") {
-          reject("invalid input");
-          break;
-        }
-        p.input = { dx: command.dx, jump: command.jump, down: command.down === true };
-        if (command.dx !== 0) p.facing = command.dx > 0 ? "right" : "left";
-        break;
-      }
-      case "set_color": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        const color = sanitizeColor(command.color);
-        if (color === null) {
-          reject("invalid color");
-          break;
-        }
-        p.color = color;
-        broadcast({ type: "player_color", player, color });
-        break;
-      }
-      case "select_slot": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        if (!Number.isInteger(command.index) || command.index < 0 || command.index >= HOTBAR_SIZE) {
-          reject("invalid slot");
-          break;
-        }
-        p.selected = command.index;
-        syncInventory(p);
-        break;
-      }
-      case "craft": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        const recipe = RECIPES.get(command.recipe);
-        if (!recipe || recipe.kind === "smelting") {
-          reject("unknown recipe");
-          break;
-        }
-        if (recipe.kind === "brewing" && !this.blockNearby(p, BlockId.BrewingStand)) {
-          reject("requires brewing stand");
-          break;
-        }
-        if (recipe.kind === "crafting" && recipe.gridSize === 3 && !this.blockNearby(p, BlockId.CraftingTable)) {
-          reject("requires crafting table");
-          break;
-        }
-        // Ingredient keys may be tags ("#planks"): any member counts.
-        for (const [key, count] of recipe.ingredients) {
-          const available = ingredientOptions(key).reduce(
-            (sum, item) => sum + countInInventory(p.inventory, item),
-            0,
-          );
-          if (available < count) {
-            reject("missing ingredients");
-            return;
-          }
-        }
-        for (const [key, count] of recipe.ingredients) {
-          let remaining = count;
-          for (const item of ingredientOptions(key)) {
-            while (remaining > 0 && removeFromInventory(p.inventory, item, 1)) {
-              remaining--;
-            }
-          }
-        }
-        addToInventory(p.inventory, recipe.result.item, recipe.result.count);
-        syncInventory(p);
-        break;
-      }
-      case "slot_click": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        if (command.button !== "left" && command.button !== "right") {
-          reject("invalid button");
-          break;
-        }
-        this.applySlotClick(p, command.slot, command.button, reject, broadcast);
-        syncInventory(p);
-        break;
-      }
-      case "return_grid": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        this.dumpGridAndCursor(p);
-        syncInventory(p);
-        break;
-      }
-      case "open_furnace": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        const { x, y } = command;
-        if (!Number.isInteger(x) || !Number.isInteger(y) || !this.withinReach(player, x, y)) {
-          reject("out of reach");
-          break;
-        }
-        const furnaceDef = blockDef(this.worldOf(p.dimension).getBlockGenerating(x, y)).furnace;
-        if (furnaceDef === undefined) {
-          reject("no furnace there");
-          break;
-        }
-        let state = this.furnaces.get(furnaceKey(p.dimension, x, y));
-        if (!state) {
-          state = createFurnace(p.dimension, x, y, furnaceDef.speed);
-          this.furnaces.set(furnaceKey(p.dimension, x, y), state);
-          this.worldOf(p.dimension).touchChunk(Math.floor(x / CHUNK_WIDTH), Math.floor(y / CHUNK_HEIGHT));
-        }
-        reply(this.furnaceEvent(state));
-        break;
-      }
-      case "open_chest": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        const { x, y } = command;
-        if (!Number.isInteger(x) || !Number.isInteger(y) || !this.withinReach(player, x, y)) {
-          reject("out of reach");
-          break;
-        }
-        const slots = blockDef(this.worldOf(p.dimension).getBlockGenerating(x, y)).container;
-        if (slots === undefined) {
-          reject("no chest there");
-          break;
-        }
-        const chest = this.ensureChest(p.dimension, x, y, slots);
-        reply({ type: "chest_changed", dim: p.dimension, x, y, slots: cloneInventory(chest.slots) });
-        break;
-      }
-      case "request_chunk": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        const { cx, cy } = command;
-        if (
-          !Number.isInteger(cx) ||
-          !Number.isInteger(cy) ||
-          Math.abs(cx) > MAX_CHUNK_COORD ||
-          Math.abs(cy) > MAX_CHUNK_COORD
-        ) {
-          reject("invalid chunk coordinates");
-          break;
-        }
-        const chunk = this.worldOf(p.dimension).ensureChunk(cx, cy);
-        reply({
-          type: "chunk_data",
-          dim: p.dimension,
-          cx,
-          cy,
-          tiles: Array.from(chunk.tiles),
-          walls: Array.from(chunk.walls),
-        });
-        break;
-      }
-      case "start_mining": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        const { x, y } = command;
-        if (!Number.isInteger(x) || !Number.isInteger(y)) {
-          reject("invalid coordinates");
-          break;
-        }
-        if (!this.withinReach(player, x, y)) {
-          reject("out of reach");
-          break;
-        }
-        const world = this.worldOf(p.dimension);
-        const current = world.getBlockGenerating(x, y);
-        const held = p.inventory[p.selected];
-        const holdsHammer = held ? itemDef(held.item)?.tool?.kind === "hammer" : false;
-        // A hammer aimed at open foreground mines the wall behind it.
-        if (
-          holdsHammer &&
-          !blockDef(current).solid &&
-          world.getWallGenerating(x, y) !== BlockId.Air
-        ) {
-          p.mining = { x, y, progress: 0, wall: true };
-          break;
-        }
-        if (current === BlockId.Air || blockDef(current).hardness < 0) {
-          reject("cannot mine");
-          break;
-        }
-        p.mining = { x, y, progress: 0 };
-        break;
-      }
-      case "stop_mining": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        if (p.mining) {
-          const { x, y } = p.mining;
-          p.mining = null;
-          broadcast({ type: "mining_progress", player, x, y, progress: 0, total: 0 });
-        }
-        break;
-      }
-      case "attack": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        if (p.attackCooldown > 0) {
-          break;
-        }
-        const entity = this.entities.get(command.entity);
-        if (!entity || !isMobEntity(entity) || entity.dimension !== p.dimension) {
-          reject("no such target");
-          break;
-        }
-        const size = sizeOf(entity.kind);
-        const dist = Math.hypot(entity.x - p.x, entity.y - size.height / 2 - (p.y - PLAYER_HEIGHT / 2));
-        if (dist > ATTACK_REACH) {
-          reject("out of reach");
-          break;
-        }
-        p.attackCooldown = PLAYER_ATTACK_COOLDOWN;
-        const held = p.inventory[p.selected] ?? null;
-        const strength = p.effects["strength"] !== undefined ? STRENGTH_BONUS : 0;
-        this.hurtMob(entity, attackDamage(held) + strength, out, p.x, attackKnockback(held));
-        break;
-      }
-      case "trade": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        const villager = this.entities.get(command.entity);
-        if (!villager || villager.kind !== "villager" || villager.dimension !== p.dimension) {
-          reject("no villager");
-          break;
-        }
-        if (Math.hypot(villager.x - p.x, villager.y - p.y) > ATTACK_REACH + 1) {
-          reject("out of reach");
-          break;
-        }
-        const trade = TRADES[command.trade];
-        if (!trade) {
-          reject("unknown trade");
-          break;
-        }
-        if (!removeFromInventory(p.inventory, trade.cost.item, trade.cost.count)) {
-          reject("missing items");
-          break;
-        }
-        addToInventory(p.inventory, trade.result.item, trade.result.count);
-        syncInventory(p);
-        break;
-      }
-      case "use_item": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        const stack = p.inventory[p.selected];
-        if (!stack) {
-          reject("nothing to use");
-          break;
-        }
-        const def = itemDef(stack.item);
-        if (def?.effect) {
-          // Potions apply instantly; the datapack decides the effect,
-          // its duration and what stays behind (the bottle).
-          stack.count -= 1;
-          if (stack.count === 0) p.inventory[p.selected] = null;
-          if (def.effect.returns) {
-            addToInventory(p.inventory, def.effect.returns, 1);
-          }
-          p.effects[def.effect.id] = def.effect.ticks;
-          syncInventory(p);
-          reply({ type: "player_effects", player: p.id, effects: { ...p.effects } });
-          break;
-        }
-        if (def?.food) {
-          if (p.hunger >= PLAYER_MAX_HUNGER) {
-            reject("not hungry");
-            break;
-          }
-          // Eating takes the item's eat_ticks; finished in stepPlayers.
-          if (!p.eating) {
-            p.eating = { item: stack.item, ticks: def.food.eatTicks };
-          }
-          break;
-        }
-        reject("nothing to use");
-        break;
-      }
-      case "shoot": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        const { dx, dy } = command;
-        if (typeof dx !== "number" || typeof dy !== "number" || !Number.isFinite(dx) || !Number.isFinite(dy)) {
-          reject("invalid direction");
-          break;
-        }
-        const len = Math.hypot(dx, dy);
-        if (len < 1e-6) {
-          reject("invalid direction");
-          break;
-        }
-        if (p.inventory[p.selected]?.item !== "bow") {
-          reject("no bow");
-          break;
-        }
-        if (p.attackCooldown > 0) {
-          break;
-        }
-        if (!removeFromInventory(p.inventory, "arrow", 1)) {
-          reject("no arrows");
-          break;
-        }
-        p.attackCooldown = BOW_COOLDOWN;
-        const originY = p.y - PLAYER_HEIGHT * 0.6;
-        const arrow: ArrowEntity = {
-          id: this.nextId++,
-          kind: "arrow",
-          dimension: p.dimension,
-          x: p.x + (dx / len) * 0.8,
-          y: originY + (dy / len) * 0.8,
-          vx: (dx / len) * BOW_ARROW_SPEED,
-          vy: (dy / len) * BOW_ARROW_SPEED,
-          onGround: false,
-          damage: BOW_DAMAGE,
-          ttl: ARROW_TTL,
-          owner: player,
-        };
-        this.entities.set(arrow.id, arrow);
-        broadcast({
-          type: "entity_spawned",
-          id: arrow.id,
-          kind: "arrow",
-          dim: arrow.dimension,
-          x: arrow.x,
-          y: arrow.y,
-        });
-        syncInventory(p);
-        break;
-      }
-      case "enchant": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        if (!this.blockNearby(p, BlockId.EnchantingTable)) {
-          reject("requires enchanting table");
-          break;
-        }
-        const stack = p.inventory[p.selected];
-        const enchId = stack ? enchantFor(stack) : null;
-        if (!stack || !enchId) {
-          reject("cannot enchant this");
-          break;
-        }
-        const existing = stack.ench?.find((e) => e.id === enchId);
-        if (existing && existing.level >= ENCHANT_MAX_LEVEL) {
-          reject("already maxed");
-          break;
-        }
-        if (!removeFromInventory(p.inventory, "lapis_lazuli", ENCHANT_LAPIS_COST)) {
-          reject("missing lapis");
-          break;
-        }
-        if (existing) {
-          existing.level++;
-        } else {
-          stack.ench = [...(stack.ench ?? []), { id: enchId, level: 1 }];
-        }
-        syncInventory(p);
-        break;
-      }
-      case "place_block": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        const { x, y } = command;
-        if (!Number.isInteger(x) || !Number.isInteger(y)) {
-          reject("invalid coordinates");
-          break;
-        }
-        const world = this.worldOf(p.dimension);
-        const stack = p.inventory[p.selected];
-        if (!stack) {
-          reject("nothing to place");
-          break;
-        }
-        if (!this.withinReach(player, x, y)) {
-          reject("out of reach");
-          break;
-        }
-        // A multiblock trigger (e.g. flint and steel lighting a portal)
-        // takes over instead of placing a block; unhandled falls through
-        // to normal placement below.
-        const attempt = tryActivateMultiblock(world, x, y, { type: "place_block", item: stack.item }, {
-          dimension: p.dimension,
-          sim: this,
-          broadcast,
-        });
-        if (attempt.activated) break;
-        if (attempt.attempted) {
-          reject(attempt.failReason);
-          break;
-        }
-        const def = itemDef(stack.item);
-        if (def?.block === undefined) {
-          reject("item not placeable");
-          break;
-        }
-        const consume = (): void => {
-          if (!p.creative) {
-            stack.count -= 1;
-            if (stack.count === 0) p.inventory[p.selected] = null;
-          }
-          syncInventory(p);
-        };
-        const hasCardinal = (test: (nx: number, ny: number) => boolean): boolean =>
-          test(x - 1, y) || test(x + 1, y) || test(x, y - 1) || test(x, y + 1);
-
-        if (command.layer === "bg") {
-          // Background walls: the wall slot must be free and at least one
-          // cardinal neighbor must already have a wall.
-          if (world.getWallGenerating(x, y) !== BlockId.Air) {
-            reject("space occupied");
-            break;
-          }
-          if (
-            !p.creative &&
-            !hasCardinal((nx, ny) => world.getWallGenerating(nx, ny) !== BlockId.Air)
-          ) {
-            reject("needs an adjacent wall");
-            break;
-          }
-          if (world.setWall(x, y, def.block)) {
-            broadcast({ type: "wall_changed", dim: p.dimension, x, y, block: def.block });
-            consume();
-          }
-          break;
-        }
-
-        if (world.getBlockGenerating(x, y) !== BlockId.Air) {
-          reject("space occupied");
-          break;
-        }
-        // Foreground rule: a cardinal foreground block, or a wall behind
-        // the target position.
-        if (
-          !p.creative &&
-          world.getWallGenerating(x, y) === BlockId.Air &&
-          !hasCardinal((nx, ny) => world.getBlockGenerating(nx, ny) !== BlockId.Air)
-        ) {
-          reject("needs support");
-          break;
-        }
-        if (blockDef(def.block).solid && this.tileIntersectsAnyPlayer(p.dimension, x, y)) {
-          reject("blocked by player");
-          break;
-        }
-        // Doors occupy two tiles (placed tile + the one above).
-        if (blockDef(def.block).tall) {
-          if (world.getBlockGenerating(x, y - 1) !== BlockId.Air) {
-            reject("needs headroom");
-            break;
-          }
-          if (blockDef(def.block).solid && this.tileIntersectsAnyPlayer(p.dimension, x, y - 1)) {
-            reject("blocked by player");
-            break;
-          }
-          world.setBlock(x, y, def.block);
-          world.setBlock(x, y - 1, def.block);
-          broadcast({ type: "block_changed", dim: p.dimension, x, y, block: def.block });
-          broadcast({ type: "block_changed", dim: p.dimension, x, y: y - 1, block: def.block });
-          consume();
-          break;
-        }
-        if (world.setBlock(x, y, def.block)) {
-          broadcast({ type: "block_changed", dim: p.dimension, x, y, block: def.block });
-          this.wakeLiquids(p.dimension, x, y);
-          consume();
-        }
-        break;
-      }
-      case "use_block": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        const { x, y } = command;
-        if (!Number.isInteger(x) || !Number.isInteger(y) || !this.withinReach(player, x, y)) {
-          reject("out of reach");
-          break;
-        }
-        const world = this.worldOf(p.dimension);
-        const block = world.getBlockGenerating(x, y);
-        const def = blockDef(block);
-        if (def.toggleTo === undefined) {
-          reject("nothing to use");
-          break;
-        }
-        // Can't close a door/trapdoor onto somebody.
-        const target = blockDef(def.toggleTo);
-        const tiles: Array<[number, number]> = [[x, y]];
-        if (def.tall) {
-          for (const dy of [-1, 1]) {
-            if (world.getBlockGenerating(x, y + dy) === block) tiles.push([x, y + dy]);
-          }
-        }
-        if (target.solid && tiles.some(([tx, ty]) => this.tileIntersectsAnyPlayer(p.dimension, tx, ty))) {
-          reject("blocked by player");
-          break;
-        }
-        for (const [tx, ty] of tiles) {
-          world.setBlock(tx, ty, def.toggleTo);
-          broadcast({ type: "block_changed", dim: p.dimension, x: tx, y: ty, block: def.toggleTo });
-        }
-        break;
-      }
-      case "use_bucket": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        const { x, y } = command;
-        if (!Number.isInteger(x) || !Number.isInteger(y) || !this.withinReach(player, x, y)) {
-          reject("out of reach");
-          break;
-        }
-        const stack = p.inventory[p.selected];
-        const capacity = stack ? itemDef(stack.item)?.bucket : undefined;
-        if (!stack || capacity === undefined) {
-          reject("no bucket");
-          break;
-        }
-        const world = this.worldOf(p.dimension);
-        const targetDef = blockDef(world.getBlockGenerating(x, y));
-        const heldLiquid = stack.data?.liquid;
-        const heldAmount = stack.data?.amount ?? 0;
-
-        // Scoop: only full source tiles can be bucketed (matches the
-        // liquid model's own source/flowing distinction), and only
-        // into an empty bucket or one already carrying the same kind.
-        if (
-          targetDef.liquid?.level === 8 &&
-          (heldLiquid === undefined || heldLiquid === targetDef.liquid.kind) &&
-          heldAmount < capacity
-        ) {
-          world.setBlock(x, y, BlockId.Air);
-          broadcast({ type: "block_changed", dim: p.dimension, x, y, block: BlockId.Air });
-          this.wakeLiquids(p.dimension, x, y);
-          stack.data = { ...stack.data, liquid: targetDef.liquid.kind, amount: heldAmount + 1 };
-          syncInventory(p);
-          break;
-        }
-
-        // Pour: onto open space, or topping up a non-full pool of the
-        // same kind - always leaves a full source block, like a real
-        // bucket, consuming exactly one charge.
-        if (heldLiquid !== undefined && heldAmount > 0) {
-          const isOpen = !targetDef.solid && targetDef.liquid === undefined && !targetDef.slab;
-          const canPourInto = isOpen || (targetDef.liquid?.kind === heldLiquid && targetDef.liquid.level < 8);
-          if (!canPourInto) {
-            reject("cannot pour here");
-            break;
-          }
-          const sourceBlock = liquidBlock(heldLiquid, 8);
-          world.setBlock(x, y, sourceBlock);
-          broadcast({ type: "block_changed", dim: p.dimension, x, y, block: sourceBlock });
-          this.wakeLiquids(p.dimension, x, y);
-          // Clay dissolves the moment it pours lava - every other tier
-          // survives (copper and up don't melt).
-          if (!p.creative && stack.item === "clay_bucket" && heldLiquid === "lava") {
-            p.inventory[p.selected] = null;
-          } else {
-            const remaining = heldAmount - 1;
-            stack.data = remaining > 0 ? { ...stack.data, amount: remaining } : undefined;
-          }
-          syncInventory(p);
-          break;
-        }
-
-        reject("nothing to do");
-        break;
-      }
-      case "grapple": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        const held = p.inventory[p.selected];
-        const range = held ? itemDef(held.item)?.grapple : undefined;
-        if (range === undefined) {
-          reject("no grappling hook");
-          break;
-        }
-        const { dx, dy } = command;
-        if (typeof dx !== "number" || typeof dy !== "number" || !Number.isFinite(dx) || !Number.isFinite(dy)) {
-          reject("invalid direction");
-          break;
-        }
-        const len = Math.hypot(dx, dy);
-        if (len < 1e-6) {
-          reject("invalid direction");
-          break;
-        }
-        // March the ray; anchor just before the first solid tile.
-        const world = this.worldOf(p.dimension);
-        const ox = p.x;
-        const oy = p.y - PLAYER_HEIGHT / 2;
-        let anchor: { x: number; y: number } | null = null;
-        const step = 0.25;
-        for (let d = step; d <= range; d += step) {
-          const sx = ox + (dx / len) * d;
-          const sy = oy + (dy / len) * d;
-          if (blockDef(world.getBlockGenerating(Math.floor(sx), Math.floor(sy))).solid) {
-            const back = d - step;
-            anchor = { x: ox + (dx / len) * back, y: oy + (dy / len) * back };
-            break;
-          }
-        }
-        if (!anchor) {
-          reject("no anchor in range");
-          break;
-        }
-        p.grapple = { x: anchor.x, y: anchor.y, ticks: 0 };
-        break;
-      }
-      case "set_creative": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        p.creative = command.on === true;
-        if (!p.creative) p.vy = Math.min(p.vy, 0);
-        reply({ type: "player_creative", player, on: p.creative });
-        break;
-      }
-      case "creative_give": {
-        const p = this.getPlayer(player);
-        if (!p) {
-          reject("not joined");
-          break;
-        }
-        if (!p.creative) {
-          reject("not in creative mode");
-          break;
-        }
-        const def = itemDef(command.item);
-        const count = Number(command.count);
-        if (!def || !Number.isInteger(count) || count < 1 || count > 64) {
-          reject("invalid item");
-          break;
-        }
-        addToInventory(p.inventory, def.id, Math.min(count, def.maxStack));
-        syncInventory(p);
-        break;
-      }
-    }
+    dispatchCommand({ sim: this, player, command, out, broadcast, reply, reject });
   }
 
-  private applySlotClick(
+  applySlotClick(
     p: PlayerEntity,
     slot: SlotRef,
     button: "left" | "right",
@@ -2447,7 +1574,8 @@ export class Simulation {
           reject("invalid slot");
           return;
         }
-        const tableNearby = this.blockNearby(p, BlockId.CraftingTable);
+        const craftingTable = stationBlock("crafting_table");
+        const tableNearby = craftingTable !== undefined && this.blockNearby(p, craftingTable);
         if (!tableNearby && !SMALL_GRID_INDICES.includes(slot.index)) {
           reject("requires crafting table");
           return;
@@ -2458,7 +1586,8 @@ export class Simulation {
         return;
       }
       case "craft_result": {
-        const maxSize = this.blockNearby(p, BlockId.CraftingTable) ? 3 : 2;
+        const craftingTable = stationBlock("crafting_table");
+        const maxSize = craftingTable !== undefined && this.blockNearby(p, craftingTable) ? 3 : 2;
         const recipe = matchGrid(p.craftGrid, RECIPES.values(), maxSize);
         if (!recipe) {
           return;
@@ -2594,7 +1723,7 @@ export class Simulation {
     }
   }
 
-  private ensureChest(
+  ensureChest(
     dimension: Dimension,
     x: number,
     y: number,
@@ -2617,7 +1746,7 @@ export class Simulation {
     return chest;
   }
 
-  private dumpGridAndCursor(p: PlayerEntity): void {
+  dumpGridAndCursor(p: PlayerEntity): void {
     for (let i = 0; i < CRAFT_GRID_SIZE; i++) {
       const cell = p.craftGrid[i];
       if (!cell) continue;
@@ -2630,7 +1759,7 @@ export class Simulation {
     }
   }
 
-  private withinReach(player: PlayerId, tileX: number, tileY: number): boolean {
+  withinReach(player: PlayerId, tileX: number, tileY: number): boolean {
     const p = this.getPlayer(player);
     if (!p) return false;
     const dx = tileX + 0.5 - p.x;
@@ -2638,7 +1767,7 @@ export class Simulation {
     return dx * dx + dy * dy <= REACH * REACH;
   }
 
-  private tileIntersectsAnyPlayer(dimension: Dimension, tileX: number, tileY: number): boolean {
+  tileIntersectsAnyPlayer(dimension: Dimension, tileX: number, tileY: number): boolean {
     for (const p of this.playerEntities()) {
       if (p.dimension !== dimension) continue;
       const overlapsX = tileX + 1 > p.x - PLAYER_WIDTH / 2 && tileX < p.x + PLAYER_WIDTH / 2;
@@ -2648,7 +1777,7 @@ export class Simulation {
     return false;
   }
 
-  private blockNearby(p: PlayerEntity, block: BlockId): boolean {
+  blockNearby(p: PlayerEntity, block: BlockId): boolean {
     const world = this.worldOf(p.dimension);
     const centerY = p.y - PLAYER_HEIGHT / 2;
     const minX = Math.floor(p.x - REACH);

@@ -8,6 +8,7 @@ import {
   chunkKey,
   findSpawnX,
   itemDef,
+  mobDef,
   PLAYER_HEIGHT,
   registerBlockJson,
   registerItemJson,
@@ -116,6 +117,7 @@ async function runGame(options: GameOptions): Promise<Renderer> {
   renderer.onTrade = (villager, trade) => connection.send({ type: "trade", entity: villager, trade });
   renderer.onEnchant = () => connection.send({ type: "enchant" });
   renderer.onUiClosed = () => connection.send({ type: "return_grid" });
+  renderer.onDropCursor = () => connection.send({ type: "drop_cursor" });
 
   attachInput(renderer.canvas, {
     camera: renderer.camera,
@@ -127,7 +129,7 @@ async function runGame(options: GameOptions): Promise<Renderer> {
     onRightClickTile: (x, y) => renderer.tryOpenBlockUI(x, y),
     onRightClickMob: (x, y) => {
       const mob = renderer.mobKindAt(x, y);
-      if (mob?.kind === "villager") {
+      if (mob && mobDef(mob.kind)?.trades) {
         renderer.openTrading(mob.id);
         return true;
       }
@@ -143,7 +145,7 @@ async function runGame(options: GameOptions): Promise<Renderer> {
         connection.send({ type: "use_bucket", x: Math.floor(x), y: Math.floor(y) });
         return true;
       }
-      if (item === "bow") {
+      if (item === "flatcraft:item:bow") {
         // Shoot toward the cursor, from the player's chest height.
         const pos = renderer.localPlayerPos();
         if (pos) {
@@ -171,6 +173,8 @@ async function runGame(options: GameOptions): Promise<Renderer> {
       connection.send({ type: "attack", entity: mob });
       return true;
     },
+    hasCursorItem: () => renderer.hasCursorItem(),
+    onDropCursor: () => renderer.onDropCursor?.(),
     onUiWheel: (deltaY) => renderer.handleWheel(deltaY),
     onHotbarScroll: (direction) =>
       connection.send({ type: "select_slot", index: renderer.hotbarSlotAfter(direction) }),
@@ -185,6 +189,9 @@ async function runGame(options: GameOptions): Promise<Renderer> {
       renderer.backgroundMode = placeBackground;
     },
     onToggleCreative: () => connection.send({ type: "set_creative", on: !renderer.creativeMode }),
+    onToggleDebug: () => {
+      renderer.debugVisible = !renderer.debugVisible;
+    },
     onPointerMove: (x, y) => renderer.setPointer(x, y),
   });
 
@@ -256,7 +263,9 @@ async function startOnline(info: ServerInfo): Promise<void> {
     playerName: session.name,
     playerColor: storedPlayerColor(),
   });
-  void renderer;
+  session.onPing((ms) => {
+    renderer.pingMs = ms;
+  });
   session.onDisconnect(() => disconnectOverlay());
 }
 
@@ -329,7 +338,7 @@ async function startSingleplayer(): Promise<void> {
     const sx = findSpawnX(sim.world.seed);
     const sy = surfaceHeight(sim.world.seed, sx) - 1;
     buildPortal(sim.world, sx + 3, sy);
-    sim.portals.overworld.set(`${sx + 3},${sy}`, { x: sx + 3, y: sy });
+    sim.portalsOf("flatcraft:dimension:overworld").set(`${sx + 3},${sy}`, { x: sx + 3, y: sy });
   }
   // Debug: ?fillblock=name:count places a horizontal strip below spawn
   // (e.g. to eyeball sprite-variant variety across many tiles of one id).

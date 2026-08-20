@@ -1,5 +1,5 @@
 {
-  "id": "diamond_grappling_hook",
+  "id": "flatcraft:item:diamond_grappling_hook",
   "name": "Diamond Grappling Hook",
   "max_stack": 1,
   "grapple": {
@@ -10,13 +10,31 @@
       "station": "crafting_table",
       "style": "shapeless",
       "ingredients": [
-        "item:diamond",
-        "item:diamond",
-        "item:diamond",
-        "item:string",
-        "item:string",
-        "item:golden_grappling_hook"
+        "item:flatcraft:item:diamond",
+        "item:flatcraft:item:diamond",
+        "item:flatcraft:item:diamond",
+        "item:flatcraft:item:string",
+        "item:flatcraft:item:string",
+        "item:flatcraft:item:golden_grappling_hook"
       ]
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "......S.",
+        "......S.",
+        "......S.",
+        "..HHH.S.",
+        ".H...HS.",
+        ".H....H.",
+        "..HH.H..",
+        "........"
+      ],
+      "palette": {
+        "H": "#5fd8d2",
+        "S": "#e8e8e0"
+      }
+    }
+  }
 }

@@ -1,7 +1,16 @@
 {
-  "dimension": "overworld",
-  "placement": { "type": "surface", "chance": 0.03, "biomes": ["plains"] },
-  "anchor": [2, 4],
+  "dimension": "flatcraft:dimension:overworld",
+  "placement": {
+    "type": "surface",
+    "chance": 0.03,
+    "biomes": [
+      "flatcraft:biome:plains"
+    ]
+  },
+  "anchor": [
+    2,
+    4
+  ],
   "pattern": [
     "C   C",
     "C   C",
@@ -11,7 +20,11 @@
     "CCCCC"
   ],
   "key": {
-    "C": { "block": "flatcraft:cobblestone" },
-    "W": { "block": "flatcraft:water" }
+    "C": {
+      "block": "flatcraft:block:cobblestone"
+    },
+    "W": {
+      "block": "flatcraft:block:water"
+    }
   }
 }

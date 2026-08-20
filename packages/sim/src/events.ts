@@ -92,7 +92,12 @@ export type SimEvent =
       cookProgress: number;
       cookTotal: number;
     }
-  | { type: "command_rejected"; player: PlayerId; reason: string };
+  | { type: "command_rejected"; player: PlayerId; reason: string }
+  /** F3-style debug info, broadcast periodically (see GameServer.advance -
+   * not Simulation.tick, since real ticks-per-second can only be measured
+   * against wall-clock time, which this package deliberately never reads
+   * itself). tps is measured over the broadcast interval, not per-tick. */
+  | { type: "debug_stats"; tps: number; tickCount: number; seed: number; players: number; entities: number };
 
 /**
  * An event plus its audience. `to` limits delivery to a single player

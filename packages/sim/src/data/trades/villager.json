@@ -1,15 +1,114 @@
 {
   "trades": [
-    { "cost": { "item": "flatcraft:coal", "count": 12 }, "result": { "item": "flatcraft:emerald", "count": 1 } },
-    { "cost": { "item": "flatcraft:leather", "count": 5 }, "result": { "item": "flatcraft:emerald", "count": 1 } },
-    { "cost": { "item": "flatcraft:wool", "count": 8 }, "result": { "item": "flatcraft:emerald", "count": 1 } },
-    { "cost": { "item": "flatcraft:porkchop", "count": 7 }, "result": { "item": "flatcraft:emerald", "count": 1 } },
-    { "cost": { "item": "flatcraft:gunpowder", "count": 4 }, "result": { "item": "flatcraft:emerald", "count": 1 } },
-    { "cost": { "item": "flatcraft:emerald", "count": 1 }, "result": { "item": "flatcraft:arrow", "count": 8 } },
-    { "cost": { "item": "flatcraft:emerald", "count": 2 }, "result": { "item": "flatcraft:glass", "count": 4 } },
-    { "cost": { "item": "flatcraft:emerald", "count": 3 }, "result": { "item": "flatcraft:iron_ingot", "count": 1 } },
-    { "cost": { "item": "flatcraft:emerald", "count": 3 }, "result": { "item": "flatcraft:flint_and_steel", "count": 1 } },
-    { "cost": { "item": "flatcraft:emerald", "count": 12 }, "result": { "item": "flatcraft:diamond", "count": 1 } },
-    { "cost": { "item": "flatcraft:emerald", "count": 20 }, "result": { "item": "flatcraft:elytra", "count": 1 } }
+    {
+      "cost": {
+        "item": "flatcraft:item:coal",
+        "count": 12
+      },
+      "result": {
+        "item": "flatcraft:item:emerald",
+        "count": 1
+      }
+    },
+    {
+      "cost": {
+        "item": "flatcraft:item:leather",
+        "count": 5
+      },
+      "result": {
+        "item": "flatcraft:item:emerald",
+        "count": 1
+      }
+    },
+    {
+      "cost": {
+        "item": "flatcraft:item:wool",
+        "count": 8
+      },
+      "result": {
+        "item": "flatcraft:item:emerald",
+        "count": 1
+      }
+    },
+    {
+      "cost": {
+        "item": "flatcraft:item:porkchop",
+        "count": 7
+      },
+      "result": {
+        "item": "flatcraft:item:emerald",
+        "count": 1
+      }
+    },
+    {
+      "cost": {
+        "item": "flatcraft:item:gunpowder",
+        "count": 4
+      },
+      "result": {
+        "item": "flatcraft:item:emerald",
+        "count": 1
+      }
+    },
+    {
+      "cost": {
+        "item": "flatcraft:item:emerald",
+        "count": 1
+      },
+      "result": {
+        "item": "flatcraft:item:arrow",
+        "count": 8
+      }
+    },
+    {
+      "cost": {
+        "item": "flatcraft:item:emerald",
+        "count": 2
+      },
+      "result": {
+        "item": "flatcraft:item:glass",
+        "count": 4
+      }
+    },
+    {
+      "cost": {
+        "item": "flatcraft:item:emerald",
+        "count": 3
+      },
+      "result": {
+        "item": "flatcraft:item:iron_ingot",
+        "count": 1
+      }
+    },
+    {
+      "cost": {
+        "item": "flatcraft:item:emerald",
+        "count": 3
+      },
+      "result": {
+        "item": "flatcraft:item:flint_and_steel",
+        "count": 1
+      }
+    },
+    {
+      "cost": {
+        "item": "flatcraft:item:emerald",
+        "count": 12
+      },
+      "result": {
+        "item": "flatcraft:item:diamond",
+        "count": 1
+      }
+    },
+    {
+      "cost": {
+        "item": "flatcraft:item:emerald",
+        "count": 20
+      },
+      "result": {
+        "item": "flatcraft:item:elytra",
+        "count": 1
+      }
+    }
   ]
 }

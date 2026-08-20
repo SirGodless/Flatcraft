@@ -1,27 +1,69 @@
-import { registerMultiblockHandler } from "./multiblock.js";
+import { multiblockDef, registerMultiblockHandler, stampBuildPattern } from "./multiblock.js";
 import { BlockId } from "./world/block.js";
 import type { World } from "./world/world.js";
 
 /**
  * Nether portals: an obsidian frame with a 2-4 x 3-5 air interior can be
- * lit with flint and steel; standing in the portal for PORTAL_TICKS
- * teleports between dimensions at an 1:8 coordinate scale.
+ * lit with flint and steel; standing in the portal for a tuned number of
+ * ticks teleports between dimensions at an 1:8 coordinate scale. Frame
+ * detection bounds and timing are data (data/multiblocks/nether_portal.json's
+ * "config"), read through portalConfig() below - not module constants -
+ * so a datapack can retune portals without touching this file.
  */
 
-export const PORTAL_MIN_W = 2;
-export const PORTAL_MAX_W = 4;
-export const PORTAL_MIN_H = 3;
-export const PORTAL_MAX_H = 5;
-/** Ticks a player must stand at a portal before teleporting. */
-export const PORTAL_TICKS = 60;
+const DEFAULT_CONFIG: PortalConfig = { minW: 2, maxW: 4, minH: 3, maxH: 5, ticks: 60, range: 2.0, cooldown: 100 };
+
+export interface PortalConfig {
+  minW: number;
+  maxW: number;
+  minH: number;
+  maxH: number;
+  /** Ticks a player must stand at a portal before teleporting. */
+  ticks: number;
+  /**
+   * Lit frames become side-permeable (PortalFrame), so players walk into
+   * the interior; standing within this range of a portal block counts.
+   */
+  range: number;
+  /** Ticks after arrival before the return trip can start. */
+  cooldown: number;
+}
+
+function numOr(raw: Record<string, unknown> | undefined, key: string, def: number): number {
+  const v = raw?.[key];
+  if (v === undefined) return def;
+  if (typeof v !== "number") throw new Error(`nether portal config: "${key}" must be a number`);
+  return v;
+}
+
+function parsePortalConfig(raw: Record<string, unknown> | undefined): PortalConfig {
+  return {
+    minW: numOr(raw, "min_w", DEFAULT_CONFIG.minW),
+    maxW: numOr(raw, "max_w", DEFAULT_CONFIG.maxW),
+    minH: numOr(raw, "min_h", DEFAULT_CONFIG.minH),
+    maxH: numOr(raw, "max_h", DEFAULT_CONFIG.maxH),
+    ticks: numOr(raw, "ticks", DEFAULT_CONFIG.ticks),
+    range: numOr(raw, "range", DEFAULT_CONFIG.range),
+    cooldown: numOr(raw, "cooldown", DEFAULT_CONFIG.cooldown),
+  };
+}
+
+let cachedConfig: PortalConfig | null = null;
+
 /**
- * Lit frames become side-permeable (PortalFrame), so players walk into
- * the interior; standing within this range of a portal block counts.
+ * The active portal tuning, read from data/multiblocks/nether_portal.json's
+ * "config" and cached on first call. Looking this up lazily (rather than
+ * at module load) matters: this module is imported well before
+ * data/multiblocks/index.ts registers that def, so an eager read here
+ * would race the registration - every caller below only reaches this at
+ * actual gameplay time, long after boot-time registration has finished.
  */
-export const PORTAL_RANGE = 2.0;
-/** Ticks after arrival before the return trip can start. */
-export const PORTAL_COOLDOWN = 100;
-export const NETHER_SCALE = 8;
+export function portalConfig(): PortalConfig {
+  if (!cachedConfig) {
+    cachedConfig = parsePortalConfig(multiblockDef("flatcraft:multiblock:nether_portal")?.config);
+  }
+  return cachedConfig;
+}
 
 export interface PortalInterior {
   /** Interior bounds (inclusive), all air/portal blocks. */
@@ -37,6 +79,7 @@ export interface PortalInterior {
  * (corners don't matter, like Minecraft).
  */
 export function findPortalInterior(world: World, x: number, y: number): PortalInterior | null {
+  const cfg = portalConfig();
   const isInner = (bx: number, by: number): boolean => {
     const b = world.getBlockGenerating(bx, by);
     return b === BlockId.Air || b === BlockId.NetherPortal;
@@ -44,18 +87,18 @@ export function findPortalInterior(world: World, x: number, y: number): PortalIn
   if (!isInner(x, y)) return null;
 
   let left = x;
-  while (left > x - PORTAL_MAX_W && isInner(left - 1, y)) left--;
+  while (left > x - cfg.maxW && isInner(left - 1, y)) left--;
   let right = x;
-  while (right < left + PORTAL_MAX_W - 1 && isInner(right + 1, y)) right++;
+  while (right < left + cfg.maxW - 1 && isInner(right + 1, y)) right++;
   let top = y;
-  while (top > y - PORTAL_MAX_H && isInner(left, top - 1)) top--;
+  while (top > y - cfg.maxH && isInner(left, top - 1)) top--;
   let bottom = y;
-  while (bottom < top + PORTAL_MAX_H - 1 && isInner(left, bottom + 1)) bottom++;
+  while (bottom < top + cfg.maxH - 1 && isInner(left, bottom + 1)) bottom++;
 
   const width = right - left + 1;
   const height = bottom - top + 1;
-  if (width < PORTAL_MIN_W || width > PORTAL_MAX_W) return null;
-  if (height < PORTAL_MIN_H || height > PORTAL_MAX_H) return null;
+  if (width < cfg.minW || width > cfg.maxW) return null;
+  if (height < cfg.minH || height > cfg.maxH) return null;
 
   // Frames are built from obsidian; once lit they turn into the
   // side-permeable PortalFrame - both count as frame material.
@@ -110,7 +153,7 @@ export function convertFrame(
 // check with findPortalInterior, which already only reads through
 // World.getBlockGenerating, so it's exactly as safe as a pattern-matched
 // multiblock would be.
-registerMultiblockHandler("nether_portal", {
+registerMultiblockHandler("flatcraft:multiblock_handler:nether_portal", {
   activate({ world, x, y, dimension, sim, broadcast }) {
     const interior = findPortalInterior(world, x, y);
     if (!interior) return false;
@@ -124,56 +167,47 @@ registerMultiblockHandler("nether_portal", {
     for (const change of convertFrame(world, interior)) {
       broadcast({ type: "block_changed", dim: dimension, x: change.x, y: change.y, block: change.block });
     }
-    sim.portals[dimension].set(`${interior.left},${interior.bottom}`, { x: interior.left, y: interior.bottom });
+    sim.portalsOf(dimension).set(`${interior.left},${interior.bottom}`, { x: interior.left, y: interior.bottom });
     return true;
   },
 });
 
 /**
  * Build a standard 2x3 portal (frame + lit interior) with its interior
- * bottom-left at (bx, by). Returns the tiles changed.
+ * bottom-left at (bx, by). Returns the tiles changed. The frame/interior
+ * shape itself is data (data/multiblocks/nether_portal.json's
+ * "build_pattern") - findPortalInterior's detection bounds and this
+ * construction shape used to be two independently hand-maintained
+ * definitions of "what a portal looks like"; now both trace back to the
+ * same JSON def, so they can't drift apart.
  */
 export function buildPortal(world: World, bx: number, by: number): Array<{ x: number; y: number; block: BlockId }> {
   const changes: Array<{ x: number; y: number; block: BlockId }> = [];
-  const set = (x: number, y: number, block: BlockId): void => {
-    world.ensureChunk(Math.floor(x / 32), Math.floor(y / 32));
-    world.setBlock(x, y, block);
-    changes.push({ x, y, block });
-  };
   // Clear breathing room around the portal.
   for (let x = bx - 2; x <= bx + 3; x++) {
     for (let y = by - 4; y <= by; y++) {
-      set(x, y, BlockId.Air);
+      world.ensureChunk(Math.floor(x / 32), Math.floor(y / 32));
+      world.setBlock(x, y, BlockId.Air);
+      changes.push({ x, y, block: BlockId.Air });
     }
   }
-  // Frame: interior is x in [bx, bx+1], y in [by-2, by]. Lit frames are
-  // PortalFrame (side-permeable), so players walk straight in. The floor
-  // row extends one tile to each side so arriving players have footing.
-  for (let y = by - 3; y <= by + 1; y++) {
-    set(bx - 1, y, BlockId.PortalFrame);
-    set(bx + 2, y, BlockId.PortalFrame);
-  }
-  for (let x = bx - 1; x <= bx + 2; x++) {
-    set(x, by - 3, BlockId.PortalFrame);
-  }
-  for (let x = bx - 3; x <= bx + 4; x++) {
-    set(x, by + 1, x >= bx - 1 && x <= bx + 2 ? BlockId.PortalFrame : BlockId.Obsidian);
-  }
-  for (let y = by - 2; y <= by; y++) {
-    set(bx, y, BlockId.NetherPortal);
-    set(bx + 1, y, BlockId.NetherPortal);
-  }
+  const pattern = multiblockDef("flatcraft:multiblock:nether_portal")?.buildPattern;
+  if (!pattern) throw new Error('nether portal def is missing its "build_pattern"');
+  changes.push(...stampBuildPattern(world, pattern, bx, by));
   return changes;
 }
 
-/** Whether a portal block is within PORTAL_RANGE of the given center. */
+/** Whether a portal block is within the configured range of the given center. */
 export function nearPortal(world: World, cx: number, cy: number): boolean {
-  const tx0 = Math.floor(cx) - 2;
-  const ty0 = Math.floor(cy) - 2;
-  for (let ty = ty0; ty <= ty0 + 4; ty++) {
-    for (let tx = tx0; tx <= tx0 + 4; tx++) {
+  const range = portalConfig().range;
+  const tx0 = Math.floor(cx - range);
+  const tx1 = Math.ceil(cx + range);
+  const ty0 = Math.floor(cy - range);
+  const ty1 = Math.ceil(cy + range);
+  for (let ty = ty0; ty <= ty1; ty++) {
+    for (let tx = tx0; tx <= tx1; tx++) {
       if (world.getBlockGenerating(tx, ty) !== BlockId.NetherPortal) continue;
-      if (Math.hypot(tx + 0.5 - cx, ty + 0.5 - cy) <= PORTAL_RANGE) return true;
+      if (Math.hypot(tx + 0.5 - cx, ty + 0.5 - cy) <= range) return true;
     }
   }
   return false;

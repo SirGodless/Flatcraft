@@ -1,11 +1,28 @@
 {
-  "id": "copper_ingot",
+  "id": "flatcraft:item:copper_ingot",
   "name": "Copper Ingot",
   "recipes": [
     {
       "station": "furnace",
-      "input": "item:copper_ore",
+      "input": "item:flatcraft:item:copper_ore",
       "cooking_ticks": 200
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "........",
+        "..XXXX..",
+        ".XXXXXX.",
+        ".XXXXX..",
+        "........",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#d87a4e"
+      }
+    }
+  }
 }

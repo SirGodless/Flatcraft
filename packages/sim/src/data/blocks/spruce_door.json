@@ -1,9 +1,25 @@
 {
-  "id": "spruce_door",
+  "id": "flatcraft:block:spruce_door",
   "name": "Spruce Door",
   "solid": true,
   "hardness": 28,
   "tool": "axe",
   "tall": true,
-  "toggle_to": "spruce_door_open"
+  "toggle_to": "flatcraft:block:spruce_door_open",
+  "visual": {
+    "fallback": {
+      "base": [
+        116,
+        86,
+        50
+      ],
+      "noise": 0.07,
+      "stripe": true,
+      "frame": [
+        69.6,
+        51.6,
+        30
+      ]
+    }
+  }
 }

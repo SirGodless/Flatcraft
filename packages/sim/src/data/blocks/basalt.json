@@ -1,8 +1,19 @@
 {
-  "id": "basalt",
+  "id": "flatcraft:block:basalt",
   "name": "Basalt",
   "solid": true,
   "hardness": 25,
   "tool": "pickaxe",
-  "required_tier": 1
+  "required_tier": 1,
+  "visual": {
+    "fallback": {
+      "base": [
+        74,
+        74,
+        82
+      ],
+      "noise": 0.08,
+      "stripe": true
+    }
+  }
 }

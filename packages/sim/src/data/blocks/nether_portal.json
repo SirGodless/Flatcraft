@@ -1,7 +1,18 @@
 {
-  "id": "nether_portal",
+  "id": "flatcraft:block:nether_portal",
   "name": "Nether Portal",
   "solid": false,
   "hardness": -1,
-  "drops": "none"
+  "drops": "none",
+  "visual": {
+    "fallback": {
+      "base": [
+        138,
+        48,
+        200
+      ],
+      "noise": 0.25,
+      "alpha": 0.75
+    }
+  }
 }

@@ -1,5 +1,5 @@
 {
-  "id": "leather_armor",
+  "id": "flatcraft:item:leather_armor",
   "name": "Leather Armor",
   "max_stack": 1,
   "armor": {
@@ -15,8 +15,25 @@
         "aaa"
       ],
       "key": {
-        "a": "item:leather"
+        "a": "item:flatcraft:item:leather"
       }
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "XX....XX",
+        "XXXXXXXX",
+        "XXXXXXXX",
+        ".XXXXXX.",
+        ".XXXXXX.",
+        ".XXXXXX.",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#8a5a30"
+      }
+    }
+  }
 }

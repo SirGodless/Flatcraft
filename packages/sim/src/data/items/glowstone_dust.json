@@ -1,4 +1,21 @@
 {
-  "id": "glowstone_dust",
-  "name": "Glowstone Dust"
+  "id": "flatcraft:item:glowstone_dust",
+  "name": "Glowstone Dust",
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "..XXX...",
+        ".XXXXX..",
+        ".XXXXX..",
+        "..XXXX..",
+        "...XX...",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#f0cf5e"
+      }
+    }
+  }
 }

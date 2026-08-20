@@ -1,12 +1,30 @@
 {
-  "id": "emerald_ore",
+  "id": "flatcraft:block:emerald_ore",
   "name": "Emerald Ore",
   "solid": true,
   "hardness": 45,
   "tool": "pickaxe",
   "required_tier": 3,
   "drops": {
-    "item": "emerald",
+    "item": "flatcraft:item:emerald",
     "amount": 1
+  },
+  "visual": {
+    "fallback": {
+      "base": [
+        122,
+        122,
+        128
+      ],
+      "noise": 0.12,
+      "specks": {
+        "color": [
+          48,
+          200,
+          94
+        ],
+        "count": 3
+      }
+    }
   }
 }

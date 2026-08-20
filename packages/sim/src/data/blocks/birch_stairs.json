@@ -1,7 +1,18 @@
 {
-  "id": "birch_stairs",
+  "id": "flatcraft:block:birch_stairs",
   "name": "Birch Stairs",
   "solid": true,
   "hardness": 30,
-  "tool": "axe"
+  "tool": "axe",
+  "visual": {
+    "fallback": {
+      "base": [
+        198,
+        180,
+        130
+      ],
+      "noise": 0.07,
+      "shape": "stairs"
+    }
+  }
 }

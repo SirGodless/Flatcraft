@@ -1,5 +1,5 @@
 {
-  "id": "arrow",
+  "id": "flatcraft:item:arrow",
   "name": "Arrow",
   "recipes": [
     {
@@ -11,11 +11,30 @@
         "c"
       ],
       "key": {
-        "a": "item:flint",
-        "b": "item:stick",
-        "c": "item:feather"
+        "a": "item:flatcraft:item:flint",
+        "b": "item:flatcraft:item:stick",
+        "c": "item:flatcraft:item:feather"
       },
       "amount": 4
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "......F.",
+        ".....S..",
+        "....S...",
+        "...S....",
+        "..S.....",
+        ".H......",
+        "........"
+      ],
+      "palette": {
+        "S": "#8a6234",
+        "H": "#c8c8cc",
+        "F": "#e8e8e8"
+      }
+    }
+  }
 }

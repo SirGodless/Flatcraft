@@ -1,7 +1,18 @@
 {
-  "id": "spruce_leaves",
+  "id": "flatcraft:block:spruce_leaves",
   "name": "Spruce Leaves",
   "solid": false,
   "hardness": 3,
-  "drops": "none"
+  "drops": "none",
+  "visual": {
+    "fallback": {
+      "base": [
+        40,
+        88,
+        50
+      ],
+      "noise": 0.22,
+      "holes": 0.16
+    }
+  }
 }

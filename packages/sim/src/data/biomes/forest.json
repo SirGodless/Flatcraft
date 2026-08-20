@@ -1,0 +1,30 @@
+{
+  "id": "flatcraft:biome:forest",
+  "noise_max": 0.8,
+  "layers": [
+    {
+      "to_depth": 0,
+      "block": "flatcraft:block:grass"
+    },
+    {
+      "to_depth": 4,
+      "block": "flatcraft:block:dirt"
+    }
+  ],
+  "floor": "flatcraft:block:stone",
+  "wall_layer": {
+    "to_depth": 4,
+    "block": "flatcraft:block:dirt"
+  },
+  "tree_chance": 0.16,
+  "tree_woods": [
+    {
+      "wood": "flatcraft:wood:birch",
+      "weight": 0.4
+    },
+    {
+      "wood": "flatcraft:wood:oak",
+      "weight": 0.6
+    }
+  ]
+}

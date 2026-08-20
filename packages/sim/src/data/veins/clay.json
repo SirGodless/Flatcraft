@@ -1,0 +1,9 @@
+{
+  "id": "flatcraft:vein:clay",
+  "block": "flatcraft:block:clay",
+  "attempts": 1,
+  "size_min": 4,
+  "size_max": 8,
+  "min_y": 4,
+  "max_y": 120
+}

@@ -1,9 +1,26 @@
 {
-  "id": "chicken",
+  "id": "flatcraft:item:chicken",
   "name": "Chicken",
   "food": {
     "hunger": 2,
     "saturation": 1,
     "eat_ticks": 32
+  },
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "..XXX...",
+        ".XXXXX..",
+        ".XXXXX..",
+        "..XXXX..",
+        "...XX...",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#e8c890"
+      }
+    }
   }
 }

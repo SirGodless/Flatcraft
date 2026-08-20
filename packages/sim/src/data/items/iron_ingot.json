@@ -1,11 +1,28 @@
 {
-  "id": "iron_ingot",
+  "id": "flatcraft:item:iron_ingot",
   "name": "Iron Ingot",
   "recipes": [
     {
       "station": "furnace",
-      "input": "item:iron_ore",
+      "input": "item:flatcraft:item:iron_ore",
       "cooking_ticks": 200
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "........",
+        "..XXXX..",
+        ".XXXXXX.",
+        ".XXXXX..",
+        "........",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#d8d8dc"
+      }
+    }
+  }
 }

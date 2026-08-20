@@ -5,6 +5,8 @@ import {
   CHUNK_HEIGHT,
   CHUNK_WIDTH,
   daylightFactor,
+  defaultDimensionId,
+  dimensionDef,
   itemDef,
   mobDef,
   PLAYER_HEIGHT,
@@ -20,6 +22,7 @@ import {
   type SlotRef,
 } from "@flatcraft/sim";
 import { Camera } from "./camera.js";
+import { hexToNumber } from "./color.js";
 import { FogOfWar } from "./fog.js";
 import { itemTexture } from "./icons.js";
 import { entityAnimationStates, entityTexture } from "./entitySprites.js";
@@ -152,6 +155,9 @@ export class Renderer {
   onOpenFurnace: ((x: number, y: number) => void) | null = null;
   /** Called when a UI closes, so the grid/cursor can be returned. */
   onUiClosed: (() => void) | null = null;
+  /** Wired by the bootstrap code: left-click outside any inventory UI
+   * while a cursor item is held - drops it into the world. */
+  onDropCursor: (() => void) | null = null;
 
   private readonly app = new Application();
   private readonly worldContainer = new Container();
@@ -171,6 +177,19 @@ export class Renderer {
   creativeMode = false;
   /** Background-wall placement mode (B key), shown in the HUD. */
   backgroundMode = false;
+  /** F3-style debug overlay toggle. */
+  debugVisible = false;
+  private debugHud!: Text;
+  /** Smoothed (EMA) render frames/sec - purely client-side, from draw()'s dtMs. */
+  private fps = 0;
+  /** Latest debug_stats broadcast from the server (see GameServer.advance);
+   * null until the first one arrives. */
+  private debugStats: { tps: number; tickCount: number; seed: number; players: number; entities: number } | null =
+    null;
+  /** Round-trip time to the server in ms, or null when not applicable
+   * (singleplayer's loopback transport has no real network hop) - set
+   * externally by the bootstrap code from OnlineSession.onPing. */
+  pingMs: number | null = null;
   /** Wired by the bootstrap code: right-clicked a door/trapdoor. */
   onUseBlock: ((x: number, y: number) => void) | null = null;
   /** Wired by the bootstrap code: creative picker item click. */
@@ -205,7 +224,7 @@ export class Renderer {
   private darkness!: Graphics;
   private timeOfDay = 0;
   /** The dimension the local player is in; everything else is hidden. */
-  private localDim = "overworld";
+  private localDim = defaultDimensionId();
   private readonly playerDims = new Map<PlayerId, string>();
   /** Called when the local player switches dimension (world reset). */
   onDimensionChanged: (() => void) | null = null;
@@ -248,6 +267,14 @@ export class Renderer {
     });
     this.hud.position.set(8, 8);
     this.app.stage.addChild(this.hud);
+
+    this.debugHud = new Text({
+      text: "",
+      style: { fill: "#ffff88", fontSize: 13, fontFamily: "monospace" },
+    });
+    this.debugHud.position.set(8, 28);
+    this.debugHud.visible = false;
+    this.app.stage.addChild(this.debugHud);
 
     this.hotbar = new HotbarUI(blockTextures);
     this.hotbar.update(this.inventory, this.selectedSlot);
@@ -439,6 +466,13 @@ export class Renderer {
       return true;
     }
     return false;
+  }
+
+  /** Whether the player currently holds an item picked up from a slot
+   * (only possible while an inventory-style UI is/was open - see
+   * cursorStack, set from inventory_changed). */
+  hasCursorItem(): boolean {
+    return this.cursorStack !== null;
   }
 
   /** Whether a screen point lands on an open UI surface (blocks world input). */
@@ -746,6 +780,15 @@ export class Renderer {
       case "time_changed":
         this.timeOfDay = event.time;
         break;
+      case "debug_stats":
+        this.debugStats = {
+          tps: event.tps,
+          tickCount: event.tickCount,
+          seed: event.seed,
+          players: event.players,
+          entities: event.entities,
+        };
+        break;
       case "block_changed": {
         if (event.dim !== this.localDim) break;
         this.worldView.setBlock(event.x, event.y, event.block);
@@ -941,55 +984,25 @@ export class Renderer {
       }
     }
     const gfx = new Graphics();
-    const humanoid = (body: number, head: number): void => {
-      gfx.rect(0, 0, 0.6 * TILE_PX, 1.8 * TILE_PX).fill({ color: body });
-      gfx.rect(0, 0, 0.6 * TILE_PX, 0.45 * TILE_PX).fill({ color: head });
-    };
-    const animal = (w: number, h: number, body: number, snout: number): void => {
-      gfx.rect(0, 0, w * TILE_PX, h * TILE_PX).fill({ color: body });
-      gfx.rect((w - 0.25) * TILE_PX, 0.25 * TILE_PX, 0.25 * TILE_PX, 0.2 * TILE_PX).fill({ color: snout });
-    };
-    switch (kind) {
-      case "zombie":
-        humanoid(0x4e9e4e, 0x3c7a3c);
-        break;
-      case "skeleton":
-        humanoid(0xd8d8d0, 0xb8b8b0);
-        break;
-      case "zombified_piglin":
-        humanoid(0xd88a8a, 0x8a9e4e);
-        break;
-      case "creeper":
-        gfx.rect(0, 0, 0.6 * TILE_PX, 1.5 * TILE_PX).fill({ color: 0x58c25a });
-        gfx.rect(0.1 * TILE_PX, 0.15 * TILE_PX, 0.12 * TILE_PX, 0.15 * TILE_PX).fill({ color: 0x1a1a1a });
-        gfx.rect(0.38 * TILE_PX, 0.15 * TILE_PX, 0.12 * TILE_PX, 0.15 * TILE_PX).fill({ color: 0x1a1a1a });
-        gfx.rect(0.22 * TILE_PX, 0.3 * TILE_PX, 0.16 * TILE_PX, 0.25 * TILE_PX).fill({ color: 0x1a1a1a });
-        break;
-      case "pig":
-        animal(0.9, 0.9, 0xefa4a8, 0xd98488);
-        break;
-      case "cow":
-        animal(0.9, 1.2, 0x6b4a34, 0xe8e8e0);
-        break;
-      case "sheep":
-        animal(0.9, 1.1, 0xe8e8e2, 0xd0b8a8);
-        break;
-      case "chicken":
-        animal(0.5, 0.6, 0xf0f0e8, 0xe8a030);
-        break;
-      case "villager":
-        gfx.rect(0, 0, 0.6 * TILE_PX, 1.9 * TILE_PX).fill({ color: 0x8a6a4a });
-        gfx.rect(0, 0, 0.6 * TILE_PX, 0.5 * TILE_PX).fill({ color: 0xc8a078 });
-        gfx.rect(0.22 * TILE_PX, 0.3 * TILE_PX, 0.16 * TILE_PX, 0.25 * TILE_PX).fill({ color: 0xb08858 });
-        break;
-      case "arrow":
-        // Centered on the local origin (not top-left, like everything
-        // else here) so it can rotate in place to face its flight
-        // direction - see the per-frame update loop.
-        gfx.rect(-0.15 * TILE_PX, -0.06 * TILE_PX, 0.3 * TILE_PX, 0.12 * TILE_PX).fill({ color: 0x9a9a9a });
-        break;
-      default:
+    // "arrow" is a projectile, not a mob - it has no MobDef to read a
+    // fallback from (see entities.ts's NON_MOB_SIZES for the same
+    // item/arrow special case) so it keeps its own hardcoded shape.
+    if (kind === "arrow") {
+      // Centered on the local origin (not top-left, like everything else
+      // here) so it can rotate in place to face its flight direction -
+      // see the per-frame update loop.
+      gfx.rect(-0.15 * TILE_PX, -0.06 * TILE_PX, 0.3 * TILE_PX, 0.12 * TILE_PX).fill({ color: 0x9a9a9a });
+    } else {
+      const rects = mobDef(kind)?.visual?.fallback?.rects;
+      if (rects) {
+        for (const r of rects) {
+          gfx.rect(r.x * TILE_PX, r.y * TILE_PX, r.w * TILE_PX, r.h * TILE_PX).fill({ color: hexToNumber(r.color) });
+        }
+      } else {
+        // No sprite, no declared fallback (e.g. a datapack mod mob with
+        // neither) - a visible placeholder beats invisible.
         gfx.rect(0, 0, TILE_PX, TILE_PX).fill({ color: 0xff00ff });
+      }
     }
     if (shaderFx) gfx.filters = [shaderFx];
     return { gfx, ...(shaderFx ? { shaderFx } : {}) };
@@ -1131,20 +1144,30 @@ export class Renderer {
   draw(dtMs: number): void {
     const now = performance.now();
 
+    // Smoothed (EMA) FPS for the debug overlay - guard dtMs=0 (first
+    // frame) so this can't divide into Infinity.
+    if (dtMs > 0) {
+      const instantFps = 1000 / dtMs;
+      this.fps = this.fps === 0 ? instantFps : this.fps * 0.9 + instantFps * 0.1;
+    }
+
     // Bake chunks touched since the last frame (at most once each).
     this.worldView.flush();
     this.reconcileBlockOverlays(now);
 
     // Advance local time between server syncs (1 tick per 50 ms) and
-    // shade the world: sky color blends toward night, plus a veil.
-    // The nether has no sky - fixed gloomy red instead.
+    // shade the world: a "cycle" dimension's sky color blends toward
+    // night plus a darkness veil; a "fixed" one (see world/dimension.ts's
+    // DimensionSky - the nether has no sky) renders a constant look
+    // regardless of time of day.
     this.timeOfDay += dtMs / TICK_MS;
-    if (this.localDim === "nether") {
-      this.app.renderer.background.color = 0x2a0f0f;
+    const sky = dimensionDef(this.localDim)?.sky;
+    if (sky?.type === "fixed") {
+      this.app.renderer.background.color = hexToNumber(sky.background ?? "#000000");
       this.darkness
         .clear()
         .rect(0, 0, this.screenWidth, this.screenHeight)
-        .fill({ color: 0x160606, alpha: 0.25 });
+        .fill({ color: hexToNumber(sky.veilColor ?? "#000000"), alpha: sky.veilAlpha ?? 0 });
     } else {
       const light = daylightFactor(this.timeOfDay);
       const lerp = (a: number, b: number): number => Math.round(a + (b - a) * light);
@@ -1314,5 +1337,20 @@ export class Renderer {
     const py = localY !== null ? Math.floor(localY) : Math.floor(this.camera.y / TILE_PX);
     const modes = `${this.backgroundMode ? " [BG-BAU]" : ""}${this.creativeMode ? " [CREATIVE]" : ""}`;
     this.hud.text = `FlatCraft | ${this.localDim} ${px},${py} | zoom ${this.camera.zoom.toFixed(1)}${modes} | A/D walk, Space jump, hold LMB mine, RMB place/use, 1-9/wheel slot, E craft, B walls, C color, +/- zoom`;
+
+    this.debugHud.visible = this.debugVisible;
+    if (this.debugVisible) {
+      const cx = Math.floor(px / CHUNK_WIDTH);
+      const cy = Math.floor(py / CHUNK_HEIGHT);
+      const stats = this.debugStats;
+      const lines = [
+        `FPS: ${this.fps.toFixed(0)}${stats ? `  TPS: ${stats.tps.toFixed(1)}` : ""}`,
+        `XYZ: ${px} / ${py}  (chunk ${cx}, ${cy})`,
+        `Dim: ${this.localDim}${stats ? `  Seed: ${stats.seed}` : ""}`,
+        stats ? `Tick: ${stats.tickCount}  Players: ${stats.players}  Entities: ${stats.entities}` : "waiting for server stats...",
+        `Ping: ${this.pingMs !== null ? `${Math.round(this.pingMs)} ms` : "n/a (singleplayer)"}`,
+      ];
+      this.debugHud.text = lines.join("\n");
+    }
   }
 }

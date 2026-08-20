@@ -4,6 +4,7 @@ import {
   canHarvest,
   countInInventory,
   findSpawnX,
+  isItemEntity,
   miningTicks,
   Simulation,
   surfaceHeight,
@@ -39,9 +40,9 @@ function mineOut(sim: Simulation, player: PlayerId, x: number, y: number, cap = 
 }
 
 describe("mining rules", () => {
-  const pickaxe = { item: "wooden_pickaxe", count: 1 };
-  const stonePickaxe = { item: "stone_pickaxe", count: 1 };
-  const shovel = { item: "wooden_shovel", count: 1 };
+  const pickaxe = { item: "flatcraft:item:wooden_pickaxe", count: 1 };
+  const stonePickaxe = { item: "flatcraft:item:stone_pickaxe", count: 1 };
+  const shovel = { item: "flatcraft:item:wooden_shovel", count: 1 };
 
   it("matching tools divide the base time by their speed", () => {
     expect(miningTicks(BlockId.Stone, pickaxe)).toBe(15); // 30 / 2
@@ -77,14 +78,14 @@ describe("mining via commands", () => {
     const x = Math.floor(state.x) + 1;
     const y = Math.floor(state.y);
     setBlock(sim, x, y, BlockId.Stone);
-    state.inventory[0] = { item: "wooden_pickaxe", count: 1 };
+    state.inventory[0] = { item: "flatcraft:item:wooden_pickaxe", count: 1 };
 
     // 15 ticks of work; the block must still stand one tick before.
     const ticks = mineOut(sim, player, x, y);
     expect(ticks).toBe(15);
     // The drop is an item entity now; stand nearby and let it get picked up.
     for (let i = 0; i < 30; i++) sim.tick([]);
-    expect(countInInventory(state.inventory, "cobblestone")).toBe(1);
+    expect(countInInventory(state.inventory, "flatcraft:item:cobblestone")).toBe(1);
   });
 
   it("mining stone bare-handed takes the penalty time and drops nothing", () => {
@@ -97,7 +98,7 @@ describe("mining via commands", () => {
     const ticks = mineOut(sim, player, x, y);
     expect(ticks).toBe(99);
     for (let i = 0; i < 30; i++) sim.tick([]);
-    expect(countInInventory(state.inventory, "cobblestone")).toBe(0);
+    expect(countInInventory(state.inventory, "flatcraft:item:cobblestone")).toBe(0);
   });
 
   it("emits progress events while mining and a clear event on stop", () => {
@@ -133,7 +134,7 @@ describe("mining via commands", () => {
     const x = Math.floor(state.x) + 1;
     const y = Math.floor(state.y);
     setBlock(sim, x, y, BlockId.Stone);
-    state.inventory[1] = { item: "wooden_pickaxe", count: 1 };
+    state.inventory[1] = { item: "flatcraft:item:wooden_pickaxe", count: 1 };
 
     sim.tick([{ player, command: { type: "start_mining", x, y } }]); // bare hand, total 99
     const after = sim.tick([{ player, command: { type: "select_slot", index: 1 } }]);
@@ -184,5 +185,21 @@ describe("mining via commands", () => {
       event: { type: "mining_progress", player, x, y, progress: 0, total: 0 },
     });
     expect(state.mining).toBeNull();
+  });
+});
+
+describe("alternate drops", () => {
+  it("gravel drops its own item most of the time, flint some of the time (data-driven alt_drop)", () => {
+    const sim = new Simulation(SEED);
+    const { player, state } = joinPlayer(sim);
+    const x = Math.floor(state.x) + 1;
+    const y = Math.floor(state.y);
+    for (let i = 0; i < 60; i++) {
+      setBlock(sim, x, y, BlockId.Gravel);
+      mineOut(sim, player, x, y);
+    }
+    const drops = new Set([...sim.entities.values()].filter(isItemEntity).map((e) => e.stack.item));
+    expect(drops).toContain("flatcraft:item:gravel");
+    expect(drops).toContain("flatcraft:item:flint");
   });
 });

@@ -1,5 +1,5 @@
 {
-  "id": "iron_shield",
+  "id": "flatcraft:item:iron_shield",
   "name": "Iron Shield",
   "max_stack": 1,
   "shield": {
@@ -15,8 +15,25 @@
         " a "
       ],
       "key": {
-        "a": "item:iron_ingot"
+        "a": "item:flatcraft:item:iron_ingot"
       }
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        ".XXXXXX.",
+        ".XXXXXX.",
+        ".XXXXXX.",
+        ".XXXXXX.",
+        "..XXXX..",
+        "...XX...",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#d8d8dc"
+      }
+    }
+  }
 }

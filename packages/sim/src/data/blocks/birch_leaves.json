@@ -1,7 +1,18 @@
 {
-  "id": "birch_leaves",
+  "id": "flatcraft:block:birch_leaves",
   "name": "Birch Leaves",
   "solid": false,
   "hardness": 3,
-  "drops": "none"
+  "drops": "none",
+  "visual": {
+    "fallback": {
+      "base": [
+        96,
+        152,
+        72
+      ],
+      "noise": 0.22,
+      "holes": 0.16
+    }
+  }
 }

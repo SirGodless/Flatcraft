@@ -1,8 +1,26 @@
 {
-  "id": "ancient_debris",
+  "id": "flatcraft:block:ancient_debris",
   "name": "Ancient Debris",
   "solid": true,
   "hardness": 90,
   "tool": "pickaxe",
-  "required_tier": 4
+  "required_tier": 4,
+  "visual": {
+    "fallback": {
+      "base": [
+        72,
+        50,
+        42
+      ],
+      "noise": 0.16,
+      "specks": {
+        "color": [
+          182,
+          124,
+          92
+        ],
+        "count": 4
+      }
+    }
+  }
 }

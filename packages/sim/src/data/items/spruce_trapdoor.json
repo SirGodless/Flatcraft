@@ -1,7 +1,7 @@
 {
-  "id": "spruce_trapdoor",
+  "id": "flatcraft:item:spruce_trapdoor",
   "name": "Spruce Trapdoor",
-  "places_block": "spruce_trapdoor",
+  "places_block": "flatcraft:block:spruce_trapdoor",
   "recipes": [
     {
       "station": "crafting_table",
@@ -11,7 +11,7 @@
         "aaa"
       ],
       "key": {
-        "a": "item:spruce_planks"
+        "a": "item:flatcraft:item:spruce_planks"
       },
       "amount": 2
     }

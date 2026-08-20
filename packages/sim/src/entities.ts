@@ -161,10 +161,6 @@ export const ITEM_PICKUP_DELAY = 10;
 export const ITEM_PICKUP_RADIUS = 1.25;
 
 export const ARROW_TTL = 100;
-/** Player bow: stronger than most mobs' arrows, with its own fire rate. */
-export const BOW_DAMAGE = 6;
-export const BOW_COOLDOWN = 20;
-export const BOW_ARROW_SPEED = 0.8;
 
 export const MOB_DESPAWN_RANGE = 72;
 export const MOB_CAP = 10;

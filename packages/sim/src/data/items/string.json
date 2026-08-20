@@ -1,14 +1,31 @@
 {
-  "id": "string",
+  "id": "flatcraft:item:string",
   "name": "String",
   "recipes": [
     {
       "station": "inventory",
       "style": "shapeless",
       "ingredients": [
-        "item:wool"
+        "item:flatcraft:item:wool"
       ],
       "amount": 4
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        ".S......",
+        "..S.....",
+        "..S.....",
+        "...S....",
+        "....S...",
+        ".....S..",
+        "........"
+      ],
+      "palette": {
+        "S": "#e8e8e0"
+      }
+    }
+  }
 }

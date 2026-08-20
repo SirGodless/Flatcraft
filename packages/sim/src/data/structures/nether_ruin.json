@@ -1,5 +1,5 @@
 {
-  "dimension": "nether",
+  "dimension": "flatcraft:dimension:nether",
   "placement": {
     "type": "underground",
     "chance": 0.05,
@@ -18,36 +18,36 @@
   ],
   "key": {
     "B": {
-      "block": "flatcraft:basalt"
+      "block": "flatcraft:block:basalt"
     },
     ".": {
-      "block": "flatcraft:air"
+      "block": "flatcraft:block:air"
     },
     "n": {
-      "block": "flatcraft:chest",
+      "block": "flatcraft:block:chest",
       "loot": [
         {
-          "item": "flatcraft:gold_ingot",
+          "item": "flatcraft:item:gold_ingot",
           "count": 5,
           "chance": 0.8
         },
         {
-          "item": "flatcraft:glowstone_dust",
+          "item": "flatcraft:item:glowstone_dust",
           "count": 8,
           "chance": 0.7
         },
         {
-          "item": "flatcraft:obsidian",
+          "item": "flatcraft:item:obsidian",
           "count": 3,
           "chance": 0.4
         },
         {
-          "item": "flatcraft:flint_and_steel",
+          "item": "flatcraft:item:flint_and_steel",
           "count": 1,
           "chance": 0.25
         },
         {
-          "item": "flatcraft:elytra",
+          "item": "flatcraft:item:elytra",
           "count": 1,
           "chance": 0.15
         }

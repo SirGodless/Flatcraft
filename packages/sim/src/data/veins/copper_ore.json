@@ -1,0 +1,9 @@
+{
+  "id": "flatcraft:vein:copper_ore",
+  "block": "flatcraft:block:copper_ore",
+  "attempts": 3,
+  "size_min": 3,
+  "size_max": 7,
+  "min_y": 8,
+  "max_y": 140
+}

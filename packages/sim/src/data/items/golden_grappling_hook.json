@@ -1,5 +1,5 @@
 {
-  "id": "golden_grappling_hook",
+  "id": "flatcraft:item:golden_grappling_hook",
   "name": "Golden Grappling Hook",
   "max_stack": 1,
   "grapple": {
@@ -10,13 +10,31 @@
       "station": "crafting_table",
       "style": "shapeless",
       "ingredients": [
-        "item:gold_ingot",
-        "item:gold_ingot",
-        "item:gold_ingot",
-        "item:string",
-        "item:string",
-        "item:iron_grappling_hook"
+        "item:flatcraft:item:gold_ingot",
+        "item:flatcraft:item:gold_ingot",
+        "item:flatcraft:item:gold_ingot",
+        "item:flatcraft:item:string",
+        "item:flatcraft:item:string",
+        "item:flatcraft:item:iron_grappling_hook"
       ]
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "......S.",
+        "......S.",
+        "......S.",
+        "..HHH.S.",
+        ".H...HS.",
+        ".H....H.",
+        "..HH.H..",
+        "........"
+      ],
+      "palette": {
+        "H": "#f5d442",
+        "S": "#e8e8e0"
+      }
+    }
+  }
 }

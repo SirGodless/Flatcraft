@@ -1,4 +1,21 @@
 {
-  "id": "wool",
-  "name": "Wool"
+  "id": "flatcraft:item:wool",
+  "name": "Wool",
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "..XXX...",
+        ".XXXXX..",
+        ".XXXXX..",
+        "..XXXX..",
+        "...XX...",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#ececec"
+      }
+    }
+  }
 }

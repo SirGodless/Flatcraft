@@ -1,0 +1,5 @@
+{
+  "id": "flatcraft:enchant:sharpness",
+  "effect": "damage_bonus",
+  "per_level": 2
+}

@@ -82,7 +82,18 @@ point and the set of connections differ.
 client ──► server ──► sim
 dedicated ─┘            ▲
         └───────────────┘
+
+content (standalone; not yet consumed by any of the above)
 ```
 
 `sim` depends on nothing. `server` depends only on `sim`. Rendering/input
 concerns never leak downward.
+
+`content` (`@flatcraft/content`) discovers content packages under a
+`content/` root - loose directories or `.zip` archives, each with a
+`content.json` manifest - and hands back a package id/version plus its raw
+file tree. It knows nothing about game content (blocks/items/...); that's
+layered on top by `sim`'s registry code once a package's files are read.
+Part of an in-progress modding architecture where the game's own vanilla
+content becomes just another content package, on equal footing with any
+third-party one - see the plan file for the full staged rollout.

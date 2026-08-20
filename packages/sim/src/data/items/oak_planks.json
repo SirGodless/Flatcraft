@@ -1,14 +1,14 @@
 {
-  "id": "oak_planks",
+  "id": "flatcraft:item:oak_planks",
   "name": "Oak Planks",
-  "places_block": "oak_planks",
+  "places_block": "flatcraft:block:oak_planks",
   "fuel_ticks": 300,
   "recipes": [
     {
       "station": "inventory",
       "style": "shapeless",
       "ingredients": [
-        "item:oak_log"
+        "item:flatcraft:item:oak_log"
       ],
       "amount": 4
     }

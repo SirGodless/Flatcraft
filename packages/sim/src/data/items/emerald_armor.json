@@ -1,5 +1,5 @@
 {
-  "id": "emerald_armor",
+  "id": "flatcraft:item:emerald_armor",
   "name": "Emerald Armor",
   "max_stack": 1,
   "armor": {
@@ -15,9 +15,26 @@
         "aaa"
       ],
       "key": {
-        "a": "item:emerald",
-        "b": "item:iron_armor"
+        "a": "item:flatcraft:item:emerald",
+        "b": "item:flatcraft:item:iron_armor"
       }
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "XX....XX",
+        "XXXXXXXX",
+        "XXXXXXXX",
+        ".XXXXXX.",
+        ".XXXXXX.",
+        ".XXXXXX.",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#30c85e"
+      }
+    }
+  }
 }

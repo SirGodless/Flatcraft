@@ -32,61 +32,61 @@ describe("server datapack", () => {
     writeFileSync(
       join(dataDir, "datapack/blocks/ruby_block.json"),
       JSON.stringify({
-        id: "ruby_block",
+        id: "flatcraft:block:ruby_block",
         name: "Ruby Block",
         solid: true,
         hardness: 40,
         tool: "pickaxe",
         required_tier: 3,
-        drops: { item: "ruby", amount: 1 },
+        drops: { item: "flatcraft:item:ruby", amount: 1 },
         visual: { variants: 3, shader: { id: "shimmer" } },
       }),
     );
     writeFileSync(
       join(dataDir, "datapack/items/ruby.json"),
       JSON.stringify({
-        id: "ruby",
+        id: "flatcraft:item:ruby",
         name: "Ruby",
         recipes: [
           {
             station: "crafting_table",
             style: "shapeless",
-            ingredients: ["item:diamond", "item:redstone"],
+            ingredients: ["item:flatcraft:item:diamond", "item:flatcraft:item:redstone"],
           },
         ],
       }),
     );
     writeFileSync(
       join(dataDir, "datapack/items/ruby_block_item.json"),
-      JSON.stringify({ id: "ruby_block_item", name: "Ruby Block", places_block: "ruby_block" }),
+      JSON.stringify({ id: "flatcraft:item:ruby_block_item", name: "Ruby Block", places_block: "flatcraft:block:ruby_block" }),
     );
     writeFileSync(
       join(dataDir, "datapack/mobs/ruby_golem.json"),
       JSON.stringify({
-        id: "ruby_golem",
+        id: "flatcraft:mob:ruby_golem",
         name: "Ruby Golem",
         health: 40,
         speed: 0.05,
         size: { width: 1, height: 2 },
         melee: { damage: 5, cooldown: 20, follow_range: 10 },
-        loot: [{ item: "ruby", max: 1, chance: 1 }],
+        loot: [{ item: "flatcraft:item:ruby", max: 1, chance: 1 }],
       }),
     );
 
     server = await startDedicatedServer({ port: 0, dataDir, seed: 1, log: () => {} });
 
     // The server process registries know the mod content.
-    const blockId = blockByName("ruby_block");
+    const blockId = blockByName("flatcraft:block:ruby_block");
     expect(blockId).toBeDefined();
     expect(blockId!).toBeGreaterThanOrEqual(78); // dynamic id range
     expect(blockDef(blockId!).displayName).toBe("Ruby Block");
     expect(blockDef(blockId!).visual).toEqual({ variants: 3, shader: { id: "shimmer" } });
-    expect(itemDef("ruby")?.name).toBe("Ruby");
-    expect(itemDef("ruby_block_item")?.block).toBe(blockId);
-    expect(RECIPES.get("ruby")?.kind).toBe("crafting");
-    expect(mobDef("ruby_golem")?.health).toBe(40);
-    expect(mobDef("ruby_golem")?.melee?.damage).toBe(5);
-    expect(mobDef("ruby_golem")?.loot?.[0]?.item).toBe("ruby");
+    expect(itemDef("flatcraft:item:ruby")?.name).toBe("Ruby");
+    expect(itemDef("flatcraft:item:ruby_block_item")?.block).toBe(blockId);
+    expect(RECIPES.get("flatcraft:item:ruby")?.kind).toBe("crafting");
+    expect(mobDef("flatcraft:mob:ruby_golem")?.health).toBe(40);
+    expect(mobDef("flatcraft:mob:ruby_golem")?.melee?.damage).toBe(5);
+    expect(mobDef("flatcraft:mob:ruby_golem")?.loot?.[0]?.item).toBe("flatcraft:item:ruby");
 
     // Clients get the raw datapack to register the same content.
     const response = await fetch(`http://localhost:${server.port}/api/datapack`);
@@ -101,11 +101,11 @@ describe("server datapack", () => {
     server.gameServer.simulation.world.ensureChunk(0, 0);
     server.gameServer.simulation.world.setBlock(1, 1, blockId!);
     const save = server.gameServer.simulation.serialize();
-    expect(save.blockPalette![blockId!]).toBe("ruby_block");
+    expect(save.blockPalette![blockId!]).toBe("flatcraft:block:ruby_block");
 
     // Mod mobs work in the live simulation exactly like built-in ones.
-    const golem = server.gameServer.simulation.spawnMob("ruby_golem", 5, 5, []);
+    const golem = server.gameServer.simulation.spawnMob("flatcraft:mob:ruby_golem", 5, 5, []);
     expect(golem.health).toBe(40);
-    expect(server.gameServer.simulation.entities.get(golem.id)?.kind).toBe("ruby_golem");
+    expect(server.gameServer.simulation.entities.get(golem.id)?.kind).toBe("flatcraft:mob:ruby_golem");
   });
 });

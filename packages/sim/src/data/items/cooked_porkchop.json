@@ -1,5 +1,5 @@
 {
-  "id": "cooked_porkchop",
+  "id": "flatcraft:item:cooked_porkchop",
   "name": "Cooked Porkchop",
   "food": {
     "hunger": 8,
@@ -9,8 +9,25 @@
   "recipes": [
     {
       "station": "furnace",
-      "input": "item:porkchop",
+      "input": "item:flatcraft:item:porkchop",
       "cooking_ticks": 200
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "..XXX...",
+        ".XXXXX..",
+        ".XXXXX..",
+        "..XXXX..",
+        "...XX...",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#d8a878"
+      }
+    }
+  }
 }

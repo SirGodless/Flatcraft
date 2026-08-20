@@ -1,5 +1,5 @@
 {
-  "id": "glass_bottle",
+  "id": "flatcraft:item:glass_bottle",
   "name": "Glass Bottle",
   "recipes": [
     {
@@ -10,9 +10,28 @@
         " a "
       ],
       "key": {
-        "a": "item:glass"
+        "a": "item:flatcraft:item:glass"
       },
       "amount": 3
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "...CC...",
+        "...CC...",
+        "..GLLG..",
+        ".GLLLLG.",
+        ".GLLLLG.",
+        ".GLLLLG.",
+        "..GGGG..",
+        "........"
+      ],
+      "palette": {
+        "C": "#c8c8d0",
+        "G": "#dce8f0",
+        "L": "#e8f4fa"
+      }
+    }
+  }
 }

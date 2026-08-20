@@ -30,7 +30,7 @@ describe("placement rules", () => {
   it("foreground needs a cardinal block or a wall behind", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
-    state.inventory[0] = { item: "dirt", count: 10 };
+    state.inventory[0] = { item: "flatcraft:item:dirt", count: 10 };
     const bx = Math.floor(state.x);
 
     // Free-floating in the sky: rejected.
@@ -51,7 +51,7 @@ describe("placement rules", () => {
   it("background walls need a free wall slot and an adjacent wall", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
-    state.inventory[0] = { item: "dirt", count: 10 };
+    state.inventory[0] = { item: "flatcraft:item:dirt", count: 10 };
     const bx = Math.floor(state.x);
 
     // High in the sky: no walls anywhere nearby.
@@ -77,7 +77,7 @@ describe("placement rules", () => {
   it("hammers mine background walls and drop them", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
-    state.inventory[0] = { item: "iron_hammer", count: 1 };
+    state.inventory[0] = { item: "flatcraft:item:iron_hammer", count: 1 };
     const bx = Math.floor(state.x);
     // The tile at surface level has a natural dirt wall; open the
     // foreground so the hammer can reach it.
@@ -91,7 +91,7 @@ describe("placement rules", () => {
     expect(sim.world.getWall(bx + 1, SURFACE)).toBe(BlockId.Air);
     // The wall dropped as an item; walk a moment to collect it.
     for (let i = 0; i < 40; i++) sim.tick([]);
-    expect(countInInventory(state.inventory, "dirt")).toBeGreaterThan(0);
+    expect(countInInventory(state.inventory, "flatcraft:item:dirt")).toBeGreaterThan(0);
   });
 });
 
@@ -99,7 +99,7 @@ describe("doors, trapdoors, slabs", () => {
   it("doors place two tiles tall, toggle open and closed", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
-    state.inventory[0] = { item: "oak_door", count: 1 };
+    state.inventory[0] = { item: "flatcraft:item:oak_door", count: 1 };
     const bx = Math.floor(state.x) + 2;
     sim.tick([{ player, command: { type: "place_block", x: bx, y: SURFACE - 1 } }]);
     expect(sim.world.getBlockGenerating(bx, SURFACE - 1)).toBe(BlockId.OakDoor);

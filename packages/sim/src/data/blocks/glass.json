@@ -1,7 +1,23 @@
 {
-  "id": "glass",
+  "id": "flatcraft:block:glass",
   "name": "Glass",
   "solid": true,
   "hardness": 5,
-  "drops": "none"
+  "drops": "none",
+  "visual": {
+    "fallback": {
+      "base": [
+        205,
+        228,
+        238
+      ],
+      "noise": 0.03,
+      "alpha": 0.4,
+      "frame": [
+        235,
+        244,
+        248
+      ]
+    }
+  }
 }
