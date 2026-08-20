@@ -1,5 +1,5 @@
 {
-  "id": "coal",
+  "id": "flatcraft:item:coal",
   "name": "Coal",
   "fuel_ticks": 1600,
   "visual": {

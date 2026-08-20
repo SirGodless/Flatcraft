@@ -35,7 +35,7 @@ registerContentType(
   {
     id: "enchant",
     fields: {
-      id: { kind: "id", required: true },
+      id: { kind: "qualified_id", required: true },
       effect: { kind: "enum", values: ["damage_bonus", "mining_speed"], required: true },
       per_level: { kind: "number", min: -1000, max: 1000, required: true },
     },

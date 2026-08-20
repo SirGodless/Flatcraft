@@ -10,7 +10,7 @@ import {
 
 const SEED = 1337;
 
-function findPlacement(dimension: "overworld" | "nether", id: string, range = 40) {
+function findPlacement(dimension: "flatcraft:dimension:overworld" | "flatcraft:dimension:nether", id: string, range = 40) {
   for (let cx = -range; cx <= range; cx++) {
     for (let cy = 0; cy <= 7; cy++) {
       for (const p of placementsNear(SEED, dimension, cx, cy)) {
@@ -31,7 +31,7 @@ describe("structures", () => {
   });
 
   it("stamps dungeon rooms into the world deterministically", () => {
-    const placement = findPlacement("overworld", "dungeon");
+    const placement = findPlacement("flatcraft:dimension:overworld", "flatcraft:structure:dungeon");
     expect(placement).not.toBeNull();
     const { originX, originY, structure } = placement!;
     const a = new World(SEED);
@@ -47,15 +47,15 @@ describe("structures", () => {
   });
 
   it("rolls loot for structure chests when first opened", () => {
-    const placement = findPlacement("overworld", "dungeon");
+    const placement = findPlacement("flatcraft:dimension:overworld", "flatcraft:structure:dungeon");
     expect(placement).not.toBeNull();
     const chestX = placement!.originX + 4;
     const chestY = placement!.originY + 3;
-    const loot = structureLootAt(SEED, "overworld", chestX, chestY);
+    const loot = structureLootAt(SEED, "flatcraft:dimension:overworld", chestX, chestY);
     expect(loot).not.toBeNull();
     expect(loot!.length).toBeGreaterThan(0);
     // Deterministic: the same roll twice.
-    expect(structureLootAt(SEED, "overworld", chestX, chestY)).toEqual(loot);
+    expect(structureLootAt(SEED, "flatcraft:dimension:overworld", chestX, chestY)).toEqual(loot);
 
     // Through the simulation: a spawned chest at that position has items.
     const sim = new Simulation(SEED);
@@ -72,14 +72,14 @@ describe("structures", () => {
   });
 
   it("places surface structures on the surface in matching biomes", () => {
-    const placement = findPlacement("overworld", "house", 80) ?? findPlacement("overworld", "well", 80);
+    const placement = findPlacement("flatcraft:dimension:overworld", "flatcraft:structure:house", 80) ?? findPlacement("flatcraft:dimension:overworld", "flatcraft:structure:well", 80);
     expect(placement).not.toBeNull();
   });
 
   it("places ruins in the nether", () => {
-    const placement = findPlacement("nether", "nether_ruin");
+    const placement = findPlacement("flatcraft:dimension:nether", "flatcraft:structure:nether_ruin");
     expect(placement).not.toBeNull();
-    const world = new World(SEED, "nether");
+    const world = new World(SEED, "flatcraft:dimension:nether");
     const { originX, originY } = placement!;
     expect(world.getBlockGenerating(originX + 3, originY + 2)).toBe(BlockId.Chest);
   });

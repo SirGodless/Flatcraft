@@ -1,5 +1,5 @@
 {
-  "id": "emerald_shield",
+  "id": "flatcraft:item:emerald_shield",
   "name": "Emerald Shield",
   "max_stack": 1,
   "shield": {
@@ -15,8 +15,8 @@
         " a "
       ],
       "key": {
-        "a": "item:emerald",
-        "b": "item:iron_shield"
+        "a": "item:flatcraft:item:emerald",
+        "b": "item:flatcraft:item:iron_shield"
       }
     }
   ],

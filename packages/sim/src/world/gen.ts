@@ -306,6 +306,6 @@ function overworldSpawnPoint(seed: number): { x: number; y: number } {
 // "arrival"/"spawn_point" ids - see world/dimension.ts for why
 // generation is referenced by id rather than the overworld dimension
 // calling this function directly.
-registerDimensionGenerator("flatcraft:overworld", generateChunk);
-registerArrivalGenerator("flatcraft:overworld_arrival", overworldArrival);
-registerSpawnPointGenerator("flatcraft:overworld_spawn_point", overworldSpawnPoint);
+registerDimensionGenerator("flatcraft:dimension_generator:overworld", generateChunk);
+registerArrivalGenerator("flatcraft:arrival_generator:overworld_arrival", overworldArrival);
+registerSpawnPointGenerator("flatcraft:spawn_point_generator:overworld_spawn_point", overworldSpawnPoint);

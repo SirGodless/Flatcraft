@@ -1,5 +1,5 @@
 import { Texture } from "pixi.js";
-import { hash01, mobDef } from "@flatcraft/sim";
+import { hash01, localName, mobDef } from "@flatcraft/sim";
 import { spriteKey, SPRITE_OVERRIDES } from "./sprites.js";
 
 /** Same salt-distinguishing rationale as icons.ts's VARIANT_SALT - kept
@@ -30,7 +30,7 @@ export function entityTexture(kind: string, variantSeed?: number): Texture | und
   const hasVariants = variantCount > 1;
   const variantIndex = hasVariants && variantSeed !== undefined ? Math.floor(hash01(variantSeed, VARIANT_SALT) * variantCount) : 0;
   const suffix = hasVariants ? `_${variantIndex}` : "";
-  if (def) return SPRITE_OVERRIDES.get((spriteKey(def.sprite) ?? `mob/${kind}`) + suffix);
+  if (def) return SPRITE_OVERRIDES.get((spriteKey(def.sprite) ?? `mob/${localName(kind)}`) + suffix);
   return SPRITE_OVERRIDES.get(`entity/${kind}${suffix}`);
 }
 
@@ -55,7 +55,7 @@ export function entityAnimationStates(kind: string): Record<string, AnimationCli
   const def = mobDef(kind);
   const states = def?.visual?.animation?.states;
   if (!states) return undefined;
-  const baseKey = spriteKey(def!.sprite) ?? `mob/${kind}`;
+  const baseKey = spriteKey(def!.sprite) ?? `mob/${localName(kind)}`;
   const result: Record<string, AnimationClip> = {};
   for (const [name, clip] of Object.entries(states)) {
     const sheet = SPRITE_OVERRIDES.get(`${baseKey}_${name}`);

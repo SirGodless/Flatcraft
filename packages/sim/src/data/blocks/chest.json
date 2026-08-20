@@ -1,5 +1,5 @@
 {
-  "id": "chest",
+  "id": "flatcraft:block:chest",
   "name": "Chest",
   "solid": true,
   "hardness": 25,

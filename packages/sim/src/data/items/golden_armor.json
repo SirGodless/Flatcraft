@@ -1,5 +1,5 @@
 {
-  "id": "golden_armor",
+  "id": "flatcraft:item:golden_armor",
   "name": "Golden Armor",
   "max_stack": 1,
   "armor": {
@@ -15,7 +15,7 @@
         "aaa"
       ],
       "key": {
-        "a": "item:gold_ingot"
+        "a": "item:flatcraft:item:gold_ingot"
       }
     }
   ],

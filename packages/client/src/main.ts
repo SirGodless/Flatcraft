@@ -144,7 +144,7 @@ async function runGame(options: GameOptions): Promise<Renderer> {
         connection.send({ type: "use_bucket", x: Math.floor(x), y: Math.floor(y) });
         return true;
       }
-      if (item === "bow") {
+      if (item === "flatcraft:item:bow") {
         // Shoot toward the cursor, from the player's chest height.
         const pos = renderer.localPlayerPos();
         if (pos) {
@@ -335,7 +335,7 @@ async function startSingleplayer(): Promise<void> {
     const sx = findSpawnX(sim.world.seed);
     const sy = surfaceHeight(sim.world.seed, sx) - 1;
     buildPortal(sim.world, sx + 3, sy);
-    sim.portalsOf("overworld").set(`${sx + 3},${sy}`, { x: sx + 3, y: sy });
+    sim.portalsOf("flatcraft:dimension:overworld").set(`${sx + 3},${sy}`, { x: sx + 3, y: sy });
   }
   // Debug: ?fillblock=name:count places a horizontal strip below spawn
   // (e.g. to eyeball sprite-variant variety across many tiles of one id).

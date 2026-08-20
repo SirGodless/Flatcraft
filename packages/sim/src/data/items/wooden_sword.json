@@ -1,5 +1,5 @@
 {
-  "id": "wooden_sword",
+  "id": "flatcraft:item:wooden_sword",
   "name": "Wooden Sword",
   "max_stack": 1,
   "tool": {
@@ -12,7 +12,7 @@
     "knockback": 0.35
   },
   "enchants": [
-    "sharpness"
+    "flatcraft:enchant:sharpness"
   ],
   "recipes": [
     {
@@ -25,7 +25,7 @@
       ],
       "key": {
         "a": "tag:planks",
-        "b": "item:stick"
+        "b": "item:flatcraft:item:stick"
       }
     }
   ],

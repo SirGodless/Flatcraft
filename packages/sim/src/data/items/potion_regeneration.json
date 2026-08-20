@@ -1,19 +1,19 @@
 {
-  "id": "potion_regeneration",
+  "id": "flatcraft:item:potion_regeneration",
   "name": "Potion Regeneration",
   "max_stack": 1,
   "effect": {
     "id": "regeneration",
     "ticks": 1800,
-    "returns": "glass_bottle"
+    "returns": "flatcraft:item:glass_bottle"
   },
   "recipes": [
     {
       "station": "brewing_stand",
       "ingredients": [
-        "item:glass_bottle",
-        "item:porkchop",
-        "item:glowstone_dust"
+        "item:flatcraft:item:glass_bottle",
+        "item:flatcraft:item:porkchop",
+        "item:flatcraft:item:glowstone_dust"
       ]
     }
   ],

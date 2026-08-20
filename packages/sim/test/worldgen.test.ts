@@ -96,14 +96,14 @@ describe("world generation", () => {
     // Find a forest tree on dry land.
     let tree = null;
     for (let x = 0; x < 4096 && !tree; x++) {
-      if (biomeAt(SEED, x) === "forest") {
+      if (biomeAt(SEED, x) === "flatcraft:biome:forest") {
         tree = treeAt(SEED, x);
       }
     }
     expect(tree).not.toBeNull();
     // Forests mix oak and birch; the trunk/canopy match the tree's wood.
-    const log = tree!.wood === "birch" ? BlockId.BirchLog : BlockId.OakLog;
-    const leaves = tree!.wood === "birch" ? BlockId.BirchLeaves : BlockId.OakLeaves;
+    const log = tree!.wood === "flatcraft:wood:birch" ? BlockId.BirchLog : BlockId.OakLog;
+    const leaves = tree!.wood === "flatcraft:wood:birch" ? BlockId.BirchLeaves : BlockId.OakLeaves;
     // Trunk occupies the column above the surface...
     expect(world.getBlockGenerating(tree!.x, tree!.surface - 1)).toBe(log);
     // ...and the canopy reaches into neighboring columns (and possibly the
@@ -117,9 +117,9 @@ describe("world generation", () => {
     const world = freshWorld();
     let tree = null;
     for (let x = 0; x < 4096 && !tree; x++) {
-      if (biomeAt(SEED, x) === "mountains") {
+      if (biomeAt(SEED, x) === "flatcraft:biome:mountains") {
         const t = treeAt(SEED, x);
-        if (t?.wood === "spruce") tree = t;
+        if (t?.wood === "flatcraft:wood:spruce") tree = t;
       }
     }
     expect(tree).not.toBeNull();
@@ -141,11 +141,11 @@ describe("world generation", () => {
       const surface = surfaceHeight(SEED, x);
       if (surface > SEA_LEVEL - 1) continue; // skip beaches/underwater
       const biome = biomeAt(SEED, x);
-      if (!desertChecked && biome === "desert") {
+      if (!desertChecked && biome === "flatcraft:biome:desert") {
         expect(world.getBlockGenerating(x, surface)).toBe(BlockId.Sand);
         desertChecked = true;
       }
-      if (!snowChecked && biome === "mountains" && surface <= -14) {
+      if (!snowChecked && biome === "flatcraft:biome:mountains" && surface <= -14) {
         expect(world.getBlockGenerating(x, surface)).toBe(BlockId.Snow);
         snowChecked = true;
       }

@@ -1,5 +1,5 @@
 {
-  "id": "emerald_hammer",
+  "id": "flatcraft:item:emerald_hammer",
   "name": "Emerald Hammer",
   "max_stack": 1,
   "tool": {
@@ -12,7 +12,7 @@
     "knockback": 0.35
   },
   "enchants": [
-    "efficiency"
+    "flatcraft:enchant:efficiency"
   ],
   "recipes": [
     {
@@ -24,9 +24,9 @@
         " c "
       ],
       "key": {
-        "a": "item:emerald",
-        "b": "item:iron_hammer",
-        "c": "item:stick"
+        "a": "item:flatcraft:item:emerald",
+        "b": "item:flatcraft:item:iron_hammer",
+        "c": "item:flatcraft:item:stick"
       }
     }
   ],

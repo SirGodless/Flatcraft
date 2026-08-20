@@ -1,5 +1,5 @@
 {
-  "id": "golden_shield",
+  "id": "flatcraft:item:golden_shield",
   "name": "Golden Shield",
   "max_stack": 1,
   "shield": {
@@ -15,7 +15,7 @@
         " a "
       ],
       "key": {
-        "a": "item:gold_ingot"
+        "a": "item:flatcraft:item:gold_ingot"
       }
     }
   ],

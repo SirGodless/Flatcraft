@@ -1,6 +1,6 @@
 import { ITEM_JSONS } from "./data/items/index.js";
 import { registerContentType, validateContentInstance } from "./registry/generic.js";
-import { validateRecipeJson, validateVisualJson, validateItemFallbackJson, type ItemJson, type RecipeJson } from "./registry/schema.js";
+import { validateRecipeJson, validateVisualJson, validateItemFallbackJson, localName, type ItemJson, type RecipeJson } from "./registry/schema.js";
 import type { ItemVisualDef } from "./registry/visual.js";
 import { blockByName, BlockId } from "./world/block.js";
 
@@ -98,14 +98,14 @@ const defs = new Map<string, ItemDef>();
 const recipeSources: Array<{ result: string; json: RecipeJson; source: string }> = [];
 
 function pretty(id: string): string {
-  return id.split("_").map((word) => (word[0] ?? "").toUpperCase() + word.slice(1)).join(" ");
+  return localName(id).split("_").map((word) => (word[0] ?? "").toUpperCase() + word.slice(1)).join(" ");
 }
 
 registerContentType(
   {
     id: "item",
     fields: {
-      id: { kind: "id", required: true },
+      id: { kind: "qualified_id", required: true },
       name: { kind: "string" },
       max_stack: { kind: "number", min: 1, max: 64 },
       sprite: { kind: "string" },

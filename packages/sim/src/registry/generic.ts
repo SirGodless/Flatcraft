@@ -1,4 +1,4 @@
-import { checkKeys, ID_PATTERN, need, needId, needNumber, needOneOf, SchemaError } from "./schema.js";
+import { checkKeys, need, needId, needNumber, needOneOf, needQualifiedId, SchemaError } from "./schema.js";
 
 /**
  * The generic content-type engine: content-defined game-content types
@@ -36,6 +36,12 @@ export type FieldDecl =
   | { kind: "string" }
   | { kind: "boolean" }
   | { kind: "id" }
+  /** Every content instance's own top-level id, "<package>:<type>:<name>"
+   * (e.g. "flatcraft:item:bow") - see schema.ts's needQualifiedId. Distinct
+   * from plain "id" (bare snake_case), which stays for identifiers that
+   * are deliberately not one of the namespaced content types (a type
+   * declaration's own id, a block's `station` key). */
+  | { kind: "qualified_id" }
   /** Opaque passthrough - accepts and returns any JSON value unvalidated.
    * For fields that are deliberately free-form by design (e.g. a
    * multiblock's handler-specific `config` blob, see multiblock.ts's
@@ -61,7 +67,7 @@ export interface TypeDeclaration {
   denseStorage?: { idKind: "uint16" };
 }
 
-const FIELD_KINDS = ["string", "boolean", "id", "any", "number", "enum", "literal", "object", "array", "record", "oneOf", "ref"] as const;
+const FIELD_KINDS = ["string", "boolean", "id", "qualified_id", "any", "number", "enum", "literal", "object", "array", "record", "oneOf", "ref"] as const;
 
 function stripRequired(source: string, path: string, raw: Record<string, unknown>): Record<string, unknown> {
   const { required, ...rest } = raw;
@@ -76,6 +82,7 @@ export function parseFieldDecl(raw: unknown, source: string, path: string): Fiel
     case "string":
     case "boolean":
     case "id":
+    case "qualified_id":
     case "any":
       checkKeys(source, `${path}.`, value, ["kind"]);
       return { kind };
@@ -174,6 +181,8 @@ function validateFieldValue(decl: FieldDecl, raw: unknown, source: string, path:
       return need<boolean>(source, path, raw, "boolean");
     case "id":
       return needId(source, path, raw);
+    case "qualified_id":
+      return needQualifiedId(source, path, raw);
     case "any":
       return raw;
     case "number":
@@ -187,27 +196,13 @@ function validateFieldValue(decl: FieldDecl, raw: unknown, source: string, path:
     }
     case "ref": {
       // Syntax only for now - see the module doc comment on why existence
-      // checking is deferred rather than attempted here.
-      const s = need<string>(source, path, raw, "string");
-      if (decl.refKind === "handler") {
-        // Handler ids already use the modname:funktion convention (e.g.
-        // "flatcraft:overworld" - see multiblock.ts, and dimension
-        // generators registered the same way) and are stored under that
-        // full string, colon included - returned as-is, never stripped.
-        if (s.length === 0) throw new SchemaError(source, `"${path}" must be a non-empty string`);
-        return s;
-      }
-      // Instance refs (blocks, items, ...) aren't namespaced yet, so
-      // tolerate (and strip) an optional "flatcraft:" prefix, matching
-      // every other ref-like field elsewhere in this codebase
-      // (needIngredientRef, multiblock.ts's stripNs) - some existing
-      // content (recipe ingredients, trades) already writes plain-
-      // namespace-prefixed refs today and this must keep accepting them.
-      const stripped = s.startsWith("flatcraft:") ? s.slice("flatcraft:".length) : s;
-      if (!ID_PATTERN.test(stripped)) {
-        throw new SchemaError(source, `"${path}" must be a lowercase snake_case id (optionally "flatcraft:"-prefixed), got "${s}"`);
-      }
-      return stripped;
+      // checking is deferred rather than attempted here. Both ref kinds
+      // are fully-qualified "package:type:name" ids under the uniform
+      // namespacing scheme, returned as-is (no stripping) - an instance
+      // ref points at another content instance's own qualified id, a
+      // handler ref points at a registered trusted handler function
+      // (multiblock handlers, dimension generators) keyed the same way.
+      return needQualifiedId(source, path, raw);
     }
     case "array": {
       const arr = need<unknown[]>(source, path, raw, "array");

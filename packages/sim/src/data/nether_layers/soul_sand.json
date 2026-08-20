@@ -1,6 +1,6 @@
 {
-  "id": "soul_sand",
-  "block": "soul_sand",
+  "id": "flatcraft:nether_layer:soul_sand",
+  "block": "flatcraft:block:soul_sand",
   "y_greater_than": 42,
   "noise": "fbm2",
   "seed_offset": 59155,

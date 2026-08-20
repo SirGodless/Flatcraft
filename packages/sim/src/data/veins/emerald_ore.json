@@ -1,6 +1,6 @@
 {
-  "id": "emerald_ore",
-  "block": "emerald_ore",
+  "id": "flatcraft:vein:emerald_ore",
+  "block": "flatcraft:block:emerald_ore",
   "attempts": 2,
   "size_min": 1,
   "size_max": 2,

@@ -1,7 +1,7 @@
 {
-  "id": "spruce_fence",
+  "id": "flatcraft:item:spruce_fence",
   "name": "Spruce Fence",
-  "places_block": "spruce_fence",
+  "places_block": "flatcraft:block:spruce_fence",
   "recipes": [
     {
       "station": "crafting_table",
@@ -11,8 +11,8 @@
         "aba"
       ],
       "key": {
-        "a": "item:spruce_planks",
-        "b": "item:stick"
+        "a": "item:flatcraft:item:spruce_planks",
+        "b": "item:flatcraft:item:stick"
       },
       "amount": 3
     }

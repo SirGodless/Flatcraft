@@ -1,5 +1,5 @@
 {
-  "id": "copper_ore",
+  "id": "flatcraft:block:copper_ore",
   "name": "Copper Ore",
   "solid": true,
   "hardness": 38,

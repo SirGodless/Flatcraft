@@ -71,7 +71,7 @@ registerContentType(
   {
     id: "nether_layer",
     fields: {
-      id: { kind: "id", required: true },
+      id: { kind: "qualified_id", required: true },
       block: { kind: "ref", ref_type: "block", required: true },
       y_less_than: { kind: "number", min: -100000, max: 100000 },
       y_greater_than: { kind: "number", min: -100000, max: 100000 },

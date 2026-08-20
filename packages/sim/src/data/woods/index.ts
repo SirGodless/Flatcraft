@@ -10,9 +10,9 @@ import spruce from "./spruce.json";
  * its id from a biome's tree_woods list (data/biomes/*.json).
  */
 const sources: Record<string, WoodJson> = {
-  oak,
-  birch,
-  spruce,
+  "flatcraft:wood:oak": oak,
+  "flatcraft:wood:birch": birch,
+  "flatcraft:wood:spruce": spruce,
 };
 
 for (const [id, json] of Object.entries(sources)) {

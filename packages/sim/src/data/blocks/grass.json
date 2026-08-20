@@ -1,11 +1,11 @@
 {
-  "id": "grass",
+  "id": "flatcraft:block:grass",
   "name": "Grass",
   "solid": true,
   "hardness": 12,
   "tool": "shovel",
   "drops": {
-    "item": "dirt",
+    "item": "flatcraft:item:dirt",
     "amount": 1
   },
   "visual": {

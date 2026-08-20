@@ -1,6 +1,6 @@
 import { BLOCK_JSONS } from "../data/blocks/index.js";
 import { registerContentType, validateContentInstance } from "../registry/generic.js";
-import { validateVisualJson, validateBlockFallbackJson, type BlockJson } from "../registry/schema.js";
+import { validateVisualJson, validateBlockFallbackJson, localName, type BlockJson } from "../registry/schema.js";
 import type { BlockVisualDef } from "../registry/visual.js";
 
 /**
@@ -160,9 +160,9 @@ const pendingToggles: Array<{ id: BlockId; target: string; source: string }> = [
 /** Datapack blocks outside the enum get ids from here. */
 let nextDynamicId = 79;
 
-/** "OakDoorOpen" -> "oak_door_open", "Water1" -> "water_1". */
+/** "OakDoorOpen" -> "flatcraft:block:oak_door_open", "Water1" -> "flatcraft:block:water_1". */
 function enumKeyToId(key: string): string {
-  return key.replace(/([a-z])([A-Z0-9])/g, "$1_$2").toLowerCase();
+  return "flatcraft:block:" + key.replace(/([a-z])([A-Z0-9])/g, "$1_$2").toLowerCase();
 }
 
 const BUILTIN_IDS = new Map<string, BlockId>();
@@ -173,15 +173,15 @@ for (const [key, value] of Object.entries(BlockId)) {
 }
 
 /** Air is an engine constant, not a data file. */
-const AIR: BlockDef = { id: BlockId.Air, name: "air", displayName: "Air", solid: false, hardness: 0 };
+const AIR: BlockDef = { id: BlockId.Air, name: "flatcraft:block:air", displayName: "Air", solid: false, hardness: 0 };
 defs.set(BlockId.Air, AIR);
-byName.set("air", BlockId.Air);
+byName.set("flatcraft:block:air", BlockId.Air);
 
 registerContentType(
   {
     id: "block",
     fields: {
-      id: { kind: "id", required: true },
+      id: { kind: "qualified_id", required: true },
       name: { kind: "string" },
       sprite: { kind: "string" },
       // Validated separately below - see items.ts's registerContentType
@@ -236,7 +236,7 @@ export function registerBlockJson(raw: unknown, source = "datapack"): BlockDef {
   const def: BlockDef = {
     id,
     name: json.id,
-    displayName: json.name ?? json.id,
+    displayName: json.name ?? localName(json.id),
     solid: json.solid,
     hardness: json.hardness,
     ...(json.tool !== undefined ? { tool: json.tool } : {}),
@@ -312,7 +312,7 @@ export function blockDrops(id: BlockId): { item: string; count: number } | null 
   const def = defs.get(id);
   if (!def || def.id === BlockId.Air) return null;
   if (def.drops === null) return null;
-  return def.drops ?? { item: def.name, count: 1 };
+  return def.drops ?? { item: `flatcraft:item:${localName(def.name)}`, count: 1 };
 }
 
 /** Blast resistance: survives an explosion whose damage falls below

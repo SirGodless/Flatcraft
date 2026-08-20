@@ -1,14 +1,14 @@
 {
-  "id": "spruce_planks",
+  "id": "flatcraft:item:spruce_planks",
   "name": "Spruce Planks",
-  "places_block": "spruce_planks",
+  "places_block": "flatcraft:block:spruce_planks",
   "fuel_ticks": 300,
   "recipes": [
     {
       "station": "inventory",
       "style": "shapeless",
       "ingredients": [
-        "item:spruce_log"
+        "item:flatcraft:item:spruce_log"
       ],
       "amount": 4
     }

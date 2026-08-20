@@ -1,5 +1,5 @@
 {
-  "id": "basalt",
+  "id": "flatcraft:item:basalt",
   "name": "Basalt",
-  "places_block": "basalt"
+  "places_block": "flatcraft:block:basalt"
 }

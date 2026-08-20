@@ -16,13 +16,12 @@ import type { Chunk } from "./chunk.js";
  * execution). Mob spawning is the one exception living outside this
  * file - see spawning.ts for why.
  *
- * Deliberately not namespaced as "flatcraft:overworld"/"flatcraft:nether"
- * - unlike a multiblock id, these dimension ids are already baked into
- * the save format, chunk file directory names, and every SimEvent that
- * carries a `dim` field. Renaming them would be a real save-compat
- * break for no benefit ("overworld"/"nether" are about as collision-
- * proof as a name gets); a mod adding a third dimension just picks its
- * own namespaced id, same as any other content.
+ * Namespaced like every other content type: "flatcraft:dimension:overworld",
+ * "flatcraft:dimension:nether". These ids are baked into the save format,
+ * chunk file directory names, and every SimEvent carrying a `dim` field,
+ * same as a block name is baked into every chunk's palette - the uniform-
+ * namespacing decision covers this too, and there is no save-compat
+ * concern weighing against it (old saves are not expected to load).
  */
 
 export interface DimensionPortal {
@@ -110,7 +109,7 @@ registerContentType(
   {
     id: "dimension",
     fields: {
-      id: { kind: "id", required: true },
+      id: { kind: "qualified_id", required: true },
       generator: { kind: "ref", ref_type: "dimension_generator", ref_kind: "handler", required: true },
       spawns: { kind: "ref", ref_type: "spawn_generator", ref_kind: "handler", required: true },
       arrival: { kind: "ref", ref_type: "arrival_generator", ref_kind: "handler", required: true },

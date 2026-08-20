@@ -1,6 +1,6 @@
 {
-  "id": "lapis_ore",
-  "block": "lapis_ore",
+  "id": "flatcraft:vein:lapis_ore",
+  "block": "flatcraft:block:lapis_ore",
   "attempts": 1,
   "size_min": 2,
   "size_max": 5,

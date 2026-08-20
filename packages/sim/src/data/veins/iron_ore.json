@@ -1,6 +1,6 @@
 {
-  "id": "iron_ore",
-  "block": "iron_ore",
+  "id": "flatcraft:vein:iron_ore",
+  "block": "flatcraft:block:iron_ore",
   "attempts": 4,
   "size_min": 3,
   "size_max": 6,

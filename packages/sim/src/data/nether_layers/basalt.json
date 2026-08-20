@@ -1,6 +1,6 @@
 {
-  "id": "basalt",
-  "block": "basalt",
+  "id": "flatcraft:nether_layer:basalt",
+  "block": "flatcraft:block:basalt",
   "y_greater_than": 36,
   "noise": "fbm2",
   "seed_offset": 59156,

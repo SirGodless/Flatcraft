@@ -1,5 +1,5 @@
 {
-  "id": "spruce_log",
+  "id": "flatcraft:block:spruce_log",
   "name": "Spruce Log",
   "solid": false,
   "hardness": 25,

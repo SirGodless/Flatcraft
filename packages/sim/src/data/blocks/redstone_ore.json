@@ -1,12 +1,12 @@
 {
-  "id": "redstone_ore",
+  "id": "flatcraft:block:redstone_ore",
   "name": "Redstone Ore",
   "solid": true,
   "hardness": 40,
   "tool": "pickaxe",
   "required_tier": 3,
   "drops": {
-    "item": "redstone",
+    "item": "flatcraft:item:redstone",
     "amount": 4
   },
   "visual": {

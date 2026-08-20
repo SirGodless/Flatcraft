@@ -1,7 +1,7 @@
 {
-  "id": "crafting_table",
+  "id": "flatcraft:item:crafting_table",
   "name": "Crafting Table",
-  "places_block": "crafting_table",
+  "places_block": "flatcraft:block:crafting_table",
   "fuel_ticks": 300,
   "recipes": [
     {

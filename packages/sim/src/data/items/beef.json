@@ -1,5 +1,5 @@
 {
-  "id": "beef",
+  "id": "flatcraft:item:beef",
   "name": "Beef",
   "food": {
     "hunger": 3,

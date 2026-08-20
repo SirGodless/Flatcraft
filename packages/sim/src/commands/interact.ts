@@ -104,7 +104,7 @@ registerCommandHandler("enchant", {
       reject("already maxed");
       return;
     }
-    if (!removeFromInventory(p.inventory, "lapis_lazuli", ENCHANT_LAPIS_COST)) {
+    if (!removeFromInventory(p.inventory, "flatcraft:item:lapis_lazuli", ENCHANT_LAPIS_COST)) {
       reject("missing lapis");
       return;
     }

@@ -1,5 +1,5 @@
 {
-  "id": "sand",
+  "id": "flatcraft:block:sand",
   "name": "Sand",
   "solid": true,
   "hardness": 8,

@@ -1,6 +1,6 @@
 {
-  "id": "glowstone",
-  "block": "glowstone",
+  "id": "flatcraft:nether_layer:glowstone",
+  "block": "flatcraft:block:glowstone",
   "y_less_than": -20,
   "noise": "fbm2",
   "seed_offset": 59154,

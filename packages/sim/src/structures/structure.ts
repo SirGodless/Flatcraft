@@ -7,15 +7,15 @@ import type { Dimension } from "../world/world.js";
  * World structures, defined in JSON (src/data/structures/*.json):
  *
  *   {
- *     "dimension": "overworld",
- *     "placement": { "type": "surface", "chance": 0.05, "biomes": ["plains"] },
+ *     "dimension": "flatcraft:dimension:overworld",
+ *     "placement": { "type": "surface", "chance": 0.05, "biomes": ["flatcraft:biome:plains"] },
  *     "anchor": [2, 3],
  *     "pattern": ["CCC", "C.C", "CCC"],
  *     "key": {
- *       "C": { "block": "flatcraft:cobblestone" },
- *       ".": { "block": "flatcraft:air" },
- *       "n": { "block": "flatcraft:chest",
- *              "loot": [{ "item": "flatcraft:diamond", "count": 2, "chance": 0.5 }] }
+ *       "C": { "block": "flatcraft:block:cobblestone" },
+ *       ".": { "block": "flatcraft:block:air" },
+ *       "n": { "block": "flatcraft:block:chest",
+ *              "loot": [{ "item": "flatcraft:item:diamond", "count": 2, "chance": 0.5 }] }
  *     }
  *   }
  *

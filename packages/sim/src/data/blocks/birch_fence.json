@@ -1,5 +1,5 @@
 {
-  "id": "birch_fence",
+  "id": "flatcraft:block:birch_fence",
   "name": "Birch Fence",
   "solid": true,
   "hardness": 30,

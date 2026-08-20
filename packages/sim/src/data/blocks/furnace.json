@@ -1,5 +1,5 @@
 {
-  "id": "furnace",
+  "id": "flatcraft:block:furnace",
   "name": "Furnace",
   "solid": true,
   "hardness": 35,

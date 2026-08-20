@@ -1,5 +1,5 @@
 {
-  "id": "glass_bottle",
+  "id": "flatcraft:item:glass_bottle",
   "name": "Glass Bottle",
   "recipes": [
     {
@@ -10,7 +10,7 @@
         " a "
       ],
       "key": {
-        "a": "item:glass"
+        "a": "item:flatcraft:item:glass"
       },
       "amount": 3
     }

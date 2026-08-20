@@ -1,5 +1,5 @@
 {
-  "id": "gold_ore",
+  "id": "flatcraft:item:gold_ore",
   "name": "Gold Ore",
-  "places_block": "gold_ore"
+  "places_block": "flatcraft:block:gold_ore"
 }

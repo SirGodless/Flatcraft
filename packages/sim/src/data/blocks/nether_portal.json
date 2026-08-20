@@ -1,5 +1,5 @@
 {
-  "id": "nether_portal",
+  "id": "flatcraft:block:nether_portal",
   "name": "Nether Portal",
   "solid": false,
   "hardness": -1,

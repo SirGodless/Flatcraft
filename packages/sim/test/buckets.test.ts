@@ -29,23 +29,23 @@ function setBlock(sim: Simulation, x: number, y: number, id: BlockId): void {
 
 describe("bucket component", () => {
   it("declares increasing capacity per tier, clay through netherite", () => {
-    expect(itemDef("clay_bucket")?.bucket).toBe(1);
-    expect(itemDef("copper_bucket")?.bucket).toBe(2);
-    expect(itemDef("iron_bucket")?.bucket).toBe(3);
-    expect(itemDef("golden_bucket")?.bucket).toBe(4);
-    expect(itemDef("diamond_bucket")?.bucket).toBe(5);
-    expect(itemDef("emerald_bucket")?.bucket).toBe(6);
-    expect(itemDef("netherite_bucket")?.bucket).toBe(7);
+    expect(itemDef("flatcraft:item:clay_bucket")?.bucket).toBe(1);
+    expect(itemDef("flatcraft:item:copper_bucket")?.bucket).toBe(2);
+    expect(itemDef("flatcraft:item:iron_bucket")?.bucket).toBe(3);
+    expect(itemDef("flatcraft:item:golden_bucket")?.bucket).toBe(4);
+    expect(itemDef("flatcraft:item:diamond_bucket")?.bucket).toBe(5);
+    expect(itemDef("flatcraft:item:emerald_bucket")?.bucket).toBe(6);
+    expect(itemDef("flatcraft:item:netherite_bucket")?.bucket).toBe(7);
   });
 
   it("diamond and emerald buckets are built on an iron bucket, like other gear", () => {
-    const diamond = RECIPES.get("diamond_bucket");
-    const emerald = RECIPES.get("emerald_bucket");
-    expect(diamond?.ingredients.has("iron_bucket")).toBe(true);
-    expect(emerald?.ingredients.has("iron_bucket")).toBe(true);
+    const diamond = RECIPES.get("flatcraft:item:diamond_bucket");
+    const emerald = RECIPES.get("flatcraft:item:emerald_bucket");
+    expect(diamond?.ingredients.has("flatcraft:item:iron_bucket")).toBe(true);
+    expect(emerald?.ingredients.has("flatcraft:item:iron_bucket")).toBe(true);
     // The cheaper tiers don't chain off each other.
-    expect(RECIPES.get("copper_bucket")?.ingredients.has("clay_bucket")).toBe(false);
-    expect(RECIPES.get("iron_bucket")?.ingredients.has("copper_bucket")).toBe(false);
+    expect(RECIPES.get("flatcraft:item:copper_bucket")?.ingredients.has("flatcraft:item:clay_bucket")).toBe(false);
+    expect(RECIPES.get("flatcraft:item:iron_bucket")?.ingredients.has("flatcraft:item:copper_bucket")).toBe(false);
   });
 });
 
@@ -56,17 +56,17 @@ describe("clay", () => {
     const fx = Math.floor(state.x) + 2;
     const fy = SURFACE - 1;
     setBlock(sim, fx, fy, BlockId.Furnace);
-    state.cursor = { item: "clay", count: 1 };
+    state.cursor = { item: "flatcraft:item:clay", count: 1 };
     sim.tick([
       { player, command: { type: "slot_click", slot: { container: "furnace", x: fx, y: fy, slot: "input" }, button: "left" } },
     ]);
-    state.cursor = { item: "coal", count: 1 };
+    state.cursor = { item: "flatcraft:item:coal", count: 1 };
     sim.tick([
       { player, command: { type: "slot_click", slot: { container: "furnace", x: fx, y: fy, slot: "fuel" }, button: "left" } },
     ]);
     for (let i = 0; i < 210; i++) sim.tick([]);
     const furnace = sim.furnaces.values().next().value!;
-    expect(furnace.output).toEqual({ item: "fired_clay", count: 1 });
+    expect(furnace.output).toEqual({ item: "flatcraft:item:fired_clay", count: 1 });
   });
 });
 
@@ -81,7 +81,7 @@ describe("bucket use", () => {
   }
 
   it("scoops a full water source, leaving the tile empty", () => {
-    const { sim, player, state, bx } = bucketSetup("clay_bucket");
+    const { sim, player, state, bx } = bucketSetup("flatcraft:item:clay_bucket");
     setBlock(sim, bx, SURFACE - 1, BlockId.Water);
     sim.tick([{ player, command: { type: "use_bucket", x: bx, y: SURFACE - 1 } }]);
     expect(sim.world.getBlockGenerating(bx, SURFACE - 1)).toBe(BlockId.Air);
@@ -89,7 +89,7 @@ describe("bucket use", () => {
   });
 
   it("refuses to scoop a partial (flowing) tile", () => {
-    const { sim, player, state, bx } = bucketSetup("clay_bucket");
+    const { sim, player, state, bx } = bucketSetup("flatcraft:item:clay_bucket");
     setBlock(sim, bx, SURFACE - 1, BlockId.Water3);
     const out = sim.tick([{ player, command: { type: "use_bucket", x: bx, y: SURFACE - 1 } }]);
     expect(out).toContainEqual({ to: player, event: { type: "command_rejected", player, reason: "nothing to do" } });
@@ -98,8 +98,8 @@ describe("bucket use", () => {
   });
 
   it("pours a carried charge as a full source and empties the bucket", () => {
-    const { sim, player, state, bx } = bucketSetup("clay_bucket");
-    state.inventory[0] = { item: "clay_bucket", count: 1, data: { liquid: "water", amount: 1 } };
+    const { sim, player, state, bx } = bucketSetup("flatcraft:item:clay_bucket");
+    state.inventory[0] = { item: "flatcraft:item:clay_bucket", count: 1, data: { liquid: "water", amount: 1 } };
     // A 1-tile pocket walled on both sides: otherwise the poured source
     // has nothing to stop it leveling out thin across the open terrain.
     setBlock(sim, bx, SURFACE - 1, BlockId.Air);
@@ -107,12 +107,12 @@ describe("bucket use", () => {
     setBlock(sim, bx + 1, SURFACE - 1, BlockId.Stone);
     sim.tick([{ player, command: { type: "use_bucket", x: bx, y: SURFACE - 1 } }]);
     expect(sim.world.getBlockGenerating(bx, SURFACE - 1)).toBe(BlockId.Water);
-    expect(state.inventory[0]?.item).toBe("clay_bucket");
+    expect(state.inventory[0]?.item).toBe("flatcraft:item:clay_bucket");
     expect(state.inventory[0]?.data).toBeUndefined();
   });
 
   it("fills a multi-charge bucket from separate sources up to its capacity", () => {
-    const { sim, player, state, bx } = bucketSetup("iron_bucket"); // capacity 3
+    const { sim, player, state, bx } = bucketSetup("flatcraft:item:iron_bucket"); // capacity 3
     // Four isolated 1-tile pools (stone between each) so scooping one
     // doesn't let the liquid-leveling system redistribute its neighbors.
     for (let i = 0; i < 4; i++) {
@@ -130,8 +130,8 @@ describe("bucket use", () => {
   });
 
   it("refuses to mix lava into a bucket already carrying water", () => {
-    const { sim, player, state, bx } = bucketSetup("iron_bucket");
-    state.inventory[0] = { item: "iron_bucket", count: 1, data: { liquid: "water", amount: 1 } };
+    const { sim, player, state, bx } = bucketSetup("flatcraft:item:iron_bucket");
+    state.inventory[0] = { item: "flatcraft:item:iron_bucket", count: 1, data: { liquid: "water", amount: 1 } };
     setBlock(sim, bx, SURFACE - 1, BlockId.Lava);
     sim.tick([{ player, command: { type: "use_bucket", x: bx, y: SURFACE - 1 } }]);
     expect(sim.world.getBlockGenerating(bx, SURFACE - 1)).toBe(BlockId.Lava); // untouched
@@ -139,8 +139,8 @@ describe("bucket use", () => {
   });
 
   it("the clay bucket breaks after pouring lava", () => {
-    const { sim, player, state, bx } = bucketSetup("clay_bucket");
-    state.inventory[0] = { item: "clay_bucket", count: 1, data: { liquid: "lava", amount: 1 } };
+    const { sim, player, state, bx } = bucketSetup("flatcraft:item:clay_bucket");
+    state.inventory[0] = { item: "flatcraft:item:clay_bucket", count: 1, data: { liquid: "lava", amount: 1 } };
     setBlock(sim, bx, SURFACE - 1, BlockId.Air);
     sim.tick([{ player, command: { type: "use_bucket", x: bx, y: SURFACE - 1 } }]);
     expect(sim.world.getBlockGenerating(bx, SURFACE - 1)).toBe(BlockId.Lava);
@@ -148,29 +148,29 @@ describe("bucket use", () => {
   });
 
   it("creative mode spares the clay bucket, like it spares placed blocks", () => {
-    const { sim, player, state, bx } = bucketSetup("clay_bucket");
+    const { sim, player, state, bx } = bucketSetup("flatcraft:item:clay_bucket");
     sim.tick([{ player, command: { type: "set_creative", on: true } }]);
-    state.inventory[0] = { item: "clay_bucket", count: 1, data: { liquid: "lava", amount: 1 } };
+    state.inventory[0] = { item: "flatcraft:item:clay_bucket", count: 1, data: { liquid: "lava", amount: 1 } };
     setBlock(sim, bx, SURFACE - 1, BlockId.Air);
     sim.tick([{ player, command: { type: "use_bucket", x: bx, y: SURFACE - 1 } }]);
-    expect(state.inventory[0]?.item).toBe("clay_bucket");
+    expect(state.inventory[0]?.item).toBe("flatcraft:item:clay_bucket");
   });
 
   it("the clay bucket survives pouring water", () => {
-    const { sim, player, state, bx } = bucketSetup("clay_bucket");
-    state.inventory[0] = { item: "clay_bucket", count: 1, data: { liquid: "water", amount: 1 } };
+    const { sim, player, state, bx } = bucketSetup("flatcraft:item:clay_bucket");
+    state.inventory[0] = { item: "flatcraft:item:clay_bucket", count: 1, data: { liquid: "water", amount: 1 } };
     setBlock(sim, bx, SURFACE - 1, BlockId.Air);
     sim.tick([{ player, command: { type: "use_bucket", x: bx, y: SURFACE - 1 } }]);
-    expect(state.inventory[0]?.item).toBe("clay_bucket");
+    expect(state.inventory[0]?.item).toBe("flatcraft:item:clay_bucket");
   });
 
   it("a copper bucket (and up) survives pouring lava", () => {
-    const { sim, player, state, bx } = bucketSetup("copper_bucket");
-    state.inventory[0] = { item: "copper_bucket", count: 1, data: { liquid: "lava", amount: 1 } };
+    const { sim, player, state, bx } = bucketSetup("flatcraft:item:copper_bucket");
+    state.inventory[0] = { item: "flatcraft:item:copper_bucket", count: 1, data: { liquid: "lava", amount: 1 } };
     setBlock(sim, bx, SURFACE - 1, BlockId.Air);
     sim.tick([{ player, command: { type: "use_bucket", x: bx, y: SURFACE - 1 } }]);
     expect(sim.world.getBlockGenerating(bx, SURFACE - 1)).toBe(BlockId.Lava);
-    expect(state.inventory[0]?.item).toBe("copper_bucket");
+    expect(state.inventory[0]?.item).toBe("flatcraft:item:copper_bucket");
     expect(state.inventory[0]?.data).toBeUndefined();
   });
 });

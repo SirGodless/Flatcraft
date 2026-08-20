@@ -1,5 +1,5 @@
 {
-  "id": "arrow",
+  "id": "flatcraft:item:arrow",
   "name": "Arrow",
   "recipes": [
     {
@@ -11,9 +11,9 @@
         "c"
       ],
       "key": {
-        "a": "item:flint",
-        "b": "item:stick",
-        "c": "item:feather"
+        "a": "item:flatcraft:item:flint",
+        "b": "item:flatcraft:item:stick",
+        "c": "item:flatcraft:item:feather"
       },
       "amount": 4
     }

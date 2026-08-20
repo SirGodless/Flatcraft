@@ -1,5 +1,5 @@
 {
-  "id": "stone_sword",
+  "id": "flatcraft:item:stone_sword",
   "name": "Stone Sword",
   "max_stack": 1,
   "tool": {
@@ -12,7 +12,7 @@
     "knockback": 0.35
   },
   "enchants": [
-    "sharpness"
+    "flatcraft:enchant:sharpness"
   ],
   "recipes": [
     {
@@ -24,8 +24,8 @@
         "b"
       ],
       "key": {
-        "a": "item:cobblestone",
-        "b": "item:stick"
+        "a": "item:flatcraft:item:cobblestone",
+        "b": "item:flatcraft:item:stick"
       }
     }
   ],

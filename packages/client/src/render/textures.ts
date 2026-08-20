@@ -1,5 +1,5 @@
 import { Texture } from "pixi.js";
-import { allBlocks, blockDef, BlockId, hash01, type BlockFallbackJson } from "@flatcraft/sim";
+import { allBlocks, blockDef, BlockId, hash01, localName, type BlockFallbackJson } from "@flatcraft/sim";
 import { spriteKey, SPRITE_OVERRIDES } from "./sprites.js";
 
 /** On-screen size of one tile at zoom 1, and texture resolution per block. */
@@ -109,7 +109,7 @@ export function createBlockTextures(): Map<BlockId, Texture> {
     if (def.id === BlockId.Air) continue;
     const key = def.sprite
       ? def.sprite.replace(/^sprites\//, "").replace(/\.[a-z0-9]+$/i, "")
-      : `block/${def.name}`;
+      : `block/${localName(def.name)}`;
     const sprite = SPRITE_OVERRIDES.get(key);
     if (sprite) {
       textures.set(def.id, sprite);
@@ -145,7 +145,7 @@ export function createBlockTextureVariants(base: Map<BlockId, Texture>): Map<Blo
     const count = def.visual?.variants ?? 1;
     if (count <= 1) continue;
     const style = def.visual?.fallback;
-    const key = spriteKey(def.sprite) ?? `block/${def.name}`;
+    const key = spriteKey(def.sprite) ?? `block/${localName(def.name)}`;
     const textures: Texture[] = [];
     for (let i = 0; i < count; i++) {
       const sprite = SPRITE_OVERRIDES.get(`${key}_${i}`);
@@ -180,7 +180,7 @@ export function blockAnimationClip(id: BlockId): BlockAnimationClip | undefined 
   const def = blockDef(id);
   const states = def?.visual?.animation?.states;
   if (!states) return undefined;
-  const baseKey = spriteKey(def!.sprite) ?? `block/${def!.name}`;
+  const baseKey = spriteKey(def!.sprite) ?? `block/${localName(def!.name)}`;
   const preferred = states["idle"] ? "idle" : Object.keys(states)[0];
   if (preferred === undefined) return undefined;
   const clip = states[preferred]!;

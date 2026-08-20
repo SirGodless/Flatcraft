@@ -1,7 +1,10 @@
 {
-  "id": "flatcraft:nether_portal",
-  "handler": "flatcraft:nether_portal",
-  "trigger_on": { "type": "place_block", "item": "flint_and_steel" },
+  "id": "flatcraft:multiblock:nether_portal",
+  "handler": "flatcraft:multiblock_handler:nether_portal",
+  "trigger_on": {
+    "type": "place_block",
+    "item": "flatcraft:item:flint_and_steel"
+  },
   "fail_reason": "no portal frame",
   "config": {
     "min_w": 2,
@@ -9,11 +12,14 @@
     "min_h": 3,
     "max_h": 5,
     "ticks": 60,
-    "range": 2.0,
+    "range": 2,
     "cooldown": 100
   },
   "build_pattern": {
-    "anchor": [3, 4],
+    "anchor": [
+      3,
+      4
+    ],
     "pattern": [
       " AAAAAA ",
       " AFFFFA ",
@@ -23,10 +29,18 @@
       "OOFFFFOO"
     ],
     "key": {
-      "A": { "block": "flatcraft:air" },
-      "F": { "block": "flatcraft:portal_frame" },
-      "P": { "block": "flatcraft:nether_portal" },
-      "O": { "block": "flatcraft:obsidian" }
+      "A": {
+        "block": "flatcraft:block:air"
+      },
+      "F": {
+        "block": "flatcraft:block:portal_frame"
+      },
+      "P": {
+        "block": "flatcraft:block:nether_portal"
+      },
+      "O": {
+        "block": "flatcraft:block:obsidian"
+      }
     }
   }
 }

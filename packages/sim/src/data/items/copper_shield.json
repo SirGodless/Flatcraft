@@ -1,5 +1,5 @@
 {
-  "id": "copper_shield",
+  "id": "flatcraft:item:copper_shield",
   "name": "Copper Shield",
   "max_stack": 1,
   "shield": {
@@ -15,7 +15,7 @@
         " a "
       ],
       "key": {
-        "a": "item:copper_ingot"
+        "a": "item:flatcraft:item:copper_ingot"
       }
     }
   ],

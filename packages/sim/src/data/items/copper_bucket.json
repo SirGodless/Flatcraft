@@ -1,5 +1,5 @@
 {
-  "id": "copper_bucket",
+  "id": "flatcraft:item:copper_bucket",
   "name": "Copper Bucket",
   "max_stack": 1,
   "bucket": {
@@ -14,7 +14,7 @@
         " a "
       ],
       "key": {
-        "a": "item:copper_ingot"
+        "a": "item:flatcraft:item:copper_ingot"
       }
     }
   ],

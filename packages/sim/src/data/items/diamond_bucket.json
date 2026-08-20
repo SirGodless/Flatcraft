@@ -1,5 +1,5 @@
 {
-  "id": "diamond_bucket",
+  "id": "flatcraft:item:diamond_bucket",
   "name": "Diamond Bucket",
   "max_stack": 1,
   "bucket": {
@@ -14,8 +14,8 @@
         " b "
       ],
       "key": {
-        "a": "item:diamond",
-        "b": "item:iron_bucket"
+        "a": "item:flatcraft:item:diamond",
+        "b": "item:flatcraft:item:iron_bucket"
       }
     }
   ],

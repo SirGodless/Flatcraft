@@ -12,20 +12,20 @@ import type { Dimension, World } from "./world/world.js";
  * the same engine). See data/multiblocks/*.json for the format:
  *
  *   {
- *     "id": "mymod:example",
- *     "handler": "mymod:example",
- *     "trigger_on": { "type": "place_block", "item": "flint_and_steel" },
+ *     "id": "mymod:multiblock:example",
+ *     "handler": "mymod:multiblock_handler:example",
+ *     "trigger_on": { "type": "place_block", "item": "item:mymod:item:flint_and_steel" },
  *     "states": {
- *       "off": { "pattern": ["OOO", "O.O", "OOO"], "key": { "O": { "block": "obsidian" }, ".": { "block": "air", "trigger": true } } }
+ *       "off": { "pattern": ["OOO", "O.O", "OOO"], "key": { "O": { "block": "flatcraft:block:obsidian" }, ".": { "block": "flatcraft:block:air", "trigger": true } } }
  *     }
  *   }
  *
- * `id` and `handler` are conventionally namespaced `modname:funktion`
- * (built-in content uses `flatcraft:`) - this is a plain naming
- * convention, not something the engine parses or defaults for you: a
- * bare id with no colon is just its own distinct string, so two
- * differently-named mods never collide as long as each prefixes its
- * own ids. registerMultiblock/registerMultiblockHandler both reject an
+ * `id` and `handler` are both fully-qualified "<package>:<type>:<name>"
+ * ids (see registry/schema.ts's QUALIFIED_ID_PATTERN) - `id` under type
+ * "multiblock", `handler` under the pseudo-type "multiblock_handler"
+ * (a handler function isn't a content *instance*, but still lives in the
+ * same namespaced id space so two mods' handler names can never
+ * collide). registerMultiblock/registerMultiblockHandler both reject an
  * id that's already taken (see below) rather than silently letting a
  * later registration overwrite an earlier one - namespacing is what
  * makes that collision unlikely in the first place, the check is what
@@ -153,13 +153,7 @@ registerContentType(
   {
     id: "multiblock",
     fields: {
-      // Not `kind: "id"` - multiblock ids already use the namespaced
-      // modname:funktion convention (e.g. "flatcraft:nether_portal"),
-      // unlike every other type migrated onto this engine so far, which
-      // all use bare snake_case ids. Uniqueness is still enforced by
-      // registerMultiblock's own DEFS.has() check below, unaffected by
-      // this field's format.
-      id: { kind: "string", required: true },
+      id: { kind: "qualified_id", required: true },
       handler: { kind: "ref", ref_type: "multiblock_handler", ref_kind: "handler", required: true },
       trigger_on: {
         kind: "object",

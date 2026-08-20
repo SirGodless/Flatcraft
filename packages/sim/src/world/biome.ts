@@ -90,7 +90,7 @@ registerContentType(
   {
     id: "biome",
     fields: {
-      id: { kind: "id", required: true },
+      id: { kind: "qualified_id", required: true },
       noise_max: { kind: "number", min: -1000, max: 1000, required: true },
       layers: { kind: "array", required: true, items: { kind: "object", fields: LAYER_FIELDS } },
       floor: { kind: "ref", ref_type: "block", required: true },

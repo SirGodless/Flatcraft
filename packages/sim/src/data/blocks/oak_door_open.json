@@ -1,15 +1,15 @@
 {
-  "id": "oak_door_open",
+  "id": "flatcraft:block:oak_door_open",
   "name": "Oak Door Open",
   "solid": false,
   "hardness": 28,
   "tool": "axe",
   "drops": {
-    "item": "oak_door",
+    "item": "flatcraft:item:oak_door",
     "amount": 1
   },
   "tall": true,
-  "toggle_to": "oak_door",
+  "toggle_to": "flatcraft:block:oak_door",
   "visual": {
     "fallback": {
       "base": [

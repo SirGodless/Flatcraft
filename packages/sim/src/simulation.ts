@@ -356,7 +356,7 @@ export class Simulation {
 
   /** The overworld (kept for compatibility; use worldOf for others). */
   get world(): World {
-    return this.worldOf("overworld");
+    return this.worldOf("flatcraft:dimension:overworld");
   }
 
   worldOf(dimension: Dimension): World {
@@ -435,7 +435,7 @@ export class Simulation {
     return entity;
   }
 
-  spawnMob(kind: MobKind, x: number, y: number, out: OutboundEvent[], dimension: Dimension = "overworld"): MobEntity {
+  spawnMob(kind: MobKind, x: number, y: number, out: OutboundEvent[], dimension: Dimension = "flatcraft:dimension:overworld"): MobEntity {
     const def = mobDef(kind);
     if (!def) throw new Error(`spawnMob: unknown mob kind "${kind}"`);
     const entity: MobEntity = {

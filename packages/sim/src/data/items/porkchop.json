@@ -1,5 +1,5 @@
 {
-  "id": "porkchop",
+  "id": "flatcraft:item:porkchop",
   "name": "Porkchop",
   "food": {
     "hunger": 3,

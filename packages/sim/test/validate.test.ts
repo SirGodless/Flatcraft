@@ -44,23 +44,27 @@ describe("content dependency validation", () => {
 
   it("reports every multiblock with a missing handler, not just the first", () => {
     registerMultiblock(
-      parseMultiblock("test_validate_missing_1", {
-        id: "test_validate_missing_1",
-        handler: "nobody_registered_this_1",
-        trigger_on: { type: "place_block", item: "coal" },
+      parseMultiblock("flatcraft:multiblock:test_validate_missing_1", {
+        id: "flatcraft:multiblock:test_validate_missing_1",
+        handler: "flatcraft:multiblock_handler:nobody_registered_this_1",
+        trigger_on: { type: "place_block", item: "flatcraft:item:coal" },
       }),
     );
     registerMultiblock(
-      parseMultiblock("test_validate_missing_2", {
-        id: "test_validate_missing_2",
-        handler: "nobody_registered_this_2",
-        trigger_on: { type: "place_block", item: "bone" },
+      parseMultiblock("flatcraft:multiblock:test_validate_missing_2", {
+        id: "flatcraft:multiblock:test_validate_missing_2",
+        handler: "flatcraft:multiblock_handler:nobody_registered_this_2",
+        trigger_on: { type: "place_block", item: "flatcraft:item:bone" },
       }),
     );
 
     const problems = validateMultiblockHandlers();
-    expect(problems).toContain('multiblock "test_validate_missing_1" references unknown behavior "nobody_registered_this_1"');
-    expect(problems).toContain('multiblock "test_validate_missing_2" references unknown behavior "nobody_registered_this_2"');
+    expect(problems).toContain(
+      'multiblock "flatcraft:multiblock:test_validate_missing_1" references unknown behavior "flatcraft:multiblock_handler:nobody_registered_this_1"',
+    );
+    expect(problems).toContain(
+      'multiblock "flatcraft:multiblock:test_validate_missing_2" references unknown behavior "flatcraft:multiblock_handler:nobody_registered_this_2"',
+    );
     // validateAllContent must surface the same problems, not swallow them.
     expect(validateAllContent().length).toBeGreaterThanOrEqual(2);
   });
@@ -78,33 +82,33 @@ describe("command handler validation", () => {
 
 describe("dimension registry", () => {
   it("the built-in overworld and nether are registered, with real generators", () => {
-    expect(allDimensionIds()).toEqual(expect.arrayContaining(["overworld", "nether"]));
+    expect(allDimensionIds()).toEqual(expect.arrayContaining(["flatcraft:dimension:overworld", "flatcraft:dimension:nether"]));
     expect(validateDimensionGenerators()).toEqual([]);
   });
 
   it("reports a dimension referencing an unregistered generator", () => {
     registerDimension(
-      parseDimension("test_validate_dim_missing", {
-        id: "test_validate_dim_missing",
-        generator: "nobody_registered_this_generator",
-        spawns: "flatcraft:overworld_spawns",
-        arrival: "flatcraft:overworld_arrival",
+      parseDimension("flatcraft:dimension:test_validate_dim_missing", {
+        id: "flatcraft:dimension:test_validate_dim_missing",
+        generator: "flatcraft:dimension_generator:nobody_registered_this_generator",
+        spawns: "flatcraft:spawn_generator:overworld_spawns",
+        arrival: "flatcraft:arrival_generator:overworld_arrival",
         has_sky: true,
       }),
     );
     expect(validateDimensionGenerators()).toContain(
-      'dimension "test_validate_dim_missing" references unknown generator "nobody_registered_this_generator"',
+      'dimension "flatcraft:dimension:test_validate_dim_missing" references unknown generator "flatcraft:dimension_generator:nobody_registered_this_generator"',
     );
   });
 
   it("rejects registering a dimension id that's already taken", () => {
     expect(() =>
       registerDimension(
-        parseDimension("overworld", {
-          id: "overworld",
-          generator: "flatcraft:overworld",
-          spawns: "flatcraft:overworld_spawns",
-          arrival: "flatcraft:overworld_arrival",
+        parseDimension("flatcraft:dimension:overworld", {
+          id: "flatcraft:dimension:overworld",
+          generator: "flatcraft:dimension_generator:overworld",
+          spawns: "flatcraft:spawn_generator:overworld_spawns",
+          arrival: "flatcraft:arrival_generator:overworld_arrival",
           has_sky: true,
         }),
       ),
@@ -113,7 +117,7 @@ describe("dimension registry", () => {
 
   it("the default respawn dimension is exactly one, with a working spawn point", () => {
     expect(validateDefaultDimension()).toEqual([]);
-    expect(defaultDimensionId()).toBe("overworld");
+    expect(defaultDimensionId()).toBe("flatcraft:dimension:overworld");
   });
 
   it("every dimension's portal, if any, links to a registered dimension", () => {
@@ -127,41 +131,60 @@ describe("dimension registry", () => {
 
 describe("biome registry", () => {
   it("the built-in biomes are registered, with every wood/vein reference resolving", () => {
-    expect(allBiomeIds()).toEqual(expect.arrayContaining(["desert", "plains", "forest", "mountains"]));
+    expect(allBiomeIds()).toEqual(
+      expect.arrayContaining([
+        "flatcraft:biome:desert",
+        "flatcraft:biome:plains",
+        "flatcraft:biome:forest",
+        "flatcraft:biome:mountains",
+      ]),
+    );
     expect(validateBiomeReferences()).toEqual([]);
   });
 
   it("reports a biome referencing an unregistered wood or vein", () => {
     registerBiome(
-      parseBiome("test_validate_biome_missing", {
-        id: "test_validate_biome_missing",
+      parseBiome("flatcraft:biome:test_validate_biome_missing", {
+        id: "flatcraft:biome:test_validate_biome_missing",
         noise_max: 0.01,
         layers: [],
-        floor: "stone",
+        floor: "flatcraft:block:stone",
         tree_chance: 0.1,
-        tree_woods: [{ wood: "nobody_registered_this_wood", weight: 1 }],
-        extra_veins: ["nobody_registered_this_vein"],
+        tree_woods: [{ wood: "flatcraft:wood:nobody_registered_this_wood", weight: 1 }],
+        extra_veins: ["flatcraft:vein:nobody_registered_this_vein"],
       }),
     );
     const problems = validateBiomeReferences();
-    expect(problems).toContain('biome "test_validate_biome_missing" references unknown wood "nobody_registered_this_wood"');
-    expect(problems).toContain('biome "test_validate_biome_missing" references unknown vein "nobody_registered_this_vein"');
+    expect(problems).toContain(
+      'biome "flatcraft:biome:test_validate_biome_missing" references unknown wood "flatcraft:wood:nobody_registered_this_wood"',
+    );
+    expect(problems).toContain(
+      'biome "flatcraft:biome:test_validate_biome_missing" references unknown vein "flatcraft:vein:nobody_registered_this_vein"',
+    );
     expect(validateAllContent().length).toBeGreaterThanOrEqual(2);
   });
 
   it("rejects registering a biome id that's already taken", () => {
     expect(() =>
-      registerBiome(parseBiome("plains", { id: "plains", noise_max: 0.55, layers: [], floor: "stone", tree_chance: 0 })),
+      registerBiome(
+        parseBiome("flatcraft:biome:plains", {
+          id: "flatcraft:biome:plains",
+          noise_max: 0.55,
+          layers: [],
+          floor: "flatcraft:block:stone",
+          tree_chance: 0,
+        }),
+      ),
     ).toThrow(/already registered/);
   });
 
   it("rejects a biome layer/floor/wall/snow block name that doesn't exist", () => {
     expect(() =>
-      parseBiome("test_validate_biome_badblock", {
-        id: "test_validate_biome_badblock",
+      parseBiome("flatcraft:biome:test_validate_biome_badblock", {
+        id: "flatcraft:biome:test_validate_biome_badblock",
         noise_max: 0.01,
         layers: [],
-        floor: "not_a_real_block",
+        floor: "flatcraft:block:not_a_real_block",
         tree_chance: 0,
       }),
     ).toThrow(/unknown floor block/);
@@ -174,7 +197,11 @@ describe("enchant references", () => {
   });
 
   it("reports an item referencing an unregistered enchant", () => {
-    const problems = validateItemEnchants([{ id: "test_validate_item", enchants: ["nobody_registered_this_enchant"] }]);
-    expect(problems).toEqual(['item "test_validate_item" references unknown enchant "nobody_registered_this_enchant"']);
+    const problems = validateItemEnchants([
+      { id: "flatcraft:item:test_validate_item", enchants: ["flatcraft:enchant:nobody_registered_this_enchant"] },
+    ]);
+    expect(problems).toEqual([
+      'item "flatcraft:item:test_validate_item" references unknown enchant "flatcraft:enchant:nobody_registered_this_enchant"',
+    ]);
   });
 });

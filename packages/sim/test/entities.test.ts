@@ -35,29 +35,29 @@ describe("item entities", () => {
     const { state } = joinPlayer(sim);
     const out: OutboundEvent[] = [];
     // Drop an item two tiles above the player's head.
-    const item = sim.spawnItem("overworld", state.x, state.y - 4, { item: "coal", count: 3 }, out);
+    const item = sim.spawnItem("flatcraft:dimension:overworld", state.x, state.y - 4, { item: "flatcraft:item:coal", count: 3 }, out);
     expect(out.some((o) => o.event.type === "entity_spawned")).toBe(true);
     settle(sim, 40);
     expect(sim.entities.has(item.id)).toBe(false); // picked up
-    expect(countInInventory(state.inventory, "coal")).toBe(3);
+    expect(countInInventory(state.inventory, "flatcraft:item:coal")).toBe(3);
   });
 
   it("items are not picked up while the pickup delay runs", () => {
     const sim = new Simulation(SEED);
     const { state } = joinPlayer(sim);
     const out: OutboundEvent[] = [];
-    sim.spawnItem("overworld", state.x, state.y - 1, { item: "coal", count: 1 }, out);
+    sim.spawnItem("flatcraft:dimension:overworld", state.x, state.y - 1, { item: "flatcraft:item:coal", count: 1 }, out);
     sim.tick([]);
-    expect(countInInventory(state.inventory, "coal")).toBe(0);
+    expect(countInInventory(state.inventory, "flatcraft:item:coal")).toBe(0);
     settle(sim, 15);
-    expect(countInInventory(state.inventory, "coal")).toBe(1);
+    expect(countInInventory(state.inventory, "flatcraft:item:coal")).toBe(1);
   });
 
   it("far-away items stay in the world", () => {
     const sim = new Simulation(SEED);
     const { state } = joinPlayer(sim);
     const out: OutboundEvent[] = [];
-    const item = sim.spawnItem("overworld", state.x + 10, state.y - 1, { item: "coal", count: 1 }, out);
+    const item = sim.spawnItem("flatcraft:dimension:overworld", state.x + 10, state.y - 1, { item: "flatcraft:item:coal", count: 1 }, out);
     settle(sim, 40);
     expect(sim.entities.has(item.id)).toBe(true);
   });
@@ -66,7 +66,7 @@ describe("item entities", () => {
 describe("combat", () => {
   function spawnZombieNear(sim: Simulation, state: PlayerEntity, dx: number): MobEntity {
     const out: OutboundEvent[] = [];
-    return sim.spawnMob("zombie", state.x + dx, state.y, out);
+    return sim.spawnMob("flatcraft:mob:zombie", state.x + dx, state.y, out);
   }
 
   it("kills a zombie with a sword, respecting invulnerability frames", () => {
@@ -74,7 +74,7 @@ describe("combat", () => {
     const { player, state } = joinPlayer(sim);
     sim.timeOfDay = 18000; // night, so daylight burning doesn't interfere
     const zombie = spawnZombieNear(sim, state, 2);
-    state.inventory[0] = { item: "iron_sword", count: 1 }; // 6 damage
+    state.inventory[0] = { item: "flatcraft:item:iron_sword", count: 1 }; // 6 damage
 
     let attacks = 0;
     // Attack whenever cooldowns allow; zombie has 20 HP -> 4 hits.
@@ -92,8 +92,8 @@ describe("combat", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
     const out: OutboundEvent[] = [];
-    const pig = sim.spawnMob("pig", state.x + 1.5, state.y, out);
-    state.inventory[0] = { item: "diamond_sword", count: 1 }; // 7 damage, 2 hits
+    const pig = sim.spawnMob("flatcraft:mob:pig", state.x + 1.5, state.y, out);
+    state.inventory[0] = { item: "flatcraft:item:diamond_sword", count: 1 }; // 7 damage, 2 hits
 
     for (let i = 0; i < 100 && sim.entities.has(pig.id); i++) {
       sim.tick([{ player, command: { type: "attack", entity: pig.id } }]);
@@ -104,14 +104,14 @@ describe("combat", () => {
     expect(drop).toBeDefined();
     state.x = drop!.x;
     settle(sim, 40);
-    expect(countInInventory(state.inventory, "porkchop")).toBeGreaterThanOrEqual(1);
+    expect(countInInventory(state.inventory, "flatcraft:item:porkchop")).toBeGreaterThanOrEqual(1);
   });
 
   it("rejects attacks beyond reach", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
     const out: OutboundEvent[] = [];
-    const zombie = sim.spawnMob("zombie", state.x + 10, state.y, out);
+    const zombie = sim.spawnMob("flatcraft:mob:zombie", state.x + 10, state.y, out);
     const result = sim.tick([{ player, command: { type: "attack", entity: zombie.id } }]);
     expect(result).toContainEqual({
       to: player,
@@ -123,7 +123,7 @@ describe("combat", () => {
     const sim = new Simulation(SEED);
     const { state } = joinPlayer(sim);
     const out: OutboundEvent[] = [];
-    sim.spawnMob("zombie", state.x + 6, state.y, out);
+    sim.spawnMob("flatcraft:mob:zombie", state.x + 6, state.y, out);
     const events = settle(sim, 200);
     // The zombie reached the player and did damage (it may even have
     // killed them, in which case they respawned at full health).
@@ -148,7 +148,7 @@ describe("combat", () => {
     const { player, state } = joinPlayer(sim);
     sim.timeOfDay = 18000;
     const zombie = spawnZombieNear(sim, state, 2);
-    state.inventory[0] = { item: "iron_sword", count: 1 };
+    state.inventory[0] = { item: "flatcraft:item:iron_sword", count: 1 };
 
     let diedEvents = 0;
     let sawDiedBeforeRemoved = false;
@@ -167,13 +167,13 @@ describe("combat", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
     const out: OutboundEvent[] = [];
-    sim.spawnItem("overworld", state.x, state.y - 1, { item: "coal", count: 1 }, out);
+    sim.spawnItem("flatcraft:dimension:overworld", state.x, state.y - 1, { item: "flatcraft:item:coal", count: 1 }, out);
     const events = settle(sim, 40); // picked up well within this window
     expect(events.some((o) => o.event.type === "entity_died")).toBe(false);
 
     // Shoot straight up into open sky: no target, expires via TTL.
-    state.inventory[1] = { item: "bow", count: 1 };
-    state.inventory[2] = { item: "arrow", count: 1 };
+    state.inventory[1] = { item: "flatcraft:item:bow", count: 1 };
+    state.inventory[2] = { item: "flatcraft:item:arrow", count: 1 };
     sim.tick([{ player, command: { type: "select_slot", index: 1 } }]);
     sim.tick([{ player, command: { type: "shoot", dx: 0, dy: -1 } }]);
     const arrowEvents = settle(sim, 150); // longer than ARROW_TTL
@@ -187,9 +187,9 @@ describe("entity determinism and spawning", () => {
       const sim = new Simulation(SEED);
       const { player, state } = joinPlayer(sim);
       const out: OutboundEvent[] = [];
-      sim.spawnMob("zombie", state.x + 8, state.y, out);
-      sim.spawnMob("pig", state.x - 5, state.y, out);
-      sim.spawnItem("overworld", state.x + 3, state.y - 2, { item: "coal", count: 1 }, out);
+      sim.spawnMob("flatcraft:mob:zombie", state.x + 8, state.y, out);
+      sim.spawnMob("flatcraft:mob:pig", state.x - 5, state.y, out);
+      sim.spawnItem("flatcraft:dimension:overworld", state.x + 3, state.y - 2, { item: "flatcraft:item:coal", count: 1 }, out);
       for (let i = 0; i < 100; i++) {
         sim.tick(i === 50 ? [{ player, command: { type: "move", dx: 1, jump: false } }] : []);
       }
@@ -211,11 +211,11 @@ describe("id allocation", () => {
     const sim = new Simulation(SEED);
     const out: OutboundEvent[] = [];
     // A mob spawned before anyone joins...
-    const early = sim.spawnMob("pig", 0, 0, out);
+    const early = sim.spawnMob("flatcraft:mob:pig", 0, 0, out);
     const { player, state } = joinPlayer(sim);
     // ...and one spawned after both draw from the same allocator.
-    const late = sim.spawnMob("pig", state.x + 5, state.y, out);
-    const item = sim.spawnItem("overworld", state.x - 5, state.y, { item: "coal", count: 1 }, out);
+    const late = sim.spawnMob("flatcraft:mob:pig", state.x + 5, state.y, out);
+    const item = sim.spawnItem("flatcraft:dimension:overworld", state.x - 5, state.y, { item: "flatcraft:item:coal", count: 1 }, out);
 
     const ids = [early.id, late.id, item.id, player];
     expect(new Set(ids).size).toBe(ids.length); // all pairwise distinct

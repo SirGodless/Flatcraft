@@ -1,11 +1,11 @@
 {
-  "id": "stone",
+  "id": "flatcraft:item:stone",
   "name": "Stone",
-  "places_block": "stone",
+  "places_block": "flatcraft:block:stone",
   "recipes": [
     {
       "station": "furnace",
-      "input": "item:cobblestone",
+      "input": "item:flatcraft:item:cobblestone",
       "cooking_ticks": 200
     }
   ]

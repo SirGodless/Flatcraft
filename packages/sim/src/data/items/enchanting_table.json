@@ -1,7 +1,7 @@
 {
-  "id": "enchanting_table",
+  "id": "flatcraft:item:enchanting_table",
   "name": "Enchanting Table",
-  "places_block": "enchanting_table",
+  "places_block": "flatcraft:block:enchanting_table",
   "recipes": [
     {
       "station": "crafting_table",
@@ -12,9 +12,9 @@
         "ccc"
       ],
       "key": {
-        "a": "item:glass",
-        "b": "item:diamond",
-        "c": "item:obsidian"
+        "a": "item:flatcraft:item:glass",
+        "b": "item:flatcraft:item:diamond",
+        "c": "item:flatcraft:item:obsidian"
       }
     }
   ]

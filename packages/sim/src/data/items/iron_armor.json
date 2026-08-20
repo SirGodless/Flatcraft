@@ -1,5 +1,5 @@
 {
-  "id": "iron_armor",
+  "id": "flatcraft:item:iron_armor",
   "name": "Iron Armor",
   "max_stack": 1,
   "armor": {
@@ -15,7 +15,7 @@
         "aaa"
       ],
       "key": {
-        "a": "item:iron_ingot"
+        "a": "item:flatcraft:item:iron_ingot"
       }
     }
   ],

@@ -1,5 +1,5 @@
 {
-  "id": "dirt",
+  "id": "flatcraft:block:dirt",
   "name": "Dirt",
   "solid": true,
   "hardness": 10,

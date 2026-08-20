@@ -1,7 +1,7 @@
 {
-  "id": "oak_fence",
+  "id": "flatcraft:item:oak_fence",
   "name": "Oak Fence",
-  "places_block": "oak_fence",
+  "places_block": "flatcraft:block:oak_fence",
   "recipes": [
     {
       "station": "crafting_table",
@@ -11,8 +11,8 @@
         "aba"
       ],
       "key": {
-        "a": "item:oak_planks",
-        "b": "item:stick"
+        "a": "item:flatcraft:item:oak_planks",
+        "b": "item:flatcraft:item:stick"
       },
       "amount": 3
     }

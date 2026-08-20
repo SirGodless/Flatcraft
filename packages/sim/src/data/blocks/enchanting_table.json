@@ -1,5 +1,5 @@
 {
-  "id": "enchanting_table",
+  "id": "flatcraft:block:enchanting_table",
   "name": "Enchanting Table",
   "solid": true,
   "hardness": 40,

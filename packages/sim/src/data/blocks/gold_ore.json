@@ -1,5 +1,5 @@
 {
-  "id": "gold_ore",
+  "id": "flatcraft:block:gold_ore",
   "name": "Gold Ore",
   "solid": true,
   "hardness": 40,

@@ -276,14 +276,52 @@ export function needId(source: string, path: string, value: unknown): string {
   return s;
 }
 
-/** "item:stick" or "tag:planks", namespace prefix optional. */
+/** Every content instance/handler id is "<package>:<type>:<name>" - e.g.
+ * "flatcraft:block:stone", "flatcraft:dimension_generator:overworld".
+ * Distinct from ID_PATTERN/needId, which stay bare-snake_case for the
+ * handful of identifiers that are deliberately NOT one of the 13
+ * namespaced content types (a type declaration's own id like "block",
+ * a block's `station` key, an item's potion-effect `effect.id`). */
+export const QUALIFIED_ID_PATTERN = /^[a-z0-9_]+:[a-z0-9_]+:[a-z0-9_]+$/;
+
+export function needQualifiedId(source: string, path: string, value: unknown): string {
+  const s = need<string>(source, path, value, "string");
+  if (!QUALIFIED_ID_PATTERN.test(s)) {
+    throw new SchemaError(source, `"${path}" must be a fully-qualified "package:type:name" id, got "${s}"`);
+  }
+  return s;
+}
+
+/** The bare `<name>` segment of a "<package>:<type>:<name>" qualified id
+ * (e.g. "flatcraft:item:bow" -> "bow") - for purposes that predate
+ * namespacing and were never meant to carry it: default sprite paths
+ * (sprites/item/bow.png, not sprites/item/flatcraft:item:bow.png) and
+ * prettified display-name fallbacks (pretty("bow"), not
+ * pretty("flatcraft:item:bow")). Two different mods' same-named items
+ * would collide under this convention - an acceptable v1 limitation,
+ * not something this rename stage tries to solve. */
+export function localName(qualifiedId: string): string {
+  const i = qualifiedId.lastIndexOf(":");
+  return i === -1 ? qualifiedId : qualifiedId.slice(i + 1);
+}
+
+/** "item:flatcraft:item:stick" or "tag:planks". Distinguished by the
+ * fixed "item:"/"tag:" prefix rather than by splitting on every colon -
+ * a qualified item id has colons of its own, so this only ever consumes
+ * the first one. Tags aren't one of the 13 namespaced content types
+ * (just a recipe-authoring grouping, see data/tags.ts), so they stay a
+ * bare name. */
 function needIngredientRef(source: string, path: string, value: unknown): string {
   const s = need<string>(source, path, value, "string");
-  const cleaned = s.replace(/^flatcraft:/, "");
-  if (!/^(item|tag):[a-z0-9_]+$/.test(cleaned)) {
-    throw new SchemaError(source, `"${path}" must look like "item:stick" or "tag:planks", got "${s}"`);
+  if (s.startsWith("item:")) {
+    needQualifiedId(source, path, s.slice("item:".length));
+    return s;
   }
-  return cleaned;
+  if (s.startsWith("tag:")) {
+    needId(source, path, s.slice("tag:".length));
+    return s;
+  }
+  throw new SchemaError(source, `"${path}" must look like "item:<qualified-id>" or "tag:<name>", got "${s}"`);
 }
 
 function validateAnimationClipJson(raw: unknown, source: string, path: string): AnimationClipJson {

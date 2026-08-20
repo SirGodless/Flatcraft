@@ -5,11 +5,12 @@ import { Chunk, chunkKey, decodeChunk, encodeRuns } from "./chunk.js";
 import { generateDimensionChunk } from "./dimension.js";
 
 /**
- * A registered dimension id (see dimension.ts) - "overworld" and
- * "nether" are just the two the engine ships with, registered the same
- * way a mod's own dimension would be. Not a closed union: a World can
- * be constructed for any id that's been registered with
- * registerDimension before that World is used.
+ * A registered dimension id (see dimension.ts) - "flatcraft:dimension:
+ * overworld" and "flatcraft:dimension:nether" are just the two the
+ * engine ships with, registered the same way a mod's own dimension
+ * would be. Not a closed union: a World can be constructed for any id
+ * that's been registered with registerDimension before that World is
+ * used.
  */
 export type Dimension = string;
 
@@ -36,7 +37,7 @@ export class World {
    * whatever tick it was last told about. */
   private currentTick = 0;
 
-  constructor(seed: number, dimension: Dimension = "overworld") {
+  constructor(seed: number, dimension: Dimension = "flatcraft:dimension:overworld") {
     this.seed = seed;
     this.dimension = dimension;
   }

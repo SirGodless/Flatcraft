@@ -62,7 +62,7 @@ function overworldSpawns(ctx: SpawnContext): void {
     }
     if (world.getBlockGenerating(x, surface) !== BlockId.Grass) return;
     const biome = biomeAt(world.seed, x);
-    if (biome !== "plains" && biome !== "forest") return;
+    if (biome !== "flatcraft:biome:plains" && biome !== "flatcraft:biome:forest") return;
     sim.spawnMob(pickMob(spawnPool("grass_day")), x + 0.5, surface, out, anchor.dimension);
   } else {
     const yStart = surface + 6 + Math.floor(sim.rng() * 40);
@@ -76,5 +76,5 @@ function netherSpawns(ctx: SpawnContext): void {
   spawnInPocket(yStart, yStart + 16, pickMob(spawnPool("nether_pocket")));
 }
 
-registerSpawnGenerator("flatcraft:overworld_spawns", overworldSpawns);
-registerSpawnGenerator("flatcraft:nether_spawns", netherSpawns);
+registerSpawnGenerator("flatcraft:spawn_generator:overworld_spawns", overworldSpawns);
+registerSpawnGenerator("flatcraft:spawn_generator:nether_spawns", netherSpawns);

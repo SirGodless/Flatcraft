@@ -1,5 +1,5 @@
 {
-  "id": "wooden_shield",
+  "id": "flatcraft:item:wooden_shield",
   "name": "Wooden Shield",
   "max_stack": 1,
   "shield": {

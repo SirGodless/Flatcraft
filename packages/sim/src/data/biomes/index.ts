@@ -13,10 +13,10 @@ import mountains from "./mountains.json";
  * that's a new dimension generator instead, see world/dimension.ts).
  */
 const sources: Record<string, BiomeJson> = {
-  desert,
-  plains,
-  forest,
-  mountains,
+  "flatcraft:biome:desert": desert,
+  "flatcraft:biome:plains": plains,
+  "flatcraft:biome:forest": forest,
+  "flatcraft:biome:mountains": mountains,
 };
 
 for (const [id, json] of Object.entries(sources)) {

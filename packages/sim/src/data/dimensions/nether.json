@@ -1,9 +1,17 @@
 {
-  "id": "nether",
-  "generator": "flatcraft:nether",
-  "spawns": "flatcraft:nether_spawns",
-  "arrival": "flatcraft:nether_arrival",
+  "id": "flatcraft:dimension:nether",
+  "generator": "flatcraft:dimension_generator:nether",
+  "spawns": "flatcraft:spawn_generator:nether_spawns",
+  "arrival": "flatcraft:arrival_generator:nether_arrival",
   "has_sky": false,
-  "portal": { "to": "overworld", "scale": 8 },
-  "sky": { "type": "fixed", "background": "#2a0f0f", "veil_color": "#160606", "veil_alpha": 0.25 }
+  "portal": {
+    "to": "flatcraft:dimension:overworld",
+    "scale": 8
+  },
+  "sky": {
+    "type": "fixed",
+    "background": "#2a0f0f",
+    "veil_color": "#160606",
+    "veil_alpha": 0.25
+  }
 }

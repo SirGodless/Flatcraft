@@ -1,5 +1,5 @@
 {
-  "id": "soul_sand",
+  "id": "flatcraft:item:soul_sand",
   "name": "Soul Sand",
-  "places_block": "soul_sand"
+  "places_block": "flatcraft:block:soul_sand"
 }

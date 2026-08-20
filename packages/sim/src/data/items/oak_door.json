@@ -1,7 +1,7 @@
 {
-  "id": "oak_door",
+  "id": "flatcraft:item:oak_door",
   "name": "Oak Door",
-  "places_block": "oak_door",
+  "places_block": "flatcraft:block:oak_door",
   "recipes": [
     {
       "station": "crafting_table",
@@ -12,7 +12,7 @@
         "aa"
       ],
       "key": {
-        "a": "item:oak_planks"
+        "a": "item:flatcraft:item:oak_planks"
       },
       "amount": 3
     }

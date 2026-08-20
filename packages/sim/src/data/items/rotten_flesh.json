@@ -1,5 +1,5 @@
 {
-  "id": "rotten_flesh",
+  "id": "flatcraft:item:rotten_flesh",
   "name": "Rotten Flesh",
   "food": {
     "hunger": 2,

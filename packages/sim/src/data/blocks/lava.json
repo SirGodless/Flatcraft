@@ -1,5 +1,5 @@
 {
-  "id": "lava",
+  "id": "flatcraft:block:lava",
   "name": "Lava",
   "solid": false,
   "hardness": -1,

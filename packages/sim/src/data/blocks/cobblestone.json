@@ -1,5 +1,5 @@
 {
-  "id": "cobblestone",
+  "id": "flatcraft:block:cobblestone",
   "name": "Cobblestone",
   "solid": true,
   "hardness": 32,

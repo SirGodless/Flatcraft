@@ -21,15 +21,15 @@ function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerEntity } 
 
 describe("hunger", () => {
   it("food items and cooking recipes are defined", () => {
-    expect(itemDef("beef")?.food?.hunger).toBe(3);
-    expect(itemDef("cooked_beef")?.food?.hunger).toBe(8);
-    expect(itemDef("cooked_porkchop")?.food?.hunger).toBe(8);
-    expect(itemDef("cooked_chicken")?.food?.hunger).toBe(6);
+    expect(itemDef("flatcraft:item:beef")?.food?.hunger).toBe(3);
+    expect(itemDef("flatcraft:item:cooked_beef")?.food?.hunger).toBe(8);
+    expect(itemDef("flatcraft:item:cooked_porkchop")?.food?.hunger).toBe(8);
+    expect(itemDef("flatcraft:item:cooked_chicken")?.food?.hunger).toBe(6);
     // Cooked food also carries saturation (buffers hunger drain).
-    expect(itemDef("cooked_beef")?.food?.saturation).toBe(8);
-    expect(RECIPES.get("cooked_beef")?.kind).toBe("smelting");
-    expect(RECIPES.get("cooked_porkchop")?.kind).toBe("smelting");
-    expect(RECIPES.get("cooked_chicken")?.kind).toBe("smelting");
+    expect(itemDef("flatcraft:item:cooked_beef")?.food?.saturation).toBe(8);
+    expect(RECIPES.get("flatcraft:item:cooked_beef")?.kind).toBe("smelting");
+    expect(RECIPES.get("flatcraft:item:cooked_porkchop")?.kind).toBe("smelting");
+    expect(RECIPES.get("flatcraft:item:cooked_chicken")?.kind).toBe("smelting");
   });
 
   it("eating takes eat_ticks, then restores hunger and consumes the food", () => {
@@ -37,26 +37,26 @@ describe("hunger", () => {
     const { player, state } = joinPlayer(sim);
     state.hunger = 5;
     state.saturation = 0;
-    state.inventory[0] = { item: "cooked_beef", count: 2 };
+    state.inventory[0] = { item: "flatcraft:item:cooked_beef", count: 2 };
     sim.tick([{ player, command: { type: "use_item" } }]);
     // Still chewing: nothing consumed yet.
-    expect(countInInventory(state.inventory, "cooked_beef")).toBe(2);
-    for (let i = 0; i < itemDef("cooked_beef")!.food!.eatTicks + 2; i++) sim.tick([]);
+    expect(countInInventory(state.inventory, "flatcraft:item:cooked_beef")).toBe(2);
+    for (let i = 0; i < itemDef("flatcraft:item:cooked_beef")!.food!.eatTicks + 2; i++) sim.tick([]);
     expect(state.hunger).toBe(13);
     expect(state.saturation).toBeGreaterThan(0);
-    expect(countInInventory(state.inventory, "cooked_beef")).toBe(1);
+    expect(countInInventory(state.inventory, "flatcraft:item:cooked_beef")).toBe(1);
   });
 
   it("rejects eating on a full bar", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
-    state.inventory[0] = { item: "beef", count: 1 };
+    state.inventory[0] = { item: "flatcraft:item:beef", count: 1 };
     const out = sim.tick([{ player, command: { type: "use_item" } }]);
     expect(out).toContainEqual({
       to: player,
       event: { type: "command_rejected", player, reason: "not hungry" },
     });
-    expect(countInInventory(state.inventory, "beef")).toBe(1);
+    expect(countInInventory(state.inventory, "flatcraft:item:beef")).toBe(1);
   });
 
   it("walking and jumping drain the bar over time (saturation first)", () => {

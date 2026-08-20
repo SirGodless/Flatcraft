@@ -11,7 +11,7 @@ import netherPortal from "./nether_portal.json";
  * built-in content uses "flatcraft:".
  */
 const sources: Record<string, MultiblockJson> = {
-  "flatcraft:nether_portal": netherPortal,
+  "flatcraft:multiblock:nether_portal": netherPortal,
 };
 
 for (const [id, json] of Object.entries(sources)) {

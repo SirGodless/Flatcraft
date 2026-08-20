@@ -55,17 +55,17 @@ describe("facing and held-item sync", () => {
   it("broadcasts when the selected hotbar item changes", () => {
     const sim = new Simulation(1337);
     const { player, state } = joinPlayer(sim);
-    state.inventory[0] = { item: "stick", count: 1 };
-    state.inventory[1] = { item: "coal", count: 1 };
+    state.inventory[0] = { item: "flatcraft:item:stick", count: 1 };
+    state.inventory[1] = { item: "flatcraft:item:coal", count: 1 };
 
     let out = sim.tick([{ player, command: { type: "select_slot", index: 0 } }]);
     expect(out).toContainEqual({
-      event: { type: "player_gear", player, facing: "right", main: "stick", off: null },
+      event: { type: "player_gear", player, facing: "right", main: "flatcraft:item:stick", off: null },
     });
 
     out = sim.tick([{ player, command: { type: "select_slot", index: 1 } }]);
     expect(out).toContainEqual({
-      event: { type: "player_gear", player, facing: "right", main: "coal", off: null },
+      event: { type: "player_gear", player, facing: "right", main: "flatcraft:item:coal", off: null },
     });
 
     // Selecting the same slot again is a no-op, no re-broadcast.
@@ -76,19 +76,19 @@ describe("facing and held-item sync", () => {
   it("broadcasts when the offhand changes, via any mutation path", () => {
     const sim = new Simulation(1337);
     const { player, state } = joinPlayer(sim);
-    state.cursor = { item: "wooden_shield", count: 1 };
+    state.cursor = { item: "flatcraft:item:wooden_shield", count: 1 };
     const out = sim.tick([
       { player, command: { type: "slot_click", slot: { container: "offhand" }, button: "left" } },
     ]);
     expect(out).toContainEqual({
-      event: { type: "player_gear", player, facing: "right", main: null, off: "wooden_shield" },
+      event: { type: "player_gear", player, facing: "right", main: null, off: "flatcraft:item:wooden_shield" },
     });
   });
 
   it("replays current facing and held items to a joining player", () => {
     const sim = new Simulation(1337);
     const { player: first, state } = joinPlayer(sim);
-    state.inventory[0] = { item: "stick", count: 1 };
+    state.inventory[0] = { item: "flatcraft:item:stick", count: 1 };
     sim.tick([{ player: first, command: { type: "select_slot", index: 0 } }]);
     sim.tick([{ player: first, command: { type: "move", dx: -1, jump: false } }]);
 
@@ -97,7 +97,7 @@ describe("facing and held-item sync", () => {
     const replay = out.find((o) => o.event.type === "player_joined" && o.event.player === first);
     expect(replay?.event.type === "player_joined" && replay.event).toMatchObject({
       facing: "left",
-      main: "stick",
+      main: "flatcraft:item:stick",
       off: null,
     });
   });

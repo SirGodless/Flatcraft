@@ -1,5 +1,5 @@
 {
-  "id": "oak_leaves",
+  "id": "flatcraft:block:oak_leaves",
   "name": "Oak Leaves",
   "solid": false,
   "hardness": 3,

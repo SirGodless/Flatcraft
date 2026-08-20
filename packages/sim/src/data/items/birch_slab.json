@@ -1,7 +1,7 @@
 {
-  "id": "birch_slab",
+  "id": "flatcraft:item:birch_slab",
   "name": "Birch Slab",
-  "places_block": "birch_slab",
+  "places_block": "flatcraft:block:birch_slab",
   "recipes": [
     {
       "station": "crafting_table",
@@ -10,7 +10,7 @@
         "aaa"
       ],
       "key": {
-        "a": "item:birch_planks"
+        "a": "item:flatcraft:item:birch_planks"
       },
       "amount": 6
     }

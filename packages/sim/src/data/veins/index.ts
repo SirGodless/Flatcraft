@@ -20,17 +20,17 @@ import emeraldOre from "./emerald_ore.json";
  * data/biomes/mountains.json's emerald_ore).
  */
 const sources: Record<string, VeinJson> = {
-  obsidian,
-  clay,
-  gravel,
-  coal_ore: coalOre,
-  copper_ore: copperOre,
-  iron_ore: ironOre,
-  lapis_ore: lapisOre,
-  gold_ore: goldOre,
-  redstone_ore: redstoneOre,
-  diamond_ore: diamondOre,
-  emerald_ore: emeraldOre,
+  "flatcraft:vein:obsidian": obsidian,
+  "flatcraft:vein:clay": clay,
+  "flatcraft:vein:gravel": gravel,
+  "flatcraft:vein:coal_ore": coalOre,
+  "flatcraft:vein:copper_ore": copperOre,
+  "flatcraft:vein:iron_ore": ironOre,
+  "flatcraft:vein:lapis_ore": lapisOre,
+  "flatcraft:vein:gold_ore": goldOre,
+  "flatcraft:vein:redstone_ore": redstoneOre,
+  "flatcraft:vein:diamond_ore": diamondOre,
+  "flatcraft:vein:emerald_ore": emeraldOre,
 };
 
 for (const [id, json] of Object.entries(sources)) {
@@ -43,14 +43,14 @@ for (const [id, json] of Object.entries(sources)) {
  * so it must stay exactly this order for existing worlds to keep
  * generating identically. */
 export const GLOBAL_VEIN_IDS: readonly string[] = [
-  "obsidian",
-  "clay",
-  "gravel",
-  "coal_ore",
-  "copper_ore",
-  "iron_ore",
-  "lapis_ore",
-  "gold_ore",
-  "redstone_ore",
-  "diamond_ore",
+  "flatcraft:vein:obsidian",
+  "flatcraft:vein:clay",
+  "flatcraft:vein:gravel",
+  "flatcraft:vein:coal_ore",
+  "flatcraft:vein:copper_ore",
+  "flatcraft:vein:iron_ore",
+  "flatcraft:vein:lapis_ore",
+  "flatcraft:vein:gold_ore",
+  "flatcraft:vein:redstone_ore",
+  "flatcraft:vein:diamond_ore",
 ];

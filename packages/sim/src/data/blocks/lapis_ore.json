@@ -1,12 +1,12 @@
 {
-  "id": "lapis_ore",
+  "id": "flatcraft:block:lapis_ore",
   "name": "Lapis Ore",
   "solid": true,
   "hardness": 40,
   "tool": "pickaxe",
   "required_tier": 2,
   "drops": {
-    "item": "lapis_lazuli",
+    "item": "flatcraft:item:lapis_lazuli",
     "amount": 6
   },
   "visual": {

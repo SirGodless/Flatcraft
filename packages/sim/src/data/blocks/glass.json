@@ -1,5 +1,5 @@
 {
-  "id": "glass",
+  "id": "flatcraft:block:glass",
   "name": "Glass",
   "solid": true,
   "hardness": 5,

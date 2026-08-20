@@ -25,19 +25,28 @@ const SEED = 1337;
  * `item` must be a real, registered item id - trigger_on is validated
  * against the item registry at parse time, same as any other datapack
  * reference in this codebase. */
-function registerTestMultiblock(id: string, item: string, failReason = "incomplete structure"): void {
+function multiblockId(shortId: string): string {
+  return `flatcraft:multiblock:${shortId}`;
+}
+
+function handlerId(shortId: string): string {
+  return `flatcraft:multiblock_handler:${shortId}`;
+}
+
+function registerTestMultiblock(shortId: string, item: string, failReason = "incomplete structure"): void {
+  const id = multiblockId(shortId);
   registerMultiblock(
     parseMultiblock(id, {
       id,
-      handler: id,
+      handler: handlerId(shortId),
       trigger_on: { type: "place_block", item },
       fail_reason: failReason,
       states: {
         on: {
           pattern: ["SDS"],
           key: {
-            S: { block: "stone", trigger: true },
-            D: { block: "dirt" },
+            S: { block: "flatcraft:block:stone", trigger: true },
+            D: { block: "flatcraft:block:dirt" },
           },
         },
       },
@@ -47,27 +56,27 @@ function registerTestMultiblock(id: string, item: string, failReason = "incomple
 
 describe("multiblock pattern matching", () => {
   it("matches a fixed pattern placed entirely within one chunk", () => {
-    registerTestMultiblock("test_simple_1", "coal");
+    registerTestMultiblock("test_simple_1", "flatcraft:item:coal");
     const world = new World(SEED);
     world.ensureChunk(0, 0);
     world.setBlock(5, 5, BlockId.Stone);
     world.setBlock(6, 5, BlockId.Dirt);
     world.setBlock(7, 5, BlockId.Stone);
 
-    const def = multiblockDef("test_simple_1")!;
+    const def = multiblockDef(multiblockId("test_simple_1"))!;
     const match = matchMultiblock(world, def, 5, 5); // clicked the left trigger cell
-    expect(match).toMatchObject({ defId: "test_simple_1", state: "on", originX: 5, originY: 5 });
+    expect(match).toMatchObject({ defId: multiblockId("test_simple_1"), state: "on", originX: 5, originY: 5 });
   });
 
   it("matches from either trigger cell, not just one fixed anchor", () => {
-    registerTestMultiblock("test_simple_2", "bone");
+    registerTestMultiblock("test_simple_2", "flatcraft:item:bone");
     const world = new World(SEED);
     world.ensureChunk(0, 0);
     world.setBlock(10, 10, BlockId.Stone);
     world.setBlock(11, 10, BlockId.Dirt);
     world.setBlock(12, 10, BlockId.Stone);
 
-    const def = multiblockDef("test_simple_2")!;
+    const def = multiblockDef(multiblockId("test_simple_2"))!;
     // Both S cells are marked trigger:true - clicking the right one
     // should resolve to the exact same structure origin.
     expect(matchMultiblock(world, def, 10, 10)).toMatchObject({ originX: 10, originY: 10 });
@@ -75,19 +84,19 @@ describe("multiblock pattern matching", () => {
   });
 
   it("does not match an incomplete structure", () => {
-    registerTestMultiblock("test_incomplete", "clay");
+    registerTestMultiblock("test_incomplete", "flatcraft:item:clay");
     const world = new World(SEED);
     world.ensureChunk(0, 0);
     world.setBlock(5, 5, BlockId.Stone);
     world.setBlock(6, 5, BlockId.Air); // missing the dirt
     world.setBlock(7, 5, BlockId.Stone);
 
-    const def = multiblockDef("test_incomplete")!;
+    const def = multiblockDef(multiblockId("test_incomplete"))!;
     expect(matchMultiblock(world, def, 5, 5)).toBeNull();
   });
 
   it("matches correctly when the pattern straddles a chunk boundary, loading both chunks on demand", () => {
-    registerTestMultiblock("test_boundary", "beef");
+    registerTestMultiblock("test_boundary", "flatcraft:item:beef");
     const world = new World(SEED);
     // Place the pattern at x = CHUNK_WIDTH-1 .. CHUNK_WIDTH+1, straddling
     // the boundary between chunk 0 and chunk 1. Ensure only the first
@@ -112,17 +121,17 @@ describe("multiblock pattern matching", () => {
     worldB.setBlock(x0 + 1, 3, BlockId.Dirt);
     worldB.setBlock(x0 + 2, 3, BlockId.Stone);
 
-    const def = multiblockDef("test_boundary")!;
+    const def = multiblockDef(multiblockId("test_boundary"))!;
     const match = matchMultiblock(worldB, def, x0, 3);
     expect(match).toMatchObject({ originX: x0, originY: 3 });
   });
 
   it("tryActivateMultiblock calls the registered handler and reports activation", () => {
     const id = "test_activate";
-    const item = "chest";
+    const item = "flatcraft:item:chest";
     registerTestMultiblock(id, item);
     let activated: MultiblockActivateContext | null = null;
-    registerMultiblockHandler(id, {
+    registerMultiblockHandler(handlerId(id), {
       activate(ctx) {
         activated = ctx;
         return true;
@@ -139,7 +148,7 @@ describe("multiblock pattern matching", () => {
       5,
       5,
       { type: "place_block", item },
-      { dimension: "overworld", sim: null as never, broadcast: () => {} },
+      { dimension: "flatcraft:dimension:overworld", sim: null as never, broadcast: () => {} },
     );
     expect(result).toEqual({ activated: true });
     expect(activated).not.toBeNull();
@@ -148,9 +157,9 @@ describe("multiblock pattern matching", () => {
 
   it("tryActivateMultiblock reports the def's fail_reason when the trigger matches but the shape doesn't", () => {
     const id = "test_fail_reason";
-    const item = "backpack";
+    const item = "flatcraft:item:backpack";
     registerTestMultiblock(id, item, "custom failure message");
-    registerMultiblockHandler(id, { activate: () => true });
+    registerMultiblockHandler(handlerId(id), { activate: () => true });
     const world = new World(SEED);
     world.ensureChunk(0, 0);
     // No blocks placed at all - pattern can't match.
@@ -160,7 +169,7 @@ describe("multiblock pattern matching", () => {
       5,
       5,
       { type: "place_block", item },
-      { dimension: "overworld", sim: null as never, broadcast: () => {} },
+      { dimension: "flatcraft:dimension:overworld", sim: null as never, broadcast: () => {} },
     );
     expect(result).toEqual({ activated: false, attempted: true, failReason: "custom failure message" });
   });
@@ -173,13 +182,13 @@ describe("multiblock pattern matching", () => {
       5,
       5,
       { type: "place_block", item: "torch" },
-      { dimension: "overworld", sim: null as never, broadcast: () => {} },
+      { dimension: "flatcraft:dimension:overworld", sim: null as never, broadcast: () => {} },
     );
     expect(result).toEqual({ activated: false, attempted: false });
   });
 
   it("skips a def whose handler id was never registered, instead of crashing", () => {
-    const item = "ancient_debris";
+    const item = "flatcraft:item:ancient_debris";
     registerTestMultiblock("test_no_handler", item);
     const world = new World(SEED);
     world.ensureChunk(0, 0);
@@ -192,14 +201,14 @@ describe("multiblock pattern matching", () => {
         5,
         5,
         { type: "place_block", item },
-        { dimension: "overworld", sim: null as never, broadcast: () => {} },
+        { dimension: "flatcraft:dimension:overworld", sim: null as never, broadcast: () => {} },
       ),
     ).not.toThrow();
   });
 
   it("rejects registering a multiblock id that's already taken, instead of silently overwriting it", () => {
-    registerTestMultiblock("test_dupe_def", "cobblestone");
-    expect(() => registerTestMultiblock("test_dupe_def", "basalt")).toThrow(/already registered/);
+    registerTestMultiblock("test_dupe_def", "flatcraft:item:cobblestone");
+    expect(() => registerTestMultiblock("test_dupe_def", "flatcraft:item:basalt")).toThrow(/already registered/);
   });
 
   it("rejects registering a handler id that's already taken, instead of silently overwriting it", () => {

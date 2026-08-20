@@ -1,14 +1,14 @@
 {
-  "id": "spruce_trapdoor_open",
+  "id": "flatcraft:block:spruce_trapdoor_open",
   "name": "Spruce Trapdoor Open",
   "solid": false,
   "hardness": 26,
   "tool": "axe",
   "drops": {
-    "item": "spruce_trapdoor",
+    "item": "flatcraft:item:spruce_trapdoor",
     "amount": 1
   },
-  "toggle_to": "spruce_trapdoor",
+  "toggle_to": "flatcraft:block:spruce_trapdoor",
   "visual": {
     "fallback": {
       "base": [

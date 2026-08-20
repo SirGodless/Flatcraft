@@ -34,39 +34,39 @@ describe("chests", () => {
 
   it("stores and returns items via cursor clicks", () => {
     const { sim, player, state, cx, cy } = chestSetup();
-    state.cursor = { item: "diamond", count: 5 };
+    state.cursor = { item: "flatcraft:item:diamond", count: 5 };
     sim.tick([
       { player, command: { type: "slot_click", slot: { container: "chest", x: cx, y: cy, index: 3 }, button: "left" } },
     ]);
     expect(state.cursor).toBeNull();
-    expect(sim.chests.values().next().value!.slots[3]).toEqual({ item: "diamond", count: 5 });
+    expect(sim.chests.values().next().value!.slots[3]).toEqual({ item: "flatcraft:item:diamond", count: 5 });
 
     // Take half back with a right click.
     sim.tick([
       { player, command: { type: "slot_click", slot: { container: "chest", x: cx, y: cy, index: 3 }, button: "right" } },
     ]);
-    expect(state.cursor).toEqual({ item: "diamond", count: 3 });
+    expect(state.cursor).toEqual({ item: "flatcraft:item:diamond", count: 3 });
   });
 
   it("open_chest replies with contents and breaking spills them", () => {
     const { sim, player, state, cx, cy } = chestSetup();
-    state.cursor = { item: "coal", count: 7 };
+    state.cursor = { item: "flatcraft:item:coal", count: 7 };
     sim.tick([
       { player, command: { type: "slot_click", slot: { container: "chest", x: cx, y: cy, index: 0 }, button: "left" } },
     ]);
     const opened = sim.tick([{ player, command: { type: "open_chest", x: cx, y: cy } }]);
     const event = opened.find((o) => o.event.type === "chest_changed");
-    expect(event?.event.type === "chest_changed" && event.event.slots[0]).toEqual({ item: "coal", count: 7 });
+    expect(event?.event.type === "chest_changed" && event.event.slots[0]).toEqual({ item: "flatcraft:item:coal", count: 7 });
 
     // Break the chest: contents + the chest itself drop as item entities.
-    state.inventory[0] = { item: "iron_axe", count: 1 };
+    state.inventory[0] = { item: "flatcraft:item:iron_axe", count: 1 };
     sim.tick([{ player, command: { type: "start_mining", x: cx, y: cy } }]);
     for (let i = 0; i < 20 && sim.world.getBlock(cx, cy) !== BlockId.Air; i++) sim.tick([]);
     expect(sim.chests.size).toBe(0);
     state.x = cx + 0.5; // step under the spilled items
     for (let i = 0; i < 40; i++) sim.tick([]);
-    expect(countInInventory(state.inventory, "coal")).toBe(7);
-    expect(countInInventory(state.inventory, "chest")).toBe(1);
+    expect(countInInventory(state.inventory, "flatcraft:item:coal")).toBe(7);
+    expect(countInInventory(state.inventory, "flatcraft:item:chest")).toBe(1);
   });
 
   it("rejects chest clicks out of reach or on missing chests", () => {
@@ -85,13 +85,13 @@ describe("backpacks", () => {
   it("stores items inside the held backpack stack", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
-    state.inventory[0] = { item: "backpack", count: 1 };
-    state.cursor = { item: "coal", count: 9 };
+    state.inventory[0] = { item: "flatcraft:item:backpack", count: 1 };
+    state.cursor = { item: "flatcraft:item:coal", count: 9 };
     sim.tick([
       { player, command: { type: "slot_click", slot: { container: "backpack", index: 2 }, button: "left" } },
     ]);
     expect(state.cursor).toBeNull();
-    expect(state.inventory[0]?.data?.slots?.[2]).toEqual({ item: "coal", count: 9 });
+    expect(state.inventory[0]?.data?.slots?.[2]).toEqual({ item: "flatcraft:item:coal", count: 9 });
   });
 
   it("rejects backpack clicks without one in hand and forbids nesting", () => {
@@ -105,8 +105,8 @@ describe("backpacks", () => {
       event: { type: "command_rejected", player, reason: "no container in hand" },
     });
 
-    state.inventory[0] = { item: "backpack", count: 1 };
-    state.cursor = { item: "backpack", count: 1 };
+    state.inventory[0] = { item: "flatcraft:item:backpack", count: 1 };
+    state.cursor = { item: "flatcraft:item:backpack", count: 1 };
     const nested = sim.tick([
       { player, command: { type: "slot_click", slot: { container: "backpack", index: 0 }, button: "left" } },
     ]);
@@ -119,8 +119,8 @@ describe("backpacks", () => {
   it("backpack contents survive save/load", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
-    state.inventory[0] = { item: "backpack", count: 1 };
-    state.cursor = { item: "diamond", count: 3 };
+    state.inventory[0] = { item: "flatcraft:item:backpack", count: 1 };
+    state.cursor = { item: "flatcraft:item:diamond", count: 3 };
     sim.tick([
       { player, command: { type: "slot_click", slot: { container: "backpack", index: 8 }, button: "left" } },
     ]);
@@ -129,7 +129,7 @@ describe("backpacks", () => {
     const rejoinId = restored.allocatePlayerId();
     restored.tick([{ player: rejoinId, command: { type: "join", name: "T" } }]);
     const rejoined = restored.players.get(rejoinId)!;
-    expect(rejoined.inventory[0]?.data?.slots?.[8]).toEqual({ item: "diamond", count: 3 });
+    expect(rejoined.inventory[0]?.data?.slots?.[8]).toEqual({ item: "flatcraft:item:diamond", count: 3 });
   });
 
   it("chest contents survive save/load", () => {
@@ -138,14 +138,14 @@ describe("backpacks", () => {
     const cx = Math.floor(state.x) + 2;
     const cy = Math.floor(state.y) - 1;
     setBlock(sim, cx, cy, BlockId.Chest);
-    state.cursor = { item: "glowstone_dust", count: 12 };
+    state.cursor = { item: "flatcraft:item:glowstone_dust", count: 12 };
     sim.tick([
       { player, command: { type: "slot_click", slot: { container: "chest", x: cx, y: cy, index: 10 }, button: "left" } },
     ]);
 
     const restored = Simulation.deserialize(sim.serialize());
     expect(restored.chests.values().next().value!.slots[10]).toEqual({
-      item: "glowstone_dust",
+      item: "flatcraft:item:glowstone_dust",
       count: 12,
     });
   });

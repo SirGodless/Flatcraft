@@ -34,7 +34,7 @@ registerContentType(
   {
     id: "wood",
     fields: {
-      id: { kind: "id", required: true },
+      id: { kind: "qualified_id", required: true },
       log: { kind: "ref", ref_type: "block", required: true },
       leaves: { kind: "ref", ref_type: "block", required: true },
       extra_height: { kind: "number", min: -1000, max: 1000 },

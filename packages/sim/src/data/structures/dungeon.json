@@ -1,7 +1,15 @@
 {
-  "dimension": "overworld",
-  "placement": { "type": "underground", "chance": 0.06, "minY": 80, "maxY": 220 },
-  "anchor": [4, 3],
+  "dimension": "flatcraft:dimension:overworld",
+  "placement": {
+    "type": "underground",
+    "chance": 0.06,
+    "minY": 80,
+    "maxY": 220
+  },
+  "anchor": [
+    4,
+    3
+  ],
   "pattern": [
     "CCCCCCCCC",
     "C.......C",
@@ -10,16 +18,40 @@
     "CCCCCCCCC"
   ],
   "key": {
-    "C": { "block": "flatcraft:cobblestone" },
-    ".": { "block": "flatcraft:air" },
+    "C": {
+      "block": "flatcraft:block:cobblestone"
+    },
+    ".": {
+      "block": "flatcraft:block:air"
+    },
     "n": {
-      "block": "flatcraft:chest",
+      "block": "flatcraft:block:chest",
       "loot": [
-        { "item": "flatcraft:iron_ingot", "count": 4, "chance": 0.8 },
-        { "item": "flatcraft:coal", "count": 8, "chance": 0.9 },
-        { "item": "flatcraft:redstone", "count": 6, "chance": 0.5 },
-        { "item": "flatcraft:diamond", "count": 2, "chance": 0.25 },
-        { "item": "flatcraft:backpack", "count": 1, "chance": 0.3 }
+        {
+          "item": "flatcraft:item:iron_ingot",
+          "count": 4,
+          "chance": 0.8
+        },
+        {
+          "item": "flatcraft:item:coal",
+          "count": 8,
+          "chance": 0.9
+        },
+        {
+          "item": "flatcraft:item:redstone",
+          "count": 6,
+          "chance": 0.5
+        },
+        {
+          "item": "flatcraft:item:diamond",
+          "count": 2,
+          "chance": 0.25
+        },
+        {
+          "item": "flatcraft:item:backpack",
+          "count": 1,
+          "chance": 0.3
+        }
       ]
     }
   }

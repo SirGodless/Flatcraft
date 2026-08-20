@@ -1,5 +1,5 @@
 {
-  "id": "birch_log",
+  "id": "flatcraft:block:birch_log",
   "name": "Birch Log",
   "solid": false,
   "hardness": 25,

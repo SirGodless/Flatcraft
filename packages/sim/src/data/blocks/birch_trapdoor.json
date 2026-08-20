@@ -1,10 +1,10 @@
 {
-  "id": "birch_trapdoor",
+  "id": "flatcraft:block:birch_trapdoor",
   "name": "Birch Trapdoor",
   "solid": true,
   "hardness": 26,
   "tool": "axe",
-  "toggle_to": "birch_trapdoor_open",
+  "toggle_to": "flatcraft:block:birch_trapdoor_open",
   "visual": {
     "fallback": {
       "base": [

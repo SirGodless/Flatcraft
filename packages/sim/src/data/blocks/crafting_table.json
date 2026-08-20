@@ -1,5 +1,5 @@
 {
-  "id": "crafting_table",
+  "id": "flatcraft:block:crafting_table",
   "name": "Crafting Table",
   "solid": true,
   "hardness": 30,

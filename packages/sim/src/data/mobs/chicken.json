@@ -1,20 +1,46 @@
 {
-  "id": "chicken",
+  "id": "flatcraft:mob:chicken",
   "name": "Chicken",
   "health": 4,
   "speed": 0.05,
-  "size": { "width": 0.5, "height": 0.6 },
+  "size": {
+    "width": 0.5,
+    "height": 0.6
+  },
   "wanders": true,
   "loot": [
-    { "item": "chicken", "max": 1, "chance": 1 },
-    { "item": "feather", "max": 2, "chance": 0.7 }
+    {
+      "item": "flatcraft:item:chicken",
+      "max": 1,
+      "chance": 1
+    },
+    {
+      "item": "flatcraft:item:feather",
+      "max": 2,
+      "chance": 0.7
+    }
   ],
-  "spawn": { "group": "grass_day", "weight": 1 },
+  "spawn": {
+    "group": "grass_day",
+    "weight": 1
+  },
   "visual": {
     "fallback": {
       "rects": [
-        { "x": 0, "y": 0, "w": 0.5, "h": 0.6, "color": "#f0f0e8" },
-        { "x": 0.25, "y": 0.25, "w": 0.25, "h": 0.2, "color": "#e8a030" }
+        {
+          "x": 0,
+          "y": 0,
+          "w": 0.5,
+          "h": 0.6,
+          "color": "#f0f0e8"
+        },
+        {
+          "x": 0.25,
+          "y": 0.25,
+          "w": 0.25,
+          "h": 0.2,
+          "color": "#e8a030"
+        }
       ]
     }
   }

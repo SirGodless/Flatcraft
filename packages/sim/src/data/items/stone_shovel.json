@@ -1,5 +1,5 @@
 {
-  "id": "stone_shovel",
+  "id": "flatcraft:item:stone_shovel",
   "name": "Stone Shovel",
   "max_stack": 1,
   "tool": {
@@ -12,7 +12,7 @@
     "knockback": 0.35
   },
   "enchants": [
-    "efficiency"
+    "flatcraft:enchant:efficiency"
   ],
   "recipes": [
     {
@@ -24,8 +24,8 @@
         "b"
       ],
       "key": {
-        "a": "item:cobblestone",
-        "b": "item:stick"
+        "a": "item:flatcraft:item:cobblestone",
+        "b": "item:flatcraft:item:stick"
       }
     }
   ],

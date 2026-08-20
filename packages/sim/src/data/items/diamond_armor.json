@@ -1,5 +1,5 @@
 {
-  "id": "diamond_armor",
+  "id": "flatcraft:item:diamond_armor",
   "name": "Diamond Armor",
   "max_stack": 1,
   "armor": {
@@ -15,8 +15,8 @@
         "aaa"
       ],
       "key": {
-        "a": "item:diamond",
-        "b": "item:iron_armor"
+        "a": "item:flatcraft:item:diamond",
+        "b": "item:flatcraft:item:iron_armor"
       }
     }
   ],

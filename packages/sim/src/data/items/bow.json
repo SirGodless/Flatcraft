@@ -1,12 +1,12 @@
 {
-  "id": "bow",
+  "id": "flatcraft:item:bow",
   "name": "Bow",
   "max_stack": 1,
   "ranged": {
     "damage": 6,
     "cooldown_ticks": 20,
     "arrow_speed": 0.8,
-    "ammo": "arrow"
+    "ammo": "flatcraft:item:arrow"
   },
   "recipes": [
     {
@@ -18,8 +18,8 @@
         " ab"
       ],
       "key": {
-        "a": "item:stick",
-        "b": "item:string"
+        "a": "item:flatcraft:item:stick",
+        "b": "item:flatcraft:item:string"
       }
     }
   ],

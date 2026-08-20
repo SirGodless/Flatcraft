@@ -1,11 +1,11 @@
 {
-  "id": "glass",
+  "id": "flatcraft:item:glass",
   "name": "Glass",
-  "places_block": "glass",
+  "places_block": "flatcraft:block:glass",
   "recipes": [
     {
       "station": "furnace",
-      "input": "item:sand",
+      "input": "item:flatcraft:item:sand",
       "cooking_ticks": 200
     }
   ]

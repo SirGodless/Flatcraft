@@ -47,7 +47,7 @@ registerContentType(
   {
     id: "liquid",
     fields: {
-      id: { kind: "id", required: true },
+      id: { kind: "qualified_id", required: true },
       swim_speed: { kind: "number", min: -1000, max: 1000, required: true },
       sink_accel: { kind: "number", min: -1000, max: 1000, required: true },
       sink_cap: { kind: "number", min: -1000, max: 1000, required: true },

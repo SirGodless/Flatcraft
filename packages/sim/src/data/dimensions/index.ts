@@ -11,8 +11,8 @@ import nether from "./nether.json";
  * "generator" actually produces.
  */
 const sources: Record<string, DimensionJson> = {
-  overworld,
-  nether,
+  "flatcraft:dimension:overworld": overworld,
+  "flatcraft:dimension:nether": nether,
 };
 
 for (const [id, json] of Object.entries(sources)) {

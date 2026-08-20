@@ -1,11 +1,11 @@
 {
-  "id": "birch_door",
+  "id": "flatcraft:block:birch_door",
   "name": "Birch Door",
   "solid": true,
   "hardness": 28,
   "tool": "axe",
   "tall": true,
-  "toggle_to": "birch_door_open",
+  "toggle_to": "flatcraft:block:birch_door_open",
   "visual": {
     "fallback": {
       "base": [

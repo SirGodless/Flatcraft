@@ -60,7 +60,7 @@ let cachedConfig: PortalConfig | null = null;
  */
 export function portalConfig(): PortalConfig {
   if (!cachedConfig) {
-    cachedConfig = parsePortalConfig(multiblockDef("flatcraft:nether_portal")?.config);
+    cachedConfig = parsePortalConfig(multiblockDef("flatcraft:multiblock:nether_portal")?.config);
   }
   return cachedConfig;
 }
@@ -153,7 +153,7 @@ export function convertFrame(
 // check with findPortalInterior, which already only reads through
 // World.getBlockGenerating, so it's exactly as safe as a pattern-matched
 // multiblock would be.
-registerMultiblockHandler("flatcraft:nether_portal", {
+registerMultiblockHandler("flatcraft:multiblock_handler:nether_portal", {
   activate({ world, x, y, dimension, sim, broadcast }) {
     const interior = findPortalInterior(world, x, y);
     if (!interior) return false;
@@ -191,7 +191,7 @@ export function buildPortal(world: World, bx: number, by: number): Array<{ x: nu
       changes.push({ x, y, block: BlockId.Air });
     }
   }
-  const pattern = multiblockDef("flatcraft:nether_portal")?.buildPattern;
+  const pattern = multiblockDef("flatcraft:multiblock:nether_portal")?.buildPattern;
   if (!pattern) throw new Error('nether portal def is missing its "build_pattern"');
   changes.push(...stampBuildPattern(world, pattern, bx, by));
   return changes;

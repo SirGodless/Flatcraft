@@ -20,14 +20,14 @@ import {
  */
 
 registerBlockJson({
-  id: "safe_box",
+  id: "flatcraft:block:safe_box",
   name: "Safe Box",
   solid: true,
   hardness: 25,
   container: { slots: 6 },
 });
 registerBlockJson({
-  id: "kiln",
+  id: "flatcraft:block:kiln",
   name: "Kiln",
   solid: true,
   hardness: 35,
@@ -35,8 +35,8 @@ registerBlockJson({
 });
 resolveBlockLinks();
 
-const SAFE_BOX = blockByName("safe_box")!;
-const KILN = blockByName("kiln")!;
+const SAFE_BOX = blockByName("flatcraft:block:safe_box")!;
+const KILN = blockByName("flatcraft:block:kiln")!;
 
 const SEED = 1337;
 const SPAWN_X = findSpawnX(SEED);
@@ -65,7 +65,7 @@ describe("custom container blocks (datapack)", () => {
     const event = opened.find((o) => o.event.type === "chest_changed");
     expect(event?.event.type === "chest_changed" && event.event.slots).toHaveLength(6);
 
-    state.cursor = { item: "coal", count: 1 };
+    state.cursor = { item: "flatcraft:item:coal", count: 1 };
     sim.tick([
       { player, command: { type: "slot_click", slot: { container: "chest", x: bx, y: SURFACE - 1, index: 5 }, button: "left" } },
     ]);
@@ -84,7 +84,7 @@ describe("custom container blocks (datapack)", () => {
     const bx = Math.floor(state.x) + 2;
     setBlock(sim, bx, SURFACE - 1, SAFE_BOX);
     sim.tick([{ player, command: { type: "open_chest", x: bx, y: SURFACE - 1 } }]);
-    state.cursor = { item: "coal", count: 3 };
+    state.cursor = { item: "flatcraft:item:coal", count: 3 };
     sim.tick([
       { player, command: { type: "slot_click", slot: { container: "chest", x: bx, y: SURFACE - 1, index: 0 }, button: "left" } },
     ]);
@@ -103,11 +103,11 @@ describe("custom container blocks (datapack)", () => {
       const fy = SURFACE - 1;
       setBlock(sim, fx, fy, block);
       sim.tick([{ player, command: { type: "open_furnace", x: fx, y: fy } }]);
-      state.cursor = { item: "iron_ore", count: 1 };
+      state.cursor = { item: "flatcraft:item:iron_ore", count: 1 };
       sim.tick([
         { player, command: { type: "slot_click", slot: { container: "furnace", x: fx, y: fy, slot: "input" }, button: "left" } },
       ]);
-      state.cursor = { item: "coal", count: 1 };
+      state.cursor = { item: "flatcraft:item:coal", count: 1 };
       sim.tick([
         { player, command: { type: "slot_click", slot: { container: "furnace", x: fx, y: fy, slot: "fuel" }, button: "left" } },
       ]);
@@ -117,7 +117,7 @@ describe("custom container blocks (datapack)", () => {
         sim.tick([]);
         ticks++;
       }
-      expect(furnace.output).toEqual({ item: "iron_ingot", count: 1 });
+      expect(furnace.output).toEqual({ item: "flatcraft:item:iron_ingot", count: 1 });
       void speedX2;
       return ticks;
     };

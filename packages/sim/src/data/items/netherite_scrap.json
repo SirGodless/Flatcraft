@@ -1,10 +1,10 @@
 {
-  "id": "netherite_scrap",
+  "id": "flatcraft:item:netherite_scrap",
   "name": "Netherite Scrap",
   "recipes": [
     {
       "station": "furnace",
-      "input": "item:ancient_debris",
+      "input": "item:flatcraft:item:ancient_debris",
       "cooking_ticks": 400
     }
   ],

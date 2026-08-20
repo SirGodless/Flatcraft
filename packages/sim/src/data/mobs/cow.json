@@ -1,20 +1,46 @@
 {
-  "id": "cow",
+  "id": "flatcraft:mob:cow",
   "name": "Cow",
   "health": 10,
   "speed": 0.05,
-  "size": { "width": 0.9, "height": 1.2 },
+  "size": {
+    "width": 0.9,
+    "height": 1.2
+  },
   "wanders": true,
   "loot": [
-    { "item": "leather", "max": 2, "chance": 0.9 },
-    { "item": "beef", "max": 3, "chance": 1 }
+    {
+      "item": "flatcraft:item:leather",
+      "max": 2,
+      "chance": 0.9
+    },
+    {
+      "item": "flatcraft:item:beef",
+      "max": 3,
+      "chance": 1
+    }
   ],
-  "spawn": { "group": "grass_day", "weight": 1 },
+  "spawn": {
+    "group": "grass_day",
+    "weight": 1
+  },
   "visual": {
     "fallback": {
       "rects": [
-        { "x": 0, "y": 0, "w": 0.9, "h": 1.2, "color": "#6b4a34" },
-        { "x": 0.65, "y": 0.25, "w": 0.25, "h": 0.2, "color": "#e8e8e0" }
+        {
+          "x": 0,
+          "y": 0,
+          "w": 0.9,
+          "h": 1.2,
+          "color": "#6b4a34"
+        },
+        {
+          "x": 0.65,
+          "y": 0.25,
+          "w": 0.25,
+          "h": 0.2,
+          "color": "#e8e8e0"
+        }
       ]
     }
   }

@@ -1,5 +1,5 @@
 {
-  "id": "oak_slab",
+  "id": "flatcraft:block:oak_slab",
   "name": "Oak Slab",
   "solid": false,
   "hardness": 25,

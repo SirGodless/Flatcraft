@@ -1,5 +1,5 @@
 {
-  "id": "lava",
+  "id": "flatcraft:liquid:lava",
   "swim_speed": 0.35,
   "sink_accel": 0.02,
   "sink_cap": 0.08,

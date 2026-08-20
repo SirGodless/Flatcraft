@@ -2,7 +2,7 @@ import { MOB_JSONS } from "./data/mobs/index.js";
 import type { EntitySize } from "./entities.js";
 import { NON_MOB_SIZES } from "./entities.js";
 import { registerContentType, validateContentInstance } from "./registry/generic.js";
-import { validateVisualJson, validateMobFallbackJson, type MobJson } from "./registry/schema.js";
+import { validateVisualJson, validateMobFallbackJson, localName, type MobJson } from "./registry/schema.js";
 import type { MobVisualDef } from "./registry/visual.js";
 
 /**
@@ -78,14 +78,14 @@ export interface MobDef {
 const defs = new Map<string, MobDef>();
 
 function pretty(id: string): string {
-  return id.split("_").map((word) => (word[0] ?? "").toUpperCase() + word.slice(1)).join(" ");
+  return localName(id).split("_").map((word) => (word[0] ?? "").toUpperCase() + word.slice(1)).join(" ");
 }
 
 registerContentType(
   {
     id: "mob",
     fields: {
-      id: { kind: "id", required: true },
+      id: { kind: "qualified_id", required: true },
       name: { kind: "string" },
       sprite: { kind: "string" },
       // Validated separately below - see items.ts's registerContentType

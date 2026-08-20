@@ -1,6 +1,6 @@
 {
-  "id": "oak_log",
+  "id": "flatcraft:item:oak_log",
   "name": "Oak Log",
-  "places_block": "oak_log",
+  "places_block": "flatcraft:block:oak_log",
   "fuel_ticks": 300
 }

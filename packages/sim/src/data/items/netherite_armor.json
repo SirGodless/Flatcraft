@@ -1,5 +1,5 @@
 {
-  "id": "netherite_armor",
+  "id": "flatcraft:item:netherite_armor",
   "name": "Netherite Armor",
   "max_stack": 1,
   "armor": {
@@ -15,7 +15,7 @@
         "aaa"
       ],
       "key": {
-        "a": "item:netherite_ingot"
+        "a": "item:flatcraft:item:netherite_ingot"
       }
     }
   ],

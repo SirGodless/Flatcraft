@@ -1,5 +1,5 @@
 import { Texture } from "pixi.js";
-import { BlockId, hash01, itemDef, type ItemFallbackJson } from "@flatcraft/sim";
+import { BlockId, hash01, itemDef, localName, type ItemFallbackJson } from "@flatcraft/sim";
 import { spriteKey, SPRITE_OVERRIDES } from "./sprites.js";
 import { TILE_PX } from "./textures.js";
 
@@ -50,7 +50,7 @@ export function itemTexture(item: string, blockTextures: Map<BlockId, Texture>, 
   const cached = cache.get(cacheKey);
   if (cached) return cached;
   // Sprite files beat everything (datapack override or convention path).
-  const baseKey = spriteKey(def?.sprite) ?? `item/${item}`;
+  const baseKey = spriteKey(def?.sprite) ?? `item/${localName(item)}`;
   let texture: Texture | undefined = SPRITE_OVERRIDES.get(hasVariants ? `${baseKey}_${variantIndex}` : baseKey);
   if (!texture) {
     if (def?.block !== undefined) {

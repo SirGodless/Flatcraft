@@ -869,7 +869,7 @@ export class EnchantPanelUI {
     title.position.set(10, 8);
     this.container.addChild(title);
 
-    const lapis = countInInventory(this.slots, "lapis_lazuli");
+    const lapis = countInInventory(this.slots, "flatcraft:item:lapis_lazuli");
     const affordable = lapis >= 8;
     const row = new Container();
     row.position.set(10, 84);

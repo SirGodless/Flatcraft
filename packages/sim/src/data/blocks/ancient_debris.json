@@ -1,5 +1,5 @@
 {
-  "id": "ancient_debris",
+  "id": "flatcraft:block:ancient_debris",
   "name": "Ancient Debris",
   "solid": true,
   "hardness": 90,

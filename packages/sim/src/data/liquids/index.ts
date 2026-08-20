@@ -11,8 +11,8 @@ import lava from "./lava.json";
  * outright.
  */
 const sources: Record<string, LiquidJson> = {
-  water,
-  lava,
+  "flatcraft:liquid:water": water,
+  "flatcraft:liquid:lava": lava,
 };
 
 for (const [id, json] of Object.entries(sources)) {

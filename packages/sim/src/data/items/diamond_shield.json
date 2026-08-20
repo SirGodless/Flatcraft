@@ -1,5 +1,5 @@
 {
-  "id": "diamond_shield",
+  "id": "flatcraft:item:diamond_shield",
   "name": "Diamond Shield",
   "max_stack": 1,
   "shield": {
@@ -15,8 +15,8 @@
         " a "
       ],
       "key": {
-        "a": "item:diamond",
-        "b": "item:iron_shield"
+        "a": "item:flatcraft:item:diamond",
+        "b": "item:flatcraft:item:iron_shield"
       }
     }
   ],

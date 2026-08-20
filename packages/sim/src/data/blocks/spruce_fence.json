@@ -1,5 +1,5 @@
 {
-  "id": "spruce_fence",
+  "id": "flatcraft:block:spruce_fence",
   "name": "Spruce Fence",
   "solid": true,
   "hardness": 30,

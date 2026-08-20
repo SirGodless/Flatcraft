@@ -37,7 +37,7 @@ registerContentType(
   {
     id: "vein",
     fields: {
-      id: { kind: "id", required: true },
+      id: { kind: "qualified_id", required: true },
       block: { kind: "ref", ref_type: "block", required: true },
       attempts: { kind: "number", min: 0, max: 100000, required: true },
       size_min: { kind: "number", min: 0, max: 100000, required: true },

@@ -9,8 +9,8 @@ import efficiency from "./efficiency.json";
  * id from any item's "enchants" list.
  */
 const sources: Record<string, EnchantJson> = {
-  sharpness,
-  efficiency,
+  "flatcraft:enchant:sharpness": sharpness,
+  "flatcraft:enchant:efficiency": efficiency,
 };
 
 for (const [id, json] of Object.entries(sources)) {

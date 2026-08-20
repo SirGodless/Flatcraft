@@ -1,6 +1,6 @@
 {
-  "id": "ancient_debris",
-  "block": "ancient_debris",
+  "id": "flatcraft:nether_layer:ancient_debris",
+  "block": "flatcraft:block:ancient_debris",
   "y_greater_than": 40,
   "noise": "hash01",
   "seed_offset": 59157,

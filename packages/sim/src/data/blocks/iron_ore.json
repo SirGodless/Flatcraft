@@ -1,5 +1,5 @@
 {
-  "id": "iron_ore",
+  "id": "flatcraft:block:iron_ore",
   "name": "Iron Ore",
   "solid": true,
   "hardness": 40,

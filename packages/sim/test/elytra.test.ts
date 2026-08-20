@@ -20,7 +20,7 @@ function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerEntity } 
 
 /** Put the player high in the air and start moving right. */
 function launch(sim: Simulation, state: PlayerEntity, withElytra: boolean, holdJump: boolean, player: PlayerId): void {
-  if (withElytra) state.inventory[8] = { item: "elytra", count: 1 };
+  if (withElytra) state.inventory[8] = { item: "flatcraft:item:elytra", count: 1 };
   state.x = SPAWN_X + 0.5;
   state.y = SURFACE - 40;
   state.vy = 0;

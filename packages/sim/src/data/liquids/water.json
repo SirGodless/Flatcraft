@@ -1,5 +1,5 @@
 {
-  "id": "water",
+  "id": "flatcraft:liquid:water",
   "swim_speed": 0.6,
   "sink_accel": 0.03,
   "sink_cap": 0.15,

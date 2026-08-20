@@ -1,12 +1,12 @@
 {
-  "id": "diamond_ore",
+  "id": "flatcraft:block:diamond_ore",
   "name": "Diamond Ore",
   "solid": true,
   "hardness": 45,
   "tool": "pickaxe",
   "required_tier": 3,
   "drops": {
-    "item": "diamond",
+    "item": "flatcraft:item:diamond",
     "amount": 1
   },
   "visual": {

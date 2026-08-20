@@ -1,10 +1,10 @@
 {
-  "id": "oak_trapdoor",
+  "id": "flatcraft:block:oak_trapdoor",
   "name": "Oak Trapdoor",
   "solid": true,
   "hardness": 26,
   "tool": "axe",
-  "toggle_to": "oak_trapdoor_open",
+  "toggle_to": "flatcraft:block:oak_trapdoor_open",
   "visual": {
     "fallback": {
       "base": [

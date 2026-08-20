@@ -1,6 +1,6 @@
 {
-  "id": "gold_ore",
-  "block": "gold_ore",
+  "id": "flatcraft:vein:gold_ore",
+  "block": "flatcraft:block:gold_ore",
   "attempts": 2,
   "size_min": 2,
   "size_max": 5,

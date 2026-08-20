@@ -30,10 +30,10 @@ describe("save/load", () => {
     sim.world.ensureChunk(0, 0);
     sim.world.setBlock(2, 2, BlockId.Glowstone);
     const out: OutboundEvent[] = [];
-    sim.spawnMob("pig", state.x + 20, state.y, out);
-    sim.spawnItem("overworld", state.x + 21, state.y - 2, { item: "coal", count: 5 }, out);
-    sim.portalsOf("nether").set("9,40", { x: 9, y: 40 });
-    state.inventory[3] = { item: "diamond", count: 7 };
+    sim.spawnMob("flatcraft:mob:pig", state.x + 20, state.y, out);
+    sim.spawnItem("flatcraft:dimension:overworld", state.x + 21, state.y - 2, { item: "flatcraft:item:coal", count: 5 }, out);
+    sim.portalsOf("flatcraft:dimension:nether").set("9,40", { x: 9, y: 40 });
+    state.inventory[3] = { item: "flatcraft:item:diamond", count: 7 };
     sim.tick([{ player, command: { type: "open_furnace", x: 1, y: 1 } }]); // rejected (no furnace), harmless
 
     const restored = Simulation.deserialize(sim.serialize());
@@ -44,7 +44,7 @@ describe("save/load", () => {
     // round-trips through `players` (saved, adopted again on rejoin).
     const nonPlayerCount = (s: Simulation): number => [...s.entities.values()].filter((e) => !isPlayerEntity(e)).length;
     expect(nonPlayerCount(restored)).toBe(nonPlayerCount(sim));
-    expect(restored.portalsOf("nether").get("9,40")).toEqual({ x: 9, y: 40 });
+    expect(restored.portalsOf("flatcraft:dimension:nether").get("9,40")).toEqual({ x: 9, y: 40 });
   });
 
   it("migrates a pre-version-6 save's fixed {overworld,nether} worlds/portals shape", () => {
@@ -52,7 +52,7 @@ describe("save/load", () => {
     joinPlayer(sim);
     sim.world.ensureChunk(0, 0);
     sim.world.setBlock(3, 3, BlockId.Glowstone);
-    sim.portalsOf("nether").set("9,40", { x: 9, y: 40 });
+    sim.portalsOf("flatcraft:dimension:nether").set("9,40", { x: 9, y: 40 });
 
     const save = sim.serialize();
     // Pre-version-6 saves stored these as a fixed object keyed by
@@ -74,18 +74,18 @@ describe("save/load", () => {
 
     const restored = Simulation.deserialize(legacySave);
     expect(restored.world.getBlockGenerating(3, 3)).toBe(BlockId.Glowstone);
-    expect(restored.portalsOf("nether").get("9,40")).toEqual({ x: 9, y: 40 });
+    expect(restored.portalsOf("flatcraft:dimension:nether").get("9,40")).toEqual({ x: 9, y: 40 });
   });
 
   it("carries the id allocator over the round-trip, still collision-free after load", () => {
     const sim = new Simulation(SEED);
     const { state } = joinPlayer(sim);
     const out: OutboundEvent[] = [];
-    sim.spawnMob("pig", state.x + 5, state.y, out);
+    sim.spawnMob("flatcraft:mob:pig", state.x + 5, state.y, out);
 
     const restored = Simulation.deserialize(sim.serialize());
     const newPlayer = restored.allocatePlayerId();
-    const newMob = restored.spawnMob("pig", state.x - 5, state.y, out);
+    const newMob = restored.spawnMob("flatcraft:mob:pig", state.x - 5, state.y, out);
     expect(newPlayer).not.toBe(newMob.id);
     // Neither collides with anything that already existed before the save.
     const priorIds = [...sim.entities.values()].map((e) => e.id);
@@ -97,7 +97,7 @@ describe("save/load", () => {
     const sim = new Simulation(SEED);
     const { state } = joinPlayer(sim, "Alice");
     const out: OutboundEvent[] = [];
-    sim.spawnMob("pig", state.x + 5, state.y, out);
+    sim.spawnMob("flatcraft:mob:pig", state.x + 5, state.y, out);
 
     // Simulate an old (version < 3) save, or the NaN->null JSON round-trip
     // a corrupt nextId produces: the field is unusable, not just absent.
@@ -114,18 +114,18 @@ describe("save/load", () => {
   it("a rejoining player adopts their saved position and inventory", () => {
     const sim = new Simulation(SEED);
     const { state } = joinPlayer(sim, "Alice");
-    state.inventory[0] = { item: "diamond_pickaxe", count: 1 };
+    state.inventory[0] = { item: "flatcraft:item:diamond_pickaxe", count: 1 };
     state.x += 5;
     state.health = 13;
 
     const restored = Simulation.deserialize(sim.serialize());
     const { state: rejoined } = joinPlayer(restored, "Alice");
     expect(rejoined.x).toBeCloseTo(state.x, 0);
-    expect(countInInventory(rejoined.inventory, "diamond_pickaxe")).toBe(1);
+    expect(countInInventory(rejoined.inventory, "flatcraft:item:diamond_pickaxe")).toBe(1);
     expect(rejoined.health).toBeGreaterThanOrEqual(13); // regen may add
     // A different name still gets a fresh spawn.
     const { state: fresh } = joinPlayer(restored, "Bob");
-    expect(countInInventory(fresh.inventory, "diamond_pickaxe")).toBe(0);
+    expect(countInInventory(fresh.inventory, "flatcraft:item:diamond_pickaxe")).toBe(0);
   });
 
   it("restored simulations stay tick-identical with the original", () => {
@@ -173,7 +173,7 @@ describe("save/load", () => {
     sim.world.setBlock(spawnX + 3, surface - 2, BlockId.Glowstone);
     const save = sim.serialize();
     expect(save.version).toBe(6);
-    expect(save.blockPalette![BlockId.Glowstone]).toBe("glowstone");
+    expect(save.blockPalette![BlockId.Glowstone]).toBe("flatcraft:block:glowstone");
 
     // Simulate a registry that renumbered glowstone: the save's chunks
     // carry a fake number whose palette entry still says "glowstone".
@@ -181,13 +181,13 @@ describe("save/load", () => {
     // so only even indices are ids - odd indices are run lengths and
     // must be left alone.
     const fakeId = 999;
-    const overworldChunks = save.worlds.find((w) => w.dim === "overworld")!.chunks;
+    const overworldChunks = save.worlds.find((w) => w.dim === "flatcraft:dimension:overworld")!.chunks;
     for (const chunk of overworldChunks) {
       for (let i = 0; i < chunk.tiles.length; i += 2) {
         if (chunk.tiles[i] === BlockId.Glowstone) chunk.tiles[i] = fakeId;
       }
     }
-    save.blockPalette![fakeId] = "glowstone";
+    save.blockPalette![fakeId] = "flatcraft:block:glowstone";
     delete save.blockPalette![BlockId.Glowstone];
 
     const restored = Simulation.deserialize(save);

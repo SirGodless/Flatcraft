@@ -1,6 +1,6 @@
 {
-  "id": "obsidian",
-  "block": "obsidian",
+  "id": "flatcraft:vein:obsidian",
+  "block": "flatcraft:block:obsidian",
   "attempts": 2,
   "size_min": 3,
   "size_max": 6,

@@ -1,5 +1,5 @@
 {
-  "id": "obsidian",
+  "id": "flatcraft:block:obsidian",
   "name": "Obsidian",
   "solid": true,
   "hardness": 250,

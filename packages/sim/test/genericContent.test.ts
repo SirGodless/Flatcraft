@@ -26,20 +26,24 @@ describe("generic content-type engine", () => {
       },
       "test",
     );
-    const out = validateContentInstance("test_gadget", { id: "widget", rarity: "rare", uses: 5, reusable: true, crafted_from: "stick" }, "test");
-    expect(out).toEqual({ id: "widget", rarity: "rare", uses: 5, reusable: true, crafted_from: "stick" });
+    const out = validateContentInstance(
+      "test_gadget",
+      { id: "widget", rarity: "rare", uses: 5, reusable: true, crafted_from: "flatcraft:item:stick" },
+      "test",
+    );
+    expect(out).toEqual({ id: "widget", rarity: "rare", uses: 5, reusable: true, crafted_from: "flatcraft:item:stick" });
 
     expect(() => validateContentInstance("test_gadget", { id: "widget", rarity: "legendary" }, "test")).toThrow(/must be one of/);
     expect(() => validateContentInstance("test_gadget", { rarity: "common" }, "test")).toThrow(/"\(root\)\.id" is required/);
     expect(() => validateContentInstance("test_gadget", { id: "widget", rarity: "common", nope: 1 }, "test")).toThrow(/unknown field/);
   });
 
-  it("strips an optional flatcraft: prefix on instance refs, but keeps handler refs verbatim", () => {
-    // Regression test: an earlier version stripped "flatcraft:" from
-    // handler refs too, which broke dimension.ts's generator/spawns/
-    // arrival lookups - those registries are keyed by the full
-    // "flatcraft:overworld"-style modname:funktion string, not the
-    // stripped tail (see world/dimension.ts and world/gen.ts).
+  it("keeps both instance and handler refs verbatim as fully-qualified ids", () => {
+    // Regression test: under the uniform "package:type:name" namespacing
+    // scheme, both ref kinds are fully-qualified ids and neither is
+    // stripped down to a bare tail - the dimension.ts generator/spawns/
+    // arrival registries and block/item drop lookups are keyed by the
+    // full qualified string (see world/dimension.ts and world/gen.ts).
     registerContentType(
       {
         id: "test_ref_kinds",
@@ -50,8 +54,12 @@ describe("generic content-type engine", () => {
       },
       "test",
     );
-    const out = validateContentInstance("test_ref_kinds", { instance_ref: "flatcraft:stick", handler_ref: "flatcraft:overworld" }, "test");
-    expect(out).toEqual({ instance_ref: "stick", handler_ref: "flatcraft:overworld" });
+    const out = validateContentInstance(
+      "test_ref_kinds",
+      { instance_ref: "flatcraft:item:stick", handler_ref: "flatcraft:dimension_generator:overworld" },
+      "test",
+    );
+    expect(out).toEqual({ instance_ref: "flatcraft:item:stick", handler_ref: "flatcraft:dimension_generator:overworld" });
   });
 
   it("validates nested object/array/record/oneOf fields", () => {
@@ -81,8 +89,8 @@ describe("generic content-type engine", () => {
     );
     expect(out).toEqual({ id: "chest", tags: ["storage", "wood"], counts: { red: 3, blue: 7 }, slot: { x: 1, y: 2 }, drop: "none" });
 
-    const out2 = validateContentInstance("test_container", { id: "chest", drop: { item: "stick" } }, "test");
-    expect(out2["drop"]).toEqual({ item: "stick" });
+    const out2 = validateContentInstance("test_container", { id: "chest", drop: { item: "flatcraft:item:stick" } }, "test");
+    expect(out2["drop"]).toEqual({ item: "flatcraft:item:stick" });
 
     expect(() => validateContentInstance("test_container", { id: "chest", drop: "invalid" }, "test")).toThrow(/matched none of 2 variants/);
   });
@@ -105,8 +113,8 @@ describe("generic content-type engine", () => {
 // real enchant JSON files.
 describe("enchants.ts's parseEnchant, now backed by the generic engine", () => {
   it.each([
-    ["sharpness", sharpnessJson],
-    ["efficiency", efficiencyJson],
+    ["flatcraft:enchant:sharpness", sharpnessJson],
+    ["flatcraft:enchant:efficiency", efficiencyJson],
   ])("produces the same fields as parseEnchant for %s", (id, json) => {
     const generic = validateContentInstance("enchant", json, `flatcraft/enchants/${id}.json`);
     const handWritten = parseEnchant(id, json);

@@ -1,12 +1,12 @@
 {
-  "id": "string",
+  "id": "flatcraft:item:string",
   "name": "String",
   "recipes": [
     {
       "station": "inventory",
       "style": "shapeless",
       "ingredients": [
-        "item:wool"
+        "item:flatcraft:item:wool"
       ],
       "amount": 4
     }

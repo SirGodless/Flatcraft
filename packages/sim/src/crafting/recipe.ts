@@ -52,9 +52,14 @@ export function fuelTicks(item: string): number {
   return fuelTicksOf(item);
 }
 
-/** Convert a validated ingredient ref to a registry key and check it. */
+/** Convert a validated ingredient ref to a registry key and check it.
+ * "item:<qualified-item-id>" or "tag:<bare-tag-name>" - split on the
+ * first colon only, since a qualified item id carries colons of its
+ * own (see schema.ts's needIngredientRef). */
 function refToKey(ref: string, recipeId: string): string {
-  const [type, name] = ref.split(":") as [string, string];
+  const sep = ref.indexOf(":");
+  const type = ref.slice(0, sep);
+  const name = ref.slice(sep + 1);
   if (type === "tag") {
     if (!TAGS[name]) {
       throw new Error(`recipe ${recipeId}: unknown tag "${name}"`);

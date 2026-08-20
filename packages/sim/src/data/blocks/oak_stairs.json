@@ -1,5 +1,5 @@
 {
-  "id": "oak_stairs",
+  "id": "flatcraft:block:oak_stairs",
   "name": "Oak Stairs",
   "solid": true,
   "hardness": 30,

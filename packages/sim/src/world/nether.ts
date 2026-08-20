@@ -61,5 +61,5 @@ function netherArrival(world: World, xt: number): number {
 
 // Registered under data/dimensions/nether.json's "generator"/"arrival"
 // ids - see world/dimension.ts.
-registerDimensionGenerator("flatcraft:nether", generateNetherChunk);
-registerArrivalGenerator("flatcraft:nether_arrival", netherArrival);
+registerDimensionGenerator("flatcraft:dimension_generator:nether", generateNetherChunk);
+registerArrivalGenerator("flatcraft:arrival_generator:nether_arrival", netherArrival);

@@ -1,7 +1,7 @@
 {
-  "id": "chest",
+  "id": "flatcraft:item:chest",
   "name": "Chest",
-  "places_block": "chest",
+  "places_block": "flatcraft:block:chest",
   "recipes": [
     {
       "station": "crafting_table",

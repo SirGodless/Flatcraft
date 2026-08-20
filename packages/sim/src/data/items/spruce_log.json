@@ -1,6 +1,6 @@
 {
-  "id": "spruce_log",
+  "id": "flatcraft:item:spruce_log",
   "name": "Spruce Log",
-  "places_block": "spruce_log",
+  "places_block": "flatcraft:block:spruce_log",
   "fuel_ticks": 300
 }

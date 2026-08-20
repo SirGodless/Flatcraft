@@ -1,5 +1,5 @@
 {
-  "id": "bedrock",
+  "id": "flatcraft:block:bedrock",
   "name": "Bedrock",
   "solid": true,
   "hardness": -1,

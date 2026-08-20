@@ -47,8 +47,8 @@ function buildFrame(sim: Simulation, bx: number, by: number): void {
 
 describe("nether generation", () => {
   it("is deterministic and bounded by bedrock", () => {
-    const a = new World(SEED, "nether");
-    const b = new World(SEED, "nether");
+    const a = new World(SEED, "flatcraft:dimension:nether");
+    const b = new World(SEED, "flatcraft:dimension:nether");
     expect(Array.from(a.ensureChunk(0, 1).tiles)).toEqual(Array.from(b.ensureChunk(0, 1).tiles));
 
     for (let x = -32; x < 32; x++) {
@@ -58,7 +58,7 @@ describe("nether generation", () => {
   });
 
   it("contains netherrack, open caverns and a lava sea", () => {
-    const world = new World(SEED, "nether");
+    const world = new World(SEED, "flatcraft:dimension:nether");
     const found = new Set<BlockId>();
     for (let x = 0; x < 96; x++) {
       for (let y = NETHER_CEILING + 1; y < NETHER_FLOOR; y++) {
@@ -72,7 +72,7 @@ describe("nether generation", () => {
   });
 
   it("generates obsidian veins deep in the overworld", () => {
-    const world = new World(SEED, "overworld");
+    const world = new World(SEED, "flatcraft:dimension:overworld");
     let obsidian = 0;
     for (let cx = -6; cx <= 6; cx++) {
       for (const tile of world.ensureChunk(cx, 7).tiles) {
@@ -90,18 +90,18 @@ describe("portals", () => {
     const bx = Math.floor(state.x) + 2;
     const by = SURFACE - 1;
     buildFrame(sim, bx, by);
-    state.inventory[0] = { item: "flint_and_steel", count: 1 };
+    state.inventory[0] = { item: "flatcraft:item:flint_and_steel", count: 1 };
 
     sim.tick([{ player, command: { type: "place_block", x: bx, y: by - 1 } }]);
     expect(sim.world.getBlock(bx, by)).toBe(BlockId.NetherPortal);
     expect(sim.world.getBlock(bx + 1, by - 2)).toBe(BlockId.NetherPortal);
-    expect(sim.portalsOf("overworld").size).toBe(1);
+    expect(sim.portalsOf("flatcraft:dimension:overworld").size).toBe(1);
   });
 
   it("rejects lighting without a frame", () => {
     const sim = new Simulation(SEED);
     const { player, state } = joinPlayer(sim);
-    state.inventory[0] = { item: "flint_and_steel", count: 1 };
+    state.inventory[0] = { item: "flatcraft:item:flint_and_steel", count: 1 };
     const result = sim.tick([
       { player, command: { type: "place_block", x: Math.floor(state.x) + 1, y: SURFACE - 2 } },
     ]);
@@ -117,7 +117,7 @@ describe("portals", () => {
     const bx = Math.floor(state.x); // portal right at the spawn column
     const by = SURFACE - 1;
     buildFrame(sim, bx, by);
-    state.inventory[0] = { item: "flint_and_steel", count: 1 };
+    state.inventory[0] = { item: "flatcraft:item:flint_and_steel", count: 1 };
     sim.tick([{ player, command: { type: "place_block", x: bx, y: by - 1 } }]);
 
     // Walk into the portal (already standing at bx) and wait.
@@ -127,18 +127,18 @@ describe("portals", () => {
       switched = out.some((o) => o.event.type === "player_dimension");
     }
     expect(switched).toBe(true);
-    expect(state.dimension).toBe("nether");
-    expect(sim.portalsOf("nether").size).toBe(1);
-    const netherPortal = [...sim.portalsOf("nether").values()][0]!;
+    expect(state.dimension).toBe("flatcraft:dimension:nether");
+    expect(sim.portalsOf("flatcraft:dimension:nether").size).toBe(1);
+    const netherPortal = [...sim.portalsOf("flatcraft:dimension:nether").values()][0]!;
     // Arrived at 1:8 scaled coordinates, standing beside a fresh portal.
     expect(Math.abs(netherPortal.x - Math.round((bx + 0.5) / 8))).toBeLessThanOrEqual(2);
     expect(state.x).toBeCloseTo(netherPortal.x - 2.5);
-    const nether = sim.worldOf("nether");
+    const nether = sim.worldOf("flatcraft:dimension:nether");
     expect(nether.getBlockGenerating(netherPortal.x, netherPortal.y)).toBe(BlockId.NetherPortal);
 
     // The cooldown prevents an immediate return trip.
     for (let i = 0; i < 30; i++) sim.tick([]);
-    expect(state.dimension).toBe("nether");
+    expect(state.dimension).toBe("flatcraft:dimension:nether");
 
     // Step away, wait out the cooldown, step back in -> back to overworld.
     state.x = netherPortal.x + 8;
@@ -149,23 +149,23 @@ describe("portals", () => {
     for (let i = 0; i < portalConfig().ticks + 30 && !returned; i++) {
       const out = sim.tick([]);
       returned = out.some(
-        (o) => o.event.type === "player_dimension" && o.event.dim === "overworld",
+        (o) => o.event.type === "player_dimension" && o.event.dim === "flatcraft:dimension:overworld",
       );
     }
     expect(returned).toBe(true);
-    expect(state.dimension).toBe("overworld");
+    expect(state.dimension).toBe("flatcraft:dimension:overworld");
     // Reuses the original portal instead of building a second one.
-    expect(sim.portalsOf("overworld").size).toBe(1);
+    expect(sim.portalsOf("flatcraft:dimension:overworld").size).toBe(1);
   });
 
   it("keeps block edits in each dimension separate", () => {
     const sim = new Simulation(SEED);
     const { state } = joinPlayer(sim);
-    state.dimension = "nether";
-    const nether = sim.worldOf("nether");
+    state.dimension = "flatcraft:dimension:nether";
+    const nether = sim.worldOf("flatcraft:dimension:nether");
     nether.ensureChunk(0, 1);
     nether.setBlock(3, 40, BlockId.Glowstone);
-    expect(sim.worldOf("overworld").getBlockGenerating(3, 40)).not.toBe(BlockId.Glowstone);
+    expect(sim.worldOf("flatcraft:dimension:overworld").getBlockGenerating(3, 40)).not.toBe(BlockId.Glowstone);
   });
 
   it("lava hurts players standing in it", () => {

@@ -1,5 +1,5 @@
 {
-  "id": "oak_planks",
+  "id": "flatcraft:block:oak_planks",
   "name": "Oak Planks",
   "solid": true,
   "hardness": 30,

@@ -1,5 +1,5 @@
 {
-  "id": "iron_bucket",
+  "id": "flatcraft:item:iron_bucket",
   "name": "Iron Bucket",
   "max_stack": 1,
   "bucket": {
@@ -14,7 +14,7 @@
         " a "
       ],
       "key": {
-        "a": "item:iron_ingot"
+        "a": "item:flatcraft:item:iron_ingot"
       }
     }
   ],

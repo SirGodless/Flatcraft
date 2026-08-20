@@ -1,5 +1,5 @@
 {
-  "id": "golden_shovel",
+  "id": "flatcraft:item:golden_shovel",
   "name": "Golden Shovel",
   "max_stack": 1,
   "tool": {
@@ -12,7 +12,7 @@
     "knockback": 0.35
   },
   "enchants": [
-    "efficiency"
+    "flatcraft:enchant:efficiency"
   ],
   "recipes": [
     {
@@ -24,8 +24,8 @@
         "b"
       ],
       "key": {
-        "a": "item:gold_ingot",
-        "b": "item:stick"
+        "a": "item:flatcraft:item:gold_ingot",
+        "b": "item:flatcraft:item:stick"
       }
     }
   ],

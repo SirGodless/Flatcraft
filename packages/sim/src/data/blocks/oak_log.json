@@ -1,5 +1,5 @@
 {
-  "id": "oak_log",
+  "id": "flatcraft:block:oak_log",
   "name": "Oak Log",
   "solid": false,
   "hardness": 25,

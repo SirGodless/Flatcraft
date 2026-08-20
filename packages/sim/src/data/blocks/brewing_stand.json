@@ -1,5 +1,5 @@
 {
-  "id": "brewing_stand",
+  "id": "flatcraft:block:brewing_stand",
   "name": "Brewing Stand",
   "solid": true,
   "hardness": 20,

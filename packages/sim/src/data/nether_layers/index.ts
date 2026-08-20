@@ -14,10 +14,10 @@ import ancientDebris from "./ancient_debris.json";
  * existing worlds' generated terrain.
  */
 const layers: Array<[string, NetherLayerJson]> = [
-  ["glowstone", glowstone],
-  ["soul_sand", soulSand],
-  ["basalt", basalt],
-  ["ancient_debris", ancientDebris],
+  ["flatcraft:nether_layer:glowstone", glowstone],
+  ["flatcraft:nether_layer:soul_sand", soulSand],
+  ["flatcraft:nether_layer:basalt", basalt],
+  ["flatcraft:nether_layer:ancient_debris", ancientDebris],
 ];
 
 for (const [id, json] of layers) {

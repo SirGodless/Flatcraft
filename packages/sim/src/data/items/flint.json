@@ -1,5 +1,5 @@
 {
-  "id": "flint",
+  "id": "flatcraft:item:flint",
   "name": "Flint",
   "visual": {
     "fallback": {

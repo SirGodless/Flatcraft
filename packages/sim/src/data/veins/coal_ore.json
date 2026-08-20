@@ -1,6 +1,6 @@
 {
-  "id": "coal_ore",
-  "block": "coal_ore",
+  "id": "flatcraft:vein:coal_ore",
+  "block": "flatcraft:block:coal_ore",
   "attempts": 5,
   "size_min": 4,
   "size_max": 10,

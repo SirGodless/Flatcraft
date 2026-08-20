@@ -1,19 +1,19 @@
 {
-  "id": "netherite_ingot",
+  "id": "flatcraft:item:netherite_ingot",
   "name": "Netherite Ingot",
   "recipes": [
     {
       "station": "crafting_table",
       "style": "shapeless",
       "ingredients": [
-        "item:netherite_scrap",
-        "item:netherite_scrap",
-        "item:netherite_scrap",
-        "item:netherite_scrap",
-        "item:gold_ingot",
-        "item:gold_ingot",
-        "item:gold_ingot",
-        "item:gold_ingot"
+        "item:flatcraft:item:netherite_scrap",
+        "item:flatcraft:item:netherite_scrap",
+        "item:flatcraft:item:netherite_scrap",
+        "item:flatcraft:item:netherite_scrap",
+        "item:flatcraft:item:gold_ingot",
+        "item:flatcraft:item:gold_ingot",
+        "item:flatcraft:item:gold_ingot",
+        "item:flatcraft:item:gold_ingot"
       ]
     }
   ],

@@ -293,7 +293,7 @@ registerCommandHandler("use_bucket", {
       sim.wakeLiquids(p.dimension, x, y);
       // Clay dissolves the moment it pours a bucket-melting liquid -
       // every other tier survives (copper and up don't melt).
-      if (!p.creative && stack.item === "clay_bucket" && liquidDef(heldLiquid)?.meltsBuckets) {
+      if (!p.creative && stack.item === "flatcraft:item:clay_bucket" && liquidDef(`flatcraft:liquid:${heldLiquid}`)?.meltsBuckets) {
         p.inventory[p.selected] = null;
       } else {
         const remaining = heldAmount - 1;

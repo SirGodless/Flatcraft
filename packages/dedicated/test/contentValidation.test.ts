@@ -26,10 +26,10 @@ afterEach(async () => {
 describe("boot-time content validation", () => {
   it("refuses to start when a multiblock references an unregistered handler", async () => {
     registerMultiblock(
-      parseMultiblock("test_boot_missing_handler", {
-        id: "test_boot_missing_handler",
-        handler: "nobody_registered_this_handler",
-        trigger_on: { type: "place_block", item: "coal" },
+      parseMultiblock("flatcraft:multiblock:test_boot_missing_handler", {
+        id: "flatcraft:multiblock:test_boot_missing_handler",
+        handler: "flatcraft:multiblock_handler:nobody_registered_this_handler",
+        trigger_on: { type: "place_block", item: "flatcraft:item:coal" },
       }),
     );
     dataDir = mkdtempSync(join(tmpdir(), "flatcraft-contentvalidation-"));

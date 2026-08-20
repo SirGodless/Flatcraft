@@ -1,5 +1,5 @@
 {
-  "id": "oak_fence",
+  "id": "flatcraft:block:oak_fence",
   "name": "Oak Fence",
   "solid": true,
   "hardness": 30,

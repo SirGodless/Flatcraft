@@ -1,5 +1,5 @@
 {
-  "id": "backpack",
+  "id": "flatcraft:item:backpack",
   "name": "Backpack",
   "max_stack": 1,
   "container": {
@@ -14,10 +14,10 @@
         "tag:planks",
         "tag:planks",
         "tag:planks",
-        "item:stick",
-        "item:stick",
-        "item:stick",
-        "item:stick"
+        "item:flatcraft:item:stick",
+        "item:flatcraft:item:stick",
+        "item:flatcraft:item:stick",
+        "item:flatcraft:item:stick"
       ]
     }
   ],

@@ -1,5 +1,5 @@
 {
-  "id": "birch",
-  "log": "birch_log",
-  "leaves": "birch_leaves"
+  "id": "flatcraft:wood:birch",
+  "log": "flatcraft:block:birch_log",
+  "leaves": "flatcraft:block:birch_leaves"
 }

@@ -11,10 +11,10 @@ import well from "./well.json";
  * structures/structure.ts for the format) and register it here.
  */
 const sources: Record<string, StructureJson> = {
-  dungeon: dungeon,
-  well: well,
-  house: house,
-  nether_ruin: netherRuin,
+  "flatcraft:structure:dungeon": dungeon,
+  "flatcraft:structure:well": well,
+  "flatcraft:structure:house": house,
+  "flatcraft:structure:nether_ruin": netherRuin,
 };
 
 export const STRUCTURES: readonly Structure[] = Object.entries(sources).map(([id, json]) =>

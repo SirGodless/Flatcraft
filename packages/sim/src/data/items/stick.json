@@ -1,5 +1,5 @@
 {
-  "id": "stick",
+  "id": "flatcraft:item:stick",
   "name": "Stick",
   "fuel_ticks": 100,
   "recipes": [

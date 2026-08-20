@@ -1,5 +1,5 @@
 {
-  "id": "wooden_shovel",
+  "id": "flatcraft:item:wooden_shovel",
   "name": "Wooden Shovel",
   "max_stack": 1,
   "tool": {
@@ -12,7 +12,7 @@
     "knockback": 0.35
   },
   "enchants": [
-    "efficiency"
+    "flatcraft:enchant:efficiency"
   ],
   "recipes": [
     {
@@ -25,7 +25,7 @@
       ],
       "key": {
         "a": "tag:planks",
-        "b": "item:stick"
+        "b": "item:flatcraft:item:stick"
       }
     }
   ],

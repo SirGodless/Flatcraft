@@ -1,12 +1,12 @@
 {
-  "id": "portal_frame",
+  "id": "flatcraft:block:portal_frame",
   "name": "Portal Frame",
   "solid": true,
   "hardness": 250,
   "tool": "pickaxe",
   "required_tier": 4,
   "drops": {
-    "item": "obsidian",
+    "item": "flatcraft:item:obsidian",
     "amount": 1
   },
   "side_permeable": true,

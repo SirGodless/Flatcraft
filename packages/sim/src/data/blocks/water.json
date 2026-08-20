@@ -1,5 +1,5 @@
 {
-  "id": "water",
+  "id": "flatcraft:block:water",
   "name": "Water",
   "solid": false,
   "hardness": -1,

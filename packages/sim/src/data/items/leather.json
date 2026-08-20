@@ -1,5 +1,5 @@
 {
-  "id": "leather",
+  "id": "flatcraft:item:leather",
   "name": "Leather",
   "visual": {
     "fallback": {
