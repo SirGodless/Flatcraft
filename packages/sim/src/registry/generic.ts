@@ -1,4 +1,4 @@
-import { checkKeys, need, needId, needNumber, needOneOf, SchemaError } from "./schema.js";
+import { checkKeys, ID_PATTERN, need, needId, needNumber, needOneOf, SchemaError } from "./schema.js";
 
 /**
  * The generic content-type engine: content-defined game-content types
@@ -177,10 +177,22 @@ function validateFieldValue(decl: FieldDecl, raw: unknown, source: string, path:
       if (s !== decl.value) throw new SchemaError(source, `"${path}" must be "${decl.value}", got "${s}"`);
       return s;
     }
-    case "ref":
+    case "ref": {
       // Syntax only for now - see the module doc comment on why existence
-      // checking is deferred rather than attempted here.
-      return needId(source, path, raw);
+      // checking is deferred rather than attempted here. Tolerates (and
+      // strips) an optional "flatcraft:" prefix, matching every other
+      // ref-like field elsewhere in this codebase (needIngredientRef,
+      // multiblock.ts's stripNs) - full <package>:<type>:<name>
+      // namespacing isn't rolled out yet, but some existing content
+      // (recipe ingredients, trades) already writes plain-namespace-
+      // prefixed refs today and this must keep accepting them.
+      const s = need<string>(source, path, raw, "string");
+      const stripped = s.startsWith("flatcraft:") ? s.slice("flatcraft:".length) : s;
+      if (!ID_PATTERN.test(stripped)) {
+        throw new SchemaError(source, `"${path}" must be a lowercase snake_case id (optionally "flatcraft:"-prefixed), got "${s}"`);
+      }
+      return stripped;
+    }
     case "array": {
       const arr = need<unknown[]>(source, path, raw, "array");
       return arr.map((v, i) => validateFieldValue(decl.items, v, source, `${path}[${i}]`));

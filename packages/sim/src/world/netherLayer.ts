@@ -1,5 +1,6 @@
 import { fbm2, hash01 } from "../math/noise.js";
 import { hashSeed } from "../math/rng.js";
+import { registerContentType, validateContentInstance } from "../registry/generic.js";
 import { blockByName, type BlockId } from "./block.js";
 
 /**
@@ -66,26 +67,51 @@ export interface NetherLayerDef {
   aboveThreshold: boolean;
 }
 
+registerContentType(
+  {
+    id: "nether_layer",
+    fields: {
+      id: { kind: "id", required: true },
+      block: { kind: "ref", ref_type: "block", required: true },
+      y_less_than: { kind: "number", min: -100000, max: 100000 },
+      y_greater_than: { kind: "number", min: -100000, max: 100000 },
+      noise: { kind: "enum", values: ["fbm2", "hash01"], required: true },
+      seed_offset: { kind: "number", min: -1e9, max: 1e9, required: true },
+      period: { kind: "number", min: 0, max: 100000 },
+      octaves: { kind: "number", min: 0, max: 100 },
+      threshold: { kind: "number", min: -1000, max: 1000, required: true },
+      above_threshold: { kind: "boolean", required: true },
+    },
+  },
+  "engine/types/nether_layer",
+);
+
 export function parseNetherLayer(id: string, json: NetherLayerJson): NetherLayerDef {
-  const block = blockByName(json.block);
-  if (block === undefined) throw new Error(`nether layer "${id}": unknown block "${json.block}"`);
-  if (json.noise !== "fbm2" && json.noise !== "hash01") {
-    throw new Error(`nether layer "${id}": noise must be "fbm2" or "hash01"`);
-  }
-  if (json.noise === "fbm2" && (json.period === undefined || json.octaves === undefined)) {
+  const v = validateContentInstance("nether_layer", json, `nether layer "${id}"`);
+  const blockName = v["block"] as string;
+  const block = blockByName(blockName);
+  if (block === undefined) throw new Error(`nether layer "${id}": unknown block "${blockName}"`);
+  const noise = v["noise"] as "fbm2" | "hash01";
+  const period = v["period"] as number | undefined;
+  const octaves = v["octaves"] as number | undefined;
+  // Cross-field rule ("fbm2" needs period+octaves) - the generic DSL
+  // doesn't (yet) express "field X required only if field Y is Z", so
+  // this one stays a small residual check here rather than growing the
+  // DSL for a single caller.
+  if (noise === "fbm2" && (period === undefined || octaves === undefined)) {
     throw new Error(`nether layer "${id}": noise "fbm2" requires "period" and "octaves"`);
   }
   return {
     id,
     block,
-    ...(json.y_less_than !== undefined ? { yLessThan: json.y_less_than } : {}),
-    ...(json.y_greater_than !== undefined ? { yGreaterThan: json.y_greater_than } : {}),
-    noise: json.noise,
-    seedOffset: json.seed_offset,
-    ...(json.period !== undefined ? { period: json.period } : {}),
-    ...(json.octaves !== undefined ? { octaves: json.octaves } : {}),
-    threshold: json.threshold,
-    aboveThreshold: json.above_threshold,
+    ...(v["y_less_than"] !== undefined ? { yLessThan: v["y_less_than"] as number } : {}),
+    ...(v["y_greater_than"] !== undefined ? { yGreaterThan: v["y_greater_than"] as number } : {}),
+    noise,
+    seedOffset: v["seed_offset"] as number,
+    ...(period !== undefined ? { period } : {}),
+    ...(octaves !== undefined ? { octaves } : {}),
+    threshold: v["threshold"] as number,
+    aboveThreshold: v["above_threshold"] as boolean,
   };
 }
 
