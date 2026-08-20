@@ -1,5 +1,6 @@
 import type { MobKind, PlayerEntity } from "./entities.js";
 import type { OutboundEvent } from "./events.js";
+import { getHandler, hasHandler, registerHandler } from "./registry/handlers.js";
 import type { Simulation } from "./simulation.js";
 import type { World } from "./world/world.js";
 
@@ -31,17 +32,12 @@ export interface SpawnContext {
 
 export type SpawnGenerator = (ctx: SpawnContext) => void;
 
-const GENERATORS = new Map<string, SpawnGenerator>();
-
 export function registerSpawnGenerator(id: string, generator: SpawnGenerator): void {
-  if (GENERATORS.has(id)) {
-    throw new Error(`spawn generator "${id}" is already registered`);
-  }
-  GENERATORS.set(id, generator);
+  registerHandler("spawn_generator", id, generator);
 }
 
 export function spawnGenerator(id: string): SpawnGenerator | undefined {
-  return GENERATORS.get(id);
+  return getHandler("spawn_generator", id);
 }
 
 /** Every registered dimension's spawn generator must resolve - checked
@@ -53,7 +49,7 @@ export function spawnGenerator(id: string): SpawnGenerator | undefined {
 export function validateSpawnGenerators(dimensions: Iterable<{ id: string; spawns: string }>): string[] {
   const problems: string[] = [];
   for (const dim of dimensions) {
-    if (!GENERATORS.has(dim.spawns)) {
+    if (!hasHandler("spawn_generator", dim.spawns)) {
       problems.push(`dimension "${dim.id}" references unknown spawn generator "${dim.spawns}"`);
     }
   }

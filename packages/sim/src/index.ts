@@ -2,6 +2,7 @@ export * from "./constants.js";
 export * from "./registry/schema.js";
 export * from "./registry/visual.js";
 export * from "./registry/generic.js";
+export * from "./registry/handlers.js";
 export * from "./combat.js";
 export * from "./effects.js";
 export * from "./commands.js";

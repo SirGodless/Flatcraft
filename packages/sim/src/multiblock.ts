@@ -2,6 +2,7 @@ import { CHUNK_HEIGHT, CHUNK_WIDTH } from "./constants.js";
 import type { SimEvent } from "./events.js";
 import { itemDef } from "./items.js";
 import { registerContentType, validateContentInstance } from "./registry/generic.js";
+import { getHandler, hasHandler, registerHandler } from "./registry/handlers.js";
 import type { Simulation } from "./simulation.js";
 import { blockByName, type BlockId } from "./world/block.js";
 import type { Dimension, World } from "./world/world.js";
@@ -384,7 +385,7 @@ export function allMultiblocks(): Iterable<MultiblockDef> {
 export function validateMultiblockHandlers(): string[] {
   const problems: string[] = [];
   for (const def of DEFS.values()) {
-    if (!HANDLERS.has(def.handler)) {
+    if (!hasHandler("multiblock_handler", def.handler)) {
       problems.push(`multiblock "${def.id}" references unknown behavior "${def.handler}"`);
     }
   }
@@ -419,13 +420,8 @@ export interface MultiblockHandler {
   activate(ctx: MultiblockActivateContext): boolean;
 }
 
-const HANDLERS = new Map<string, MultiblockHandler>();
-
 export function registerMultiblockHandler(id: string, handler: MultiblockHandler): void {
-  if (HANDLERS.has(id)) {
-    throw new Error(`multiblock handler "${id}" is already registered - ids must be unique (use a modname: prefix)`);
-  }
-  HANDLERS.set(id, handler);
+  registerHandler("multiblock_handler", id, handler);
 }
 
 function triggerMatches(defTrigger: MultiblockTrigger, actual: MultiblockTrigger): boolean {
@@ -464,7 +460,7 @@ export function tryActivateMultiblock(
 ): MultiblockAttemptResult {
   for (const def of DEFS.values()) {
     if (!triggerMatches(def.triggerOn, trigger)) continue;
-    const handler = HANDLERS.get(def.handler);
+    const handler = getHandler<MultiblockHandler>("multiblock_handler", def.handler);
     if (!handler) continue; // no registered behavior for this id - skip, never crash
     let match: MultiblockMatch | undefined;
     if (def.states) {
