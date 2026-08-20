@@ -223,13 +223,18 @@ export interface MobJson {
   };
 }
 
-class SchemaError extends Error {
+// Exported (not just used within this file) so registry/generic.ts's
+// content-defined type-declaration engine can share the exact same
+// primitives and error format instead of a parallel reimplementation -
+// "the JSON schema of a hand-written type" and "the JSON schema of a
+// content-declared type" are the same kind of check either way.
+export class SchemaError extends Error {
   constructor(source: string, message: string) {
     super(`datapack ${source}: ${message}`);
   }
 }
 
-function checkKeys(source: string, path: string, value: object, allowed: readonly string[]): void {
+export function checkKeys(source: string, path: string, value: object, allowed: readonly string[]): void {
   for (const key of Object.keys(value)) {
     if (!allowed.includes(key)) {
       throw new SchemaError(source, `unknown field "${path}${key}"`);
@@ -237,7 +242,7 @@ function checkKeys(source: string, path: string, value: object, allowed: readonl
   }
 }
 
-function need<T>(source: string, path: string, value: unknown, type: string): T {
+export function need<T>(source: string, path: string, value: unknown, type: string): T {
   const actual = Array.isArray(value) ? "array" : typeof value;
   if (actual !== type) {
     throw new SchemaError(source, `"${path}" must be ${type}, got ${actual}`);
@@ -245,7 +250,7 @@ function need<T>(source: string, path: string, value: unknown, type: string): T 
   return value as T;
 }
 
-function needNumber(source: string, path: string, value: unknown, min: number, max: number): number {
+export function needNumber(source: string, path: string, value: unknown, min: number, max: number): number {
   const n = need<number>(source, path, value, "number");
   if (!Number.isFinite(n) || n < min || n > max) {
     throw new SchemaError(source, `"${path}" out of range [${min}, ${max}]`);
@@ -253,7 +258,7 @@ function needNumber(source: string, path: string, value: unknown, min: number, m
   return n;
 }
 
-function needOneOf<T extends string>(source: string, path: string, value: unknown, options: readonly T[]): T {
+export function needOneOf<T extends string>(source: string, path: string, value: unknown, options: readonly T[]): T {
   const s = need<string>(source, path, value, "string");
   if (!options.includes(s as T)) {
     throw new SchemaError(source, `"${path}" must be one of ${options.join("|")}, got "${s}"`);
@@ -261,9 +266,9 @@ function needOneOf<T extends string>(source: string, path: string, value: unknow
   return s as T;
 }
 
-const ID_PATTERN = /^[a-z0-9_]+$/;
+export const ID_PATTERN = /^[a-z0-9_]+$/;
 
-function needId(source: string, path: string, value: unknown): string {
+export function needId(source: string, path: string, value: unknown): string {
   const s = need<string>(source, path, value, "string");
   if (!ID_PATTERN.test(s)) {
     throw new SchemaError(source, `"${path}" must be a lowercase snake_case id, got "${s}"`);
