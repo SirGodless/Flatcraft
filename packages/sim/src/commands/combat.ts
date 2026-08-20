@@ -1,13 +1,5 @@
 import { attackDamage, attackKnockback, PLAYER_ATTACK_COOLDOWN } from "../combat.js";
-import {
-  ARROW_TTL,
-  ATTACK_REACH,
-  BOW_ARROW_SPEED,
-  BOW_COOLDOWN,
-  BOW_DAMAGE,
-  isMobEntity,
-  type ArrowEntity,
-} from "../entities.js";
+import { ARROW_TTL, ATTACK_REACH, isMobEntity, type ArrowEntity } from "../entities.js";
 import { STRENGTH_BONUS } from "../effects.js";
 import { itemDef } from "../items.js";
 import { sizeOf } from "../mobs.js";
@@ -61,18 +53,19 @@ registerCommandHandler("shoot", {
       reject("invalid direction");
       return;
     }
-    if (p.inventory[p.selected]?.item !== "bow") {
+    const ranged = itemDef(p.inventory[p.selected]?.item ?? "")?.ranged;
+    if (!ranged) {
       reject("no bow");
       return;
     }
     if (p.attackCooldown > 0) {
       return;
     }
-    if (!removeFromInventory(p.inventory, "arrow", 1)) {
+    if (!removeFromInventory(p.inventory, ranged.ammo, 1)) {
       reject("no arrows");
       return;
     }
-    p.attackCooldown = BOW_COOLDOWN;
+    p.attackCooldown = ranged.cooldownTicks;
     const originY = p.y - PLAYER_HEIGHT * 0.6;
     const arrow: ArrowEntity = {
       id: sim.allocatePlayerId(),
@@ -80,10 +73,10 @@ registerCommandHandler("shoot", {
       dimension: p.dimension,
       x: p.x + (dx / len) * 0.8,
       y: originY + (dy / len) * 0.8,
-      vx: (dx / len) * BOW_ARROW_SPEED,
-      vy: (dy / len) * BOW_ARROW_SPEED,
+      vx: (dx / len) * ranged.arrowSpeed,
+      vy: (dy / len) * ranged.arrowSpeed,
       onGround: false,
-      damage: BOW_DAMAGE,
+      damage: ranged.damage,
       ttl: ARROW_TTL,
       owner: player,
     };

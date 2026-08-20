@@ -65,10 +65,14 @@ export interface ItemJson {
   places_block?: string;
   tool?: { kind: "pickaxe" | "axe" | "shovel" | "sword" | "hammer"; tier: number; mining_speed: number };
   weapon?: { damage: number; knockback?: number };
+  /** Fires an ammo item as an arrow entity on the "shoot" command. */
+  ranged?: { damage: number; cooldown_ticks: number; arrow_speed: number; ammo: string };
   food?: { hunger: number; saturation?: number; eat_ticks?: number; returns?: string };
   armor?: { absorb: number };
   shield?: { block: number };
   grapple?: { range: number };
+  /** Held while falling + jump: slows descent, boosts horizontal speed. */
+  glider?: { sink: number; glide_boost: number };
   effect?: { id: string; ticks: number; returns?: string };
   /** Container for scooping/pouring liquids; capacity in whole blocks. */
   bucket?: { capacity: number };
@@ -304,8 +308,8 @@ function validateRecipeJson(raw: unknown, source: string, index: number): Recipe
 export function validateItemJson(raw: unknown, source: string): ItemJson {
   const value = need<Record<string, unknown>>(source, "(root)", raw, "object");
   checkKeys(source, "", value, [
-    "id", "name", "max_stack", "sprite", "visual", "places_block", "tool", "weapon", "food",
-    "armor", "shield", "grapple", "effect", "bucket", "container", "fuel_ticks", "enchants", "recipes",
+    "id", "name", "max_stack", "sprite", "visual", "places_block", "tool", "weapon", "ranged", "food",
+    "armor", "shield", "grapple", "glider", "effect", "bucket", "container", "fuel_ticks", "enchants", "recipes",
   ]);
   const out: ItemJson = { id: needId(source, "id", value["id"]) };
   if (value["name"] !== undefined) out.name = need<string>(source, "name", value["name"], "string");
@@ -330,6 +334,16 @@ export function validateItemJson(raw: unknown, source: string): ItemJson {
       out.weapon.knockback = needNumber(source, "weapon.knockback", weapon["knockback"], 0, 2);
     }
   }
+  if (value["ranged"] !== undefined) {
+    const ranged = need<Record<string, unknown>>(source, "ranged", value["ranged"], "object");
+    checkKeys(source, "ranged.", ranged, ["damage", "cooldown_ticks", "arrow_speed", "ammo"]);
+    out.ranged = {
+      damage: needNumber(source, "ranged.damage", ranged["damage"], 0, 100),
+      cooldown_ticks: needNumber(source, "ranged.cooldown_ticks", ranged["cooldown_ticks"], 1, 1000),
+      arrow_speed: needNumber(source, "ranged.arrow_speed", ranged["arrow_speed"], 0.01, 10),
+      ammo: needId(source, "ranged.ammo", ranged["ammo"]),
+    };
+  }
   if (value["food"] !== undefined) {
     const food = need<Record<string, unknown>>(source, "food", value["food"], "object");
     checkKeys(source, "food.", food, ["hunger", "saturation", "eat_ticks", "returns"]);
@@ -352,6 +366,14 @@ export function validateItemJson(raw: unknown, source: string): ItemJson {
     const grapple = need<Record<string, unknown>>(source, "grapple", value["grapple"], "object");
     checkKeys(source, "grapple.", grapple, ["range"]);
     out.grapple = { range: needNumber(source, "grapple.range", grapple["range"], 1, 128) };
+  }
+  if (value["glider"] !== undefined) {
+    const glider = need<Record<string, unknown>>(source, "glider", value["glider"], "object");
+    checkKeys(source, "glider.", glider, ["sink", "glide_boost"]);
+    out.glider = {
+      sink: needNumber(source, "glider.sink", glider["sink"], 0, 1),
+      glide_boost: needNumber(source, "glider.glide_boost", glider["glide_boost"], 0, 10),
+    };
   }
   if (value["effect"] !== undefined) {
     const effect = need<Record<string, unknown>>(source, "effect", value["effect"], "object");

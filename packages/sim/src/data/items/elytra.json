@@ -1,5 +1,6 @@
 {
   "id": "elytra",
   "name": "Elytra",
-  "max_stack": 1
+  "max_stack": 1,
+  "glider": { "sink": 0.08, "glide_boost": 2.2 }
 }

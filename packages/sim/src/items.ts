@@ -25,6 +25,21 @@ export interface WeaponDef {
   readonly knockback: number;
 }
 
+export interface RangedWeaponDef {
+  readonly damage: number;
+  readonly cooldownTicks: number;
+  readonly arrowSpeed: number;
+  /** Item id consumed as ammo, one per shot. */
+  readonly ammo: string;
+}
+
+export interface GliderDef {
+  /** Clamps downward speed while gliding. */
+  readonly sink: number;
+  /** Horizontal speed multiplier while gliding. */
+  readonly glideBoost: number;
+}
+
 export interface FoodDef {
   readonly hunger: number;
   /** Saturation buffers hunger drain before points are lost. */
@@ -51,6 +66,8 @@ export interface ItemDef {
   readonly block?: BlockId | undefined;
   readonly tool?: ToolDef | undefined;
   readonly weapon?: WeaponDef | undefined;
+  /** Fires an ammo item as an arrow entity on the "shoot" command. */
+  readonly ranged?: RangedWeaponDef | undefined;
   readonly food?: FoodDef | undefined;
   /** Fraction of incoming damage absorbed while worn. */
   readonly armor?: number | undefined;
@@ -58,6 +75,8 @@ export interface ItemDef {
   readonly shieldBlock?: number | undefined;
   /** Grappling hook: max anchor distance in tiles. */
   readonly grapple?: number | undefined;
+  /** Held while falling + jump: slows descent, boosts horizontal speed. */
+  readonly glider?: GliderDef | undefined;
   readonly effect?: EffectDef | undefined;
   /** Bucket: capacity in whole blocks of liquid it can carry. */
   readonly bucket?: number | undefined;
@@ -101,6 +120,19 @@ export function registerItemJson(raw: unknown, source = "datapack"): ItemDef {
       : {}),
     ...(json.weapon !== undefined
       ? { weapon: { damage: json.weapon.damage, knockback: json.weapon.knockback ?? 0.35 } }
+      : {}),
+    ...(json.ranged !== undefined
+      ? {
+          ranged: {
+            damage: json.ranged.damage,
+            cooldownTicks: json.ranged.cooldown_ticks,
+            arrowSpeed: json.ranged.arrow_speed,
+            ammo: json.ranged.ammo,
+          },
+        }
+      : {}),
+    ...(json.glider !== undefined
+      ? { glider: { sink: json.glider.sink, glideBoost: json.glider.glide_boost } }
       : {}),
     ...(json.food !== undefined
       ? {

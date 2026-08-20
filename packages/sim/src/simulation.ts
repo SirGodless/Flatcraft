@@ -10,9 +10,6 @@ import { createFurnace, furnaceIdle, furnaceKey, stepFurnace, type FurnaceState 
 import {
   ARROW_TTL,
   ATTACK_REACH,
-  BOW_ARROW_SPEED,
-  BOW_COOLDOWN,
-  BOW_DAMAGE,
   ITEM_DESPAWN_TICKS,
   ITEM_PICKUP_DELAY,
   ITEM_PICKUP_RADIUS,
@@ -76,8 +73,6 @@ import {
 import { rngNext, type Rng, type RngState } from "./math/rng.js";
 import { canHarvest, miningTicks } from "./mining.js";
 import {
-  ELYTRA_GLIDE_BOOST,
-  ELYTRA_SINK,
   GRAVITY,
   JUMP_VELOCITY,
   PLAYER_HEIGHT,
@@ -1089,17 +1084,16 @@ export class Simulation {
           }
           p.vy = Math.min(p.vy + GRAVITY, TERMINAL_VELOCITY);
 
-          // Elytra gliding: hold jump while falling with wings in the
-          // inventory - slow descent, fast horizontal travel, no fall damage.
-          if (
-            !p.onGround &&
-            p.input.jump &&
-            p.vy > 0 &&
-            p.inventory.some((s) => s?.item === "elytra")
-          ) {
-            p.vy = Math.min(p.vy, ELYTRA_SINK);
-            p.vx = p.input.dx * WALK_SPEED * ELYTRA_GLIDE_BOOST * speedFactor + p.kbX;
-            p.fallDistance = 0;
+          // Gliding: hold jump while falling with a glider item (e.g.
+          // elytra) in the inventory - slow descent, fast horizontal
+          // travel, no fall damage.
+          if (!p.onGround && p.input.jump && p.vy > 0) {
+            const glider = p.inventory.map((s) => (s ? itemDef(s.item)?.glider : undefined)).find(Boolean);
+            if (glider) {
+              p.vy = Math.min(p.vy, glider.sink);
+              p.vx = p.input.dx * WALK_SPEED * glider.glideBoost * speedFactor + p.kbX;
+              p.fallDistance = 0;
+            }
           }
         }
       }
