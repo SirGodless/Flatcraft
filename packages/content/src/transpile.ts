@@ -27,11 +27,22 @@ export interface TranspileError {
 
 export type TranspileResult = { ok: true; code: string } | { ok: false; errors: TranspileError[] };
 
-export function transpileScript(source: string, filename: string): TranspileResult {
+export interface TranspileOptions {
+  /** "esm" (default) keeps import/export syntax, for a future real module
+   * loader. "iife" wraps the output in a self-invoking function instead -
+   * Stage 8's sandbox runs a script as a classic (non-module) script via
+   * isolated-vm's Context.eval, which can't parse a top-level `export`;
+   * a side-effecting registration script (calls bridge.registerX(...),
+   * exports nothing a host needs to read back) wants "iife" so esbuild
+   * never emits that keyword in the first place. */
+  format?: "esm" | "iife";
+}
+
+export function transpileScript(source: string, filename: string, options: TranspileOptions = {}): TranspileResult {
   try {
     const result = transformSync(source, {
       loader: "ts",
-      format: "esm",
+      format: options.format ?? "esm",
       target: "es2022",
       sourcefile: filename,
     });

@@ -67,6 +67,42 @@ const AFTER_DIR: Readonly<Record<string, () => void>> = {
   items: syncItemRecipes,
 };
 
+/** Same dispatch table as DIR_ORDER, keyed by the content type's own id
+ * (e.g. "block", "nether_layer", "trade_list" - singular, matching
+ * registerContentType's own `id` field) rather than its directory name
+ * (plural, e.g. "blocks", "nether_layers", "trades") - for a caller that
+ * has a typeId string in hand already, not a file to place in a
+ * directory. Used by the Stage 8 sandbox bridge's
+ * registerContentInstance(typeId, instance) so a script registers into
+ * the exact same per-type validation/registration path a JSON file
+ * would go through, without needing to fake a directory-shaped
+ * ContentFiles map for one instance. */
+const TYPE_HANDLERS: Readonly<Record<string, Handler>> = {
+  block: (raw, source) => void registerBlockJson(raw, source),
+  item: (raw, source) => void registerItemJson(raw, source),
+  mob: (raw, source) => void registerMobJson(raw, source),
+  enchant: (raw, source) => void registerEnchantJson(raw, source),
+  liquid: (raw, source) => void registerLiquidJson(raw, source),
+  vein: (raw, source) => void registerVeinJson(raw, source),
+  wood: (raw, source) => void registerWoodJson(raw, source),
+  nether_layer: (raw, source) => void registerNetherLayerJson(raw, source),
+  biome: (raw, source) => void registerBiomeJson(raw, source),
+  dimension: (raw, source) => void registerDimensionJson(raw, source),
+  multiblock: (raw, source) => void registerMultiblockJson(raw, source),
+  structure: (raw, source) => void registerStructureJson(raw, source),
+  trade_list: (raw, source) => void registerTradesJson(raw, source),
+};
+
+/** Register one instance of an existing content type by its type id
+ * (see TYPE_HANDLERS). Throws for an unknown typeId - same "fail loudly,
+ * don't silently ignore broken content" rule as every other registration
+ * path in this codebase. */
+export function registerContentInstanceByType(typeId: string, raw: unknown, source: string): void {
+  const handler = TYPE_HANDLERS[typeId];
+  if (!handler) throw new Error(`unknown content type "${typeId}" (source: ${source})`);
+  handler(raw, source);
+}
+
 export interface ContentFiles {
   id: string;
   files: ReadonlyMap<string, Uint8Array>;

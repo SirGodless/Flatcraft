@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync,
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { dirname, extname, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { discoverContentDir } from "@flatcraft/content";
+import { discoverContentDir, type ContentPackage } from "@flatcraft/content";
 import { GameServer, INFO_PATH, WS_PATH } from "@flatcraft/server";
 import type { AuthRequest, ClientMessage, ServerConnection, ServerInfo, ServerMessage } from "@flatcraft/server";
 import {
@@ -27,6 +27,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { Accounts } from "./accounts.js";
 import { type ChunkExtra, ChunkFileStore } from "./chunkFiles.js";
 import { OidcLogin, type OidcConfig } from "./oidc.js";
+import { runContentScripts } from "./sandbox.js";
 
 /**
  * The dedicated server: one Node process, one port.
@@ -99,15 +100,16 @@ const MIME_TYPES: Record<string, string> = {
  * same depth, so the same relative path resolves correctly either way. */
 const here = dirname(fileURLToPath(import.meta.url));
 
-/** flatcraft's own content package (block/item/mob/... registries) loads
- * exactly once per process - a second startDedicatedServer() call in the
- * same process (every test file that spins up its own server) must not
- * try to register "flatcraft:block:stone" a second time. Cached as a
- * promise, not a boolean, so concurrent callers await the same load
- * rather than racing a second one. */
-let baseContentLoaded: Promise<void> | null = null;
+/** Every content package under contentDir (block/item/mob/... registries,
+ * flatcraft's own vanilla content included - no privileged shortcut)
+ * loads exactly once per process - a second startDedicatedServer() call
+ * in the same process (every test file that spins up its own server)
+ * must not try to register "flatcraft:block:stone" a second time.
+ * Cached as a promise, not a boolean, so concurrent callers await the
+ * same load rather than racing a second one. */
+let baseContentLoaded: Promise<readonly ContentPackage[]> | null = null;
 
-function ensureBaseContentLoaded(contentDir: string): Promise<void> {
+function ensureBaseContentLoaded(contentDir: string): Promise<readonly ContentPackage[]> {
   if (!baseContentLoaded) {
     baseContentLoaded = (async () => {
       const packages = discoverContentDir(contentDir);
@@ -115,7 +117,18 @@ function ensureBaseContentLoaded(contentDir: string): Promise<void> {
       if (!flatcraft) {
         throw new Error(`no "flatcraft" content package found under "${contentDir}"`);
       }
+      // flatcraft first - every other package's content may reference
+      // flatcraft-namespaced ids (a mod item that places a vanilla
+      // block, a mod block that drops a vanilla item), and
+      // loadContentPackage resolves cross-references eagerly as each
+      // package's own directories drain rather than deferring to the
+      // end, so load order here has to match that assumption.
       await loadContentPackage(flatcraft);
+      for (const pkg of packages) {
+        if (pkg.id === "flatcraft") continue;
+        await loadContentPackage(pkg);
+      }
+      return packages;
     })();
   }
   return baseContentLoaded;
@@ -124,7 +137,25 @@ function ensureBaseContentLoaded(contentDir: string): Promise<void> {
 export async function startDedicatedServer(options: DedicatedOptions): Promise<DedicatedServer> {
   const log = options.log ?? ((message: string) => console.log(message));
   const contentDir = resolve(options.contentDir ?? join(here, "../../../content"));
-  await ensureBaseContentLoaded(contentDir);
+  const contentPackages = await ensureBaseContentLoaded(contentDir);
+
+  // Declared before the Simulation itself exists (its construction below
+  // depends on world-load/reset options resolved later in boot) so
+  // content-package scripts can be loaded - and their registrations
+  // validated by validateAllContent below - ahead of the Simulation that
+  // their bridge calls (world/rng/spawnItem) ultimately act on. Those
+  // bridge calls only ever run from a later tick hook or handler
+  // invocation, never from a script's own top-level load, so `simulation`
+  // is always assigned by the time getSim() is actually called.
+  let simulation: Simulation | undefined;
+  const getSim = (): Simulation => {
+    if (!simulation) {
+      throw new Error(
+        "a content-package script touched the live simulation before it exists - bridge calls are only valid from a tick hook or handler invoked after boot completes, not from a script's own top-level code",
+      );
+    }
+    return simulation;
+  };
 
   const dataDir = resolve(options.dataDir);
   mkdirSync(dataDir, { recursive: true });
@@ -167,6 +198,15 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   if (packBlocks.length > 0 || packItems.length > 0 || packMobs.length > 0) {
     log(`datapack loaded: ${packBlocks.length} blocks, ${packItems.length} items, ${packMobs.length} mobs`);
   }
+
+  // Content-package scripts (content/<pkg>/scripts/*.ts) run before
+  // validateAllContent below, so a multiblock/dimension JSON referencing
+  // a script-registered handler id resolves during that same validation
+  // pass instead of looking like a dangling reference. A script throwing
+  // at top-level load is a hard boot failure (propagates out of this
+  // call), matching validateAllContent's own "refuse to start rather
+  // than run with broken content" rule.
+  runContentScripts(contentPackages, getSim, log);
 
   // Hard stop, not a warning: every content reference (currently
   // multiblock handlers) must resolve to something actually registered,
@@ -224,7 +264,6 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
       log(`RESET_WORLD set: previous world terrain moved to ${backup}`);
     }
   }
-  let simulation: Simulation;
   /** The palette a freshly-loaded meta file's chunk remap is based on -
    * undefined when there was no save to load from, or the meta file was
    * corrupt (see the catch branch below). Either way buildBlockRemap
