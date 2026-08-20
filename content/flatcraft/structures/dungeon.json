@@ -1,4 +1,5 @@
 {
+  "id": "flatcraft:structure:dungeon",
   "dimension": "flatcraft:dimension:overworld",
   "placement": {
     "type": "underground",

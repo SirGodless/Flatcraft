@@ -5,12 +5,13 @@
   "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/server.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --external:bufferutil --external:utf-8-validate",
+    "build": "esbuild src/main.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/server.mjs --banner:js=\"import { createRequire as __flatcraftCreateRequire } from 'node:module'; const require = __flatcraftCreateRequire(import.meta.url);\" --external:bufferutil --external:utf-8-validate",
     "start": "npm run build && node dist/server.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@flatcraft/content": "*",
     "@flatcraft/server": "*",
     "@flatcraft/sim": "*",
     "openid-client": "^6.8.5",

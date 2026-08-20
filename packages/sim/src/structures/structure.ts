@@ -1,12 +1,14 @@
 import { itemDef } from "../items.js";
 import { registerContentType, validateContentInstance } from "../registry/generic.js";
+import { allDimensionIds } from "../world/dimension.js";
 import { blockByName, type BlockId } from "../world/block.js";
 import type { Dimension } from "../world/world.js";
 
 /**
- * World structures, defined in JSON (src/data/structures/*.json):
+ * World structures, defined in JSON (content/flatcraft/structures/*.json):
  *
  *   {
+ *     "id": "flatcraft:structure:house",
  *     "dimension": "flatcraft:dimension:overworld",
  *     "placement": { "type": "surface", "chance": 0.05, "biomes": ["flatcraft:biome:plains"] },
  *     "anchor": [2, 3],
@@ -34,6 +36,7 @@ export interface LootEntry {
 }
 
 export interface StructureJson {
+  id: string;
   dimension: string;
   placement: {
     type: string;
@@ -79,6 +82,7 @@ registerContentType(
   {
     id: "structure",
     fields: {
+      id: { kind: "qualified_id", required: true },
       dimension: { kind: "ref", ref_type: "dimension", required: true },
       placement: {
         kind: "object",
@@ -109,20 +113,22 @@ registerContentType(
   "engine/types/structure",
 );
 
-/** Validated field shapes as they come back out of the generic engine -
- * ref fields already have any "flatcraft:" prefix stripped (see
- * registry/generic.ts), so no separate stripNs step is needed here
- * anymore. Building the actual cell grid from pattern+key is real
+const DEFS = new Map<string, Structure>();
+
+/** Register a structure from datapack JSON (content package files or
+ * server mods). Building the actual cell grid from pattern+key is real
  * algorithmic work, not schema validation, so it stays hand-written
  * after the generic engine confirms the raw shape is sound. */
-export function parseStructure(id: string, json: StructureJson): Structure {
-  const v = validateContentInstance("structure", json, `structure "${id}"`) as {
+export function registerStructureJson(raw: unknown, source = "content"): Structure {
+  const v = validateContentInstance("structure", raw, source) as {
+    id: string;
     dimension: string;
     placement: { type: "surface" | "underground"; chance: number; minY?: number; maxY?: number; biomes?: string[] };
     anchor: number[];
     pattern: string[];
     key: Record<string, { block: string; loot?: LootEntry[] }>;
   };
+  const id = v.id;
   const width = Math.max(...v.pattern.map((r) => r.length));
   const cells: (StructureCell | null)[][] = v.pattern.map((row) => {
     const line: (StructureCell | null)[] = [];
@@ -153,7 +159,7 @@ export function parseStructure(id: string, json: StructureJson): Structure {
   if (ax < 0 || ax >= width || ay < 0 || ay >= cells.length) {
     throw new Error(`structure ${id}: anchor out of bounds`);
   }
-  return {
+  const def: Structure = {
     id,
     dimension: v.dimension,
     placement: {
@@ -168,4 +174,23 @@ export function parseStructure(id: string, json: StructureJson): Structure {
     width,
     height: cells.length,
   };
+  if (DEFS.has(def.id)) {
+    throw new Error(`structure "${def.id}" is already registered`);
+  }
+  DEFS.set(def.id, def);
+  return def;
+}
+
+export function allStructures(): Iterable<Structure> {
+  return DEFS.values();
+}
+
+/** Every structure's `dimension` must name an actually registered
+ * dimension - same exhaustive-collect-all pattern as
+ * validateMultiblockHandlers. */
+export function validateStructureDimensions(): string[] {
+  const known = new Set(allDimensionIds());
+  return [...DEFS.values()]
+    .filter((s) => !known.has(s.dimension))
+    .map((s) => `structure "${s.id}" references unknown dimension "${s.dimension}"`);
 }

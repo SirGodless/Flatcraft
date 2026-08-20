@@ -1,4 +1,3 @@
-import { MOB_JSONS } from "./data/mobs/index.js";
 import type { EntitySize } from "./entities.js";
 import { NON_MOB_SIZES } from "./entities.js";
 import { registerContentType, validateContentInstance } from "./registry/generic.js";
@@ -217,10 +216,6 @@ export function registerMobJson(raw: unknown, source = "datapack"): MobDef {
   };
   defs.set(def.id, def);
   return def;
-}
-
-for (const raw of MOB_JSONS) {
-  registerMobJson(raw, "builtin");
 }
 
 export function mobDef(id: string): MobDef | undefined {

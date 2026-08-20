@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { extname, join, normalize, relative, resolve } from "node:path";
+import { dirname, extname, join, normalize, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { discoverContentDir } from "@flatcraft/content";
 import { GameServer, INFO_PATH, WS_PATH } from "@flatcraft/server";
 import type { AuthRequest, ClientMessage, ServerConnection, ServerInfo, ServerMessage } from "@flatcraft/server";
 import {
@@ -8,6 +10,7 @@ import {
   CHUNK_HEIGHT,
   CHUNK_WIDTH,
   furnaceKey,
+  loadContentPackage,
   registerBlockJson,
   registerItemJson,
   registerMobJson,
@@ -42,6 +45,11 @@ export interface DedicatedOptions {
   dataDir: string;
   /** Built client to serve; omit to run headless (API/WS only). */
   clientDir?: string | undefined;
+  /** The `content/` directory holding `flatcraft/` (and any other
+   * installed content packages) - discovered and registered before
+   * anything else touches the block/item/mob/... registries. Defaults
+   * to the repo-root `content/` directory next to this build. */
+  contentDir?: string | undefined;
   seed?: number | undefined;
   serverName?: string | undefined;
   saveIntervalMs?: number | undefined;
@@ -85,8 +93,39 @@ const MIME_TYPES: Record<string, string> = {
   ".wasm": "application/wasm",
 };
 
+/** Repo-root `content/` lives 3 levels above this file whether it's
+ * running unbundled (packages/dedicated/src) or as the esbuild-bundled
+ * dist/server.mjs (packages/dedicated/dist) - "src"/"dist" sit at the
+ * same depth, so the same relative path resolves correctly either way. */
+const here = dirname(fileURLToPath(import.meta.url));
+
+/** flatcraft's own content package (block/item/mob/... registries) loads
+ * exactly once per process - a second startDedicatedServer() call in the
+ * same process (every test file that spins up its own server) must not
+ * try to register "flatcraft:block:stone" a second time. Cached as a
+ * promise, not a boolean, so concurrent callers await the same load
+ * rather than racing a second one. */
+let baseContentLoaded: Promise<void> | null = null;
+
+function ensureBaseContentLoaded(contentDir: string): Promise<void> {
+  if (!baseContentLoaded) {
+    baseContentLoaded = (async () => {
+      const packages = discoverContentDir(contentDir);
+      const flatcraft = packages.find((p) => p.id === "flatcraft");
+      if (!flatcraft) {
+        throw new Error(`no "flatcraft" content package found under "${contentDir}"`);
+      }
+      await loadContentPackage(flatcraft);
+    })();
+  }
+  return baseContentLoaded;
+}
+
 export async function startDedicatedServer(options: DedicatedOptions): Promise<DedicatedServer> {
   const log = options.log ?? ((message: string) => console.log(message));
+  const contentDir = resolve(options.contentDir ?? join(here, "../../../content"));
+  await ensureBaseContentLoaded(contentDir);
+
   const dataDir = resolve(options.dataDir);
   mkdirSync(dataDir, { recursive: true });
   const worldFile = join(dataDir, "world.json");

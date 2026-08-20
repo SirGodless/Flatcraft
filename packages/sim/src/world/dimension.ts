@@ -137,8 +137,11 @@ registerContentType(
   "engine/types/dimension",
 );
 
-export function parseDimension(id: string, json: DimensionJson): DimensionDef {
-  const v = validateContentInstance("dimension", json, `dimension "${id}"`) as {
+/** Register a dimension from datapack JSON (content package files or
+ * server mods). */
+export function registerDimensionJson(raw: unknown, source = "content"): DimensionDef {
+  const v = validateContentInstance("dimension", raw, source) as {
+    id: string;
     generator: string;
     spawns: string;
     arrival: string;
@@ -148,12 +151,13 @@ export function parseDimension(id: string, json: DimensionJson): DimensionDef {
     portal?: { to: string; scale: number };
     sky?: { type: "cycle" | "fixed"; background?: string; veil_color?: string; veil_alpha?: number };
   };
+  const id = v.id;
   // Cross-field rule the DSL doesn't express yet (see nether_layer's
   // fbm2 check for the same pattern) - kept as a small residual check.
   if (v.sky?.type === "fixed" && v.sky.background === undefined) {
     throw new Error(`dimension "${id}": sky type "fixed" requires "background"`);
   }
-  return {
+  const def: DimensionDef = {
     id,
     generator: v.generator,
     spawns: v.spawns,
@@ -173,19 +177,17 @@ export function parseDimension(id: string, json: DimensionJson): DimensionDef {
         }
       : {}),
   };
+  if (DEFS.has(def.id)) {
+    throw new Error(`dimension "${def.id}" is already registered`);
+  }
+  DEFS.set(def.id, def);
+  return def;
 }
 
 const DEFS = new Map<string, DimensionDef>();
 const GENERATORS = new Map<string, DimensionGenerator>();
 const ARRIVAL_GENERATORS = new Map<string, ArrivalGenerator>();
 const SPAWN_POINT_GENERATORS = new Map<string, SpawnPointGenerator>();
-
-export function registerDimension(def: DimensionDef): void {
-  if (DEFS.has(def.id)) {
-    throw new Error(`dimension "${def.id}" is already registered`);
-  }
-  DEFS.set(def.id, def);
-}
 
 export function registerDimensionGenerator(id: string, generator: DimensionGenerator): void {
   if (GENERATORS.has(id)) {

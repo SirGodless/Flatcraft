@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  allTrades,
   countInInventory,
   itemDef,
   Simulation,
-  TRADES,
   type OutboundEvent,
   type PlayerId,
   type PlayerEntity,
@@ -20,13 +20,14 @@ function joinPlayer(sim: Simulation): { player: PlayerId; state: PlayerEntity } 
 
 describe("villager trading", () => {
   it("loads trades from JSON with resolvable items", () => {
-    expect(TRADES.length).toBeGreaterThanOrEqual(8);
-    for (const trade of TRADES) {
+    const trades = allTrades();
+    expect(trades.length).toBeGreaterThanOrEqual(8);
+    for (const trade of trades) {
       expect(itemDef(trade.cost.item)).toBeDefined();
       expect(itemDef(trade.result.item)).toBeDefined();
     }
     // The elytra is purchasable, as planned.
-    expect(TRADES.some((t) => t.result.item === "flatcraft:item:elytra")).toBe(true);
+    expect(trades.some((t) => t.result.item === "flatcraft:item:elytra")).toBe(true);
   });
 
   it("exchanges cost for result through a villager", () => {
@@ -34,7 +35,7 @@ describe("villager trading", () => {
     const { player, state } = joinPlayer(sim);
     const out: OutboundEvent[] = [];
     const villager = sim.spawnMob("flatcraft:mob:villager", state.x + 1.5, state.y, out);
-    const coalTrade = TRADES.findIndex((t) => t.cost.item === "flatcraft:item:coal");
+    const coalTrade = allTrades().findIndex((t) => t.cost.item === "flatcraft:item:coal");
     state.inventory[0] = { item: "flatcraft:item:coal", count: 20 };
 
     sim.tick([{ player, command: { type: "trade", entity: villager.id, trade: coalTrade } }]);

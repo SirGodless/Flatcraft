@@ -20,6 +20,7 @@ import {
   type OutboundEvent,
   type PlayerId,
 } from "@flatcraft/sim";
+import { loadBundledFlatcraftContent } from "./content.js";
 import { attachInput } from "./input/input.js";
 import { connectWebSocket, type OnlineSession } from "./net/wsConnection.js";
 import { Renderer } from "./render/renderer.js";
@@ -47,6 +48,7 @@ const CHUNK_REQUESTS_PER_FRAME = 12;
  * point of the transport abstraction.
  */
 async function start(): Promise<void> {
+  await loadBundledFlatcraftContent();
   const info = await detectServer();
   if (info) {
     await startOnline(info);

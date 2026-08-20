@@ -252,8 +252,11 @@ function parseTrigger(id: string, json: { type: "place_block" | "use_block"; ite
  * hand-written - the generic engine (registered above) only confirms
  * the raw shape is sound before this function does anything with it,
  * same split as structures.ts/biome.ts. */
-export function parseMultiblock(id: string, json: MultiblockJson): MultiblockDef {
-  const v = validateContentInstance("multiblock", json, `multiblock "${id}"`) as {
+/** Register a multiblock from datapack JSON (content package files or
+ * server mods). */
+export function registerMultiblockJson(raw: unknown, source = "content"): MultiblockDef {
+  const v = validateContentInstance("multiblock", raw, source) as {
+    id: string;
     handler: string;
     trigger_on: { type: "place_block" | "use_block"; item?: string };
     states?: Record<string, MultiblockStateJson>;
@@ -261,6 +264,7 @@ export function parseMultiblock(id: string, json: MultiblockJson): MultiblockDef
     build_pattern?: MultiblockBuildPatternJson;
     config?: Record<string, unknown>;
   };
+  const id = v.id;
   let states: Record<string, MultiblockState> | undefined;
   if (v.states) {
     states = {};
@@ -269,7 +273,7 @@ export function parseMultiblock(id: string, json: MultiblockJson): MultiblockDef
     }
     if (Object.keys(states).length === 0) states = undefined;
   }
-  return {
+  const def: MultiblockDef = {
     id,
     handler: v.handler,
     ...(states ? { states } : {}),
@@ -278,6 +282,11 @@ export function parseMultiblock(id: string, json: MultiblockJson): MultiblockDef
     ...(v.build_pattern ? { buildPattern: parseBuildPattern(id, v.build_pattern) } : {}),
     ...(v.config ? { config: v.config } : {}),
   };
+  if (DEFS.has(def.id)) {
+    throw new Error(`multiblock "${def.id}" is already registered - ids must be unique (use a modname: prefix)`);
+  }
+  DEFS.set(def.id, def);
+  return def;
 }
 
 /**
@@ -349,13 +358,6 @@ function matchesAt(world: World, state: MultiblockState, originX: number, origin
 // --- Registries ---
 
 const DEFS = new Map<string, MultiblockDef>();
-
-export function registerMultiblock(def: MultiblockDef): void {
-  if (DEFS.has(def.id)) {
-    throw new Error(`multiblock "${def.id}" is already registered - ids must be unique (use a modname: prefix)`);
-  }
-  DEFS.set(def.id, def);
-}
 
 export function multiblockDef(id: string): MultiblockDef | undefined {
   return DEFS.get(id);

@@ -4,9 +4,8 @@ import { blockByName, type BlockId } from "./block.js";
 /**
  * Wood types: log/leaves block pair plus tree-shape tuning, referenced
  * by id from biome tree data (see world/biome.ts). Block names resolve
- * eagerly here - blocks are a self-contained registry (world/block.ts
- * imports and registers its own JSON data at module load, before
- * anything else can import it), so a bad block name already throws
+ * eagerly here (the content loader registers blocks before woods - see
+ * registry/load.ts's DIR_ORDER), so a bad block name already throws
  * immediately instead of needing a boot-time validator.
  */
 
@@ -44,8 +43,13 @@ registerContentType(
   "engine/types/wood",
 );
 
-export function parseWood(id: string, json: WoodJson): WoodDef {
-  const v = validateContentInstance("wood", json, `wood "${id}"`);
+const DEFS = new Map<string, WoodDef>();
+
+/** Register a wood type from datapack JSON (content package files or
+ * server mods). */
+export function registerWoodJson(raw: unknown, source = "content"): WoodDef {
+  const v = validateContentInstance("wood", raw, source);
+  const id = v["id"] as string;
   const logName = v["log"] as string;
   const log = blockByName(logName);
   if (log === undefined) throw new Error(`wood "${id}": unknown log block "${logName}"`);
@@ -53,16 +57,12 @@ export function parseWood(id: string, json: WoodJson): WoodDef {
   const leaves = blockByName(leavesName);
   if (leaves === undefined) throw new Error(`wood "${id}": unknown leaves block "${leavesName}"`);
   const canopyShape = (v["canopy_shape"] as "round" | "narrow" | undefined) ?? "round";
-  return { id, log, leaves, extraHeight: (v["extra_height"] as number | undefined) ?? 0, canopyShape };
-}
-
-const DEFS = new Map<string, WoodDef>();
-
-export function registerWood(def: WoodDef): void {
+  const def: WoodDef = { id, log, leaves, extraHeight: (v["extra_height"] as number | undefined) ?? 0, canopyShape };
   if (DEFS.has(def.id)) {
     throw new Error(`wood "${def.id}" is already registered`);
   }
   DEFS.set(def.id, def);
+  return def;
 }
 
 export function woodDef(id: string): WoodDef | undefined {

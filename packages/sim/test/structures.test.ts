@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  allStructures,
   BlockId,
   placementsNear,
   Simulation,
   structureLootAt,
-  STRUCTURES,
   World,
 } from "../src/index.js";
 
@@ -23,8 +23,9 @@ function findPlacement(dimension: "flatcraft:dimension:overworld" | "flatcraft:d
 
 describe("structures", () => {
   it("parses all structure JSONs", () => {
-    expect(STRUCTURES.length).toBeGreaterThanOrEqual(4);
-    for (const s of STRUCTURES) {
+    const structures = [...allStructures()];
+    expect(structures.length).toBeGreaterThanOrEqual(4);
+    for (const s of structures) {
       expect(s.width).toBeGreaterThan(0);
       expect(s.cells.length).toBe(s.height);
     }

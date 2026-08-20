@@ -86,8 +86,24 @@ registerContentType(
   "engine/types/nether_layer",
 );
 
-export function parseNetherLayer(id: string, json: NetherLayerJson): NetherLayerDef {
-  const v = validateContentInstance("nether_layer", json, `nether layer "${id}"`);
+/** Registration order is placement priority - first match wins, same as
+ * the if/else-if chain this replaces. */
+const LAYERS: NetherLayerDef[] = [];
+
+/** Register a nether material layer from datapack JSON (content package
+ * files or server mods). */
+export function registerNetherLayerJson(raw: unknown, source = "content"): NetherLayerDef {
+  const def = parseNetherLayerJson(raw, source);
+  if (LAYERS.some((l) => l.id === def.id)) {
+    throw new Error(`nether layer "${def.id}" is already registered`);
+  }
+  LAYERS.push(def);
+  return def;
+}
+
+function parseNetherLayerJson(raw: unknown, source: string): NetherLayerDef {
+  const v = validateContentInstance("nether_layer", raw, source);
+  const id = v["id"] as string;
   const blockName = v["block"] as string;
   const block = blockByName(blockName);
   if (block === undefined) throw new Error(`nether layer "${id}": unknown block "${blockName}"`);
@@ -113,17 +129,6 @@ export function parseNetherLayer(id: string, json: NetherLayerJson): NetherLayer
     threshold: v["threshold"] as number,
     aboveThreshold: v["above_threshold"] as boolean,
   };
-}
-
-/** Registration order is placement priority - first match wins, same as
- * the if/else-if chain this replaces. */
-const LAYERS: NetherLayerDef[] = [];
-
-export function registerNetherLayer(def: NetherLayerDef): void {
-  if (LAYERS.some((l) => l.id === def.id)) {
-    throw new Error(`nether layer "${def.id}" is already registered`);
-  }
-  LAYERS.push(def);
 }
 
 /** The material at (x, y) from the first matching layer, or undefined

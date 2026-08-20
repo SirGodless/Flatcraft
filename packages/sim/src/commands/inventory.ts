@@ -1,5 +1,5 @@
 import { ingredientOptions } from "../crafting/recipe.js";
-import { RECIPES } from "../data/recipes/index.js";
+import { RECIPES } from "../crafting/registry.js";
 import { addToInventory, countInInventory, removeFromInventory } from "../inventory.js";
 import { itemDef } from "../items.js";
 import { stationBlock } from "../world/block.js";

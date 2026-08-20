@@ -1,4 +1,3 @@
-import { ITEM_JSONS } from "./data/items/index.js";
 import { registerContentType, validateContentInstance } from "./registry/generic.js";
 import { validateRecipeJson, validateVisualJson, validateItemFallbackJson, localName, type ItemJson, type RecipeJson } from "./registry/schema.js";
 import type { ItemVisualDef } from "./registry/visual.js";
@@ -246,10 +245,6 @@ export function registerItemJson(raw: unknown, source = "datapack"): ItemDef {
     recipeSources.push({ result: def.id, json: recipe, source });
   }
   return def;
-}
-
-for (const raw of ITEM_JSONS) {
-  registerItemJson(raw, "builtin");
 }
 
 export function itemDef(id: string): ItemDef | undefined {

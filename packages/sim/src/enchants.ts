@@ -43,18 +43,18 @@ registerContentType(
   "engine/types/enchant",
 );
 
-export function parseEnchant(id: string, json: EnchantJson): EnchantDef {
-  const validated = validateContentInstance("enchant", json, `enchant "${id}"`);
-  return { id, effect: validated["effect"] as EnchantEffect, perLevel: validated["per_level"] as number };
-}
-
 const DEFS = new Map<string, EnchantDef>();
 
-export function registerEnchant(def: EnchantDef): void {
+/** Register an enchant from datapack JSON (content package files or
+ * server mods). */
+export function registerEnchantJson(raw: unknown, source = "content"): EnchantDef {
+  const v = validateContentInstance("enchant", raw, source);
+  const def: EnchantDef = { id: v["id"] as string, effect: v["effect"] as EnchantEffect, perLevel: v["per_level"] as number };
   if (DEFS.has(def.id)) {
     throw new Error(`enchant "${def.id}" is already registered`);
   }
   DEFS.set(def.id, def);
+  return def;
 }
 
 export function enchantDef(id: string): EnchantDef | undefined {

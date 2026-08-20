@@ -1,4 +1,3 @@
-import { BLOCK_JSONS } from "../data/blocks/index.js";
 import { registerContentType, validateContentInstance } from "../registry/generic.js";
 import { validateVisualJson, validateBlockFallbackJson, localName, type BlockJson } from "../registry/schema.js";
 import type { BlockVisualDef } from "../registry/visual.js";
@@ -283,11 +282,6 @@ export function resolveBlockLinks(): void {
     defs.set(id, { ...defs.get(id)!, toggleTo: targetId });
   }
 }
-
-for (const raw of BLOCK_JSONS) {
-  registerBlockJson(raw, "builtin");
-}
-resolveBlockLinks();
 
 export function blockDef(id: BlockId): BlockDef {
   return defs.get(id) ?? AIR;

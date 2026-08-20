@@ -1,9 +1,9 @@
-import { parseStationRecipe, type Recipe } from "../../crafting/recipe.js";
-import { itemRecipeSources } from "../../items.js";
+import { parseStationRecipe, type Recipe } from "./recipe.js";
+import { itemRecipeSources } from "../items.js";
 
 /**
  * The recipe registry. Recipes live in the datapack, embedded in their
- * result item's JSON file under "recipes" (src/data/items/*.json).
+ * result item's JSON file under "recipes" (content/flatcraft/items/*.json).
  * A recipe's id is its result item's id (plus _2, _3... for an item
  * with multiple recipes).
  */
@@ -35,7 +35,5 @@ export function syncItemRecipes(): void {
     registerRecipe(result, json);
   }
 }
-
-syncItemRecipes();
 
 export const RECIPES: ReadonlyMap<string, Recipe> = map;

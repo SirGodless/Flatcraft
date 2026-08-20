@@ -50,15 +50,22 @@ registerContentType(
   "engine/types/vein",
 );
 
-export function parseVein(id: string, json: VeinJson): VeinDef {
-  const v = validateContentInstance("vein", json, `vein "${id}"`);
+const DEFS = new Map<string, VeinDef>();
+
+/** Register a vein from datapack JSON (content package files or server
+ * mods) - the generic content-type engine confirms the raw shape;
+ * block-existence checks stay hand-written residual work (same split as
+ * every other migrated type). */
+export function registerVeinJson(raw: unknown, source = "content"): VeinDef {
+  const v = validateContentInstance("vein", raw, source);
+  const id = v["id"] as string;
   const blockName = v["block"] as string;
   const block = blockByName(blockName);
   if (block === undefined) throw new Error(`vein "${id}": unknown block "${blockName}"`);
   const hostName = v["host"] as string | undefined;
   const host = hostName !== undefined ? blockByName(hostName) : BlockId.Stone;
   if (host === undefined) throw new Error(`vein "${id}": unknown host block "${hostName}"`);
-  return {
+  const def: VeinDef = {
     id,
     block,
     attempts: v["attempts"] as number,
@@ -68,15 +75,11 @@ export function parseVein(id: string, json: VeinJson): VeinDef {
     maxY: v["max_y"] as number,
     host,
   };
-}
-
-const DEFS = new Map<string, VeinDef>();
-
-export function registerVein(def: VeinDef): void {
   if (DEFS.has(def.id)) {
     throw new Error(`vein "${def.id}" is already registered`);
   }
   DEFS.set(def.id, def);
+  return def;
 }
 
 export function veinDef(id: string): VeinDef | undefined {
@@ -86,3 +89,21 @@ export function veinDef(id: string): VeinDef | undefined {
 export function allVeinIds(): readonly string[] {
   return [...DEFS.keys()];
 }
+
+/** Veins placed in every chunk, in placement order - this order is part
+ * of world generation determinism (each vein's placement consumes a
+ * fixed slice of the per-chunk rng stream, see world/gen.ts placeOres),
+ * so it must stay exactly this order for existing worlds to keep
+ * generating identically. */
+export const GLOBAL_VEIN_IDS: readonly string[] = [
+  "flatcraft:vein:obsidian",
+  "flatcraft:vein:clay",
+  "flatcraft:vein:gravel",
+  "flatcraft:vein:coal_ore",
+  "flatcraft:vein:copper_ore",
+  "flatcraft:vein:iron_ore",
+  "flatcraft:vein:lapis_ore",
+  "flatcraft:vein:gold_ore",
+  "flatcraft:vein:redstone_ore",
+  "flatcraft:vein:diamond_ore",
+];

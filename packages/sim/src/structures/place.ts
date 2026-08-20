@@ -1,12 +1,11 @@
 import { CHUNK_HEIGHT, CHUNK_WIDTH } from "../constants.js";
-import { STRUCTURES } from "../data/structures/index.js";
 import type { ItemStack } from "../inventory.js";
 import { hash01 } from "../math/noise.js";
 import { createRng, hashSeed } from "../math/rng.js";
 import { biomeAt, surfaceHeight } from "../world/gen.js";
 import type { Chunk } from "../world/chunk.js";
 import type { Dimension } from "../world/world.js";
-import type { LootEntry, Structure } from "./structure.js";
+import { allStructures, type LootEntry, type Structure } from "./structure.js";
 
 /**
  * Deterministic structure placement. Each chunk may host each structure's
@@ -55,7 +54,7 @@ function anchorPlacement(seed: number, structure: Structure, index: number, cx: 
 /** All placements whose pattern could intersect the given chunk. */
 export function placementsNear(seed: number, dimension: Dimension, cx: number, cy: number): Placement[] {
   const result: Placement[] = [];
-  STRUCTURES.forEach((structure, index) => {
+  [...allStructures()].forEach((structure, index) => {
     if (structure.dimension !== dimension) return;
     // Structures are smaller than a chunk, so anchors within one chunk
     // radius cover all possible overlaps.

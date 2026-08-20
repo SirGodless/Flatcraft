@@ -64,10 +64,14 @@ registerContentType(
  * do no validation at all beyond field access, so a malformed liquid
  * JSON (e.g. a string where a number belongs) previously produced silent
  * NaNs at runtime instead of failing loudly at boot. */
-export function parseLiquid(id: string, json: LiquidJson): LiquidDef {
-  const v = validateContentInstance("liquid", json, `liquid "${id}"`);
-  return {
-    id,
+const DEFS = new Map<string, LiquidDef>();
+
+/** Register a liquid from datapack JSON (content package files or
+ * server mods). */
+export function registerLiquidJson(raw: unknown, source = "content"): LiquidDef {
+  const v = validateContentInstance("liquid", raw, source);
+  const def: LiquidDef = {
+    id: v["id"] as string,
     swimSpeed: v["swim_speed"] as number,
     sinkAccel: v["sink_accel"] as number,
     sinkCap: v["sink_cap"] as number,
@@ -75,15 +79,11 @@ export function parseLiquid(id: string, json: LiquidJson): LiquidDef {
     meltsBuckets: v["melts_buckets"] === true,
     ...(v["tint"] !== undefined ? { tint: v["tint"] as string } : {}),
   };
-}
-
-const DEFS = new Map<string, LiquidDef>();
-
-export function registerLiquid(def: LiquidDef): void {
   if (DEFS.has(def.id)) {
     throw new Error(`liquid "${def.id}" is already registered`);
   }
   DEFS.set(def.id, def);
+  return def;
 }
 
 export function liquidDef(id: string): LiquidDef | undefined {

@@ -4,8 +4,7 @@ import {
   CHUNK_WIDTH,
   matchMultiblock,
   multiblockDef,
-  parseMultiblock,
-  registerMultiblock,
+  registerMultiblockJson,
   registerMultiblockHandler,
   tryActivateMultiblock,
   World,
@@ -35,23 +34,21 @@ function handlerId(shortId: string): string {
 
 function registerTestMultiblock(shortId: string, item: string, failReason = "incomplete structure"): void {
   const id = multiblockId(shortId);
-  registerMultiblock(
-    parseMultiblock(id, {
-      id,
-      handler: handlerId(shortId),
-      trigger_on: { type: "place_block", item },
-      fail_reason: failReason,
-      states: {
-        on: {
-          pattern: ["SDS"],
-          key: {
-            S: { block: "flatcraft:block:stone", trigger: true },
-            D: { block: "flatcraft:block:dirt" },
-          },
+  registerMultiblockJson({
+    id,
+    handler: handlerId(shortId),
+    trigger_on: { type: "place_block", item },
+    fail_reason: failReason,
+    states: {
+      on: {
+        pattern: ["SDS"],
+        key: {
+          S: { block: "flatcraft:block:stone", trigger: true },
+          D: { block: "flatcraft:block:dirt" },
         },
       },
-    }),
-  );
+    },
+  });
 }
 
 describe("multiblock pattern matching", () => {

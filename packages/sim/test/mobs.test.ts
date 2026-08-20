@@ -50,7 +50,13 @@ describe("new mobs", () => {
 
     let arrowSeen = false;
     let hurt = false;
-    for (let i = 0; i < 300 && !hurt; i++) {
+    // Structure/vein registration order (and so exact terrain layout) now
+    // comes from content-package file scan order rather than a
+    // hand-curated index.ts import list - still fully deterministic for a
+    // given seed, just not the same layout as before, so a tight tick
+    // budget tuned to the old layout can time out before the skeleton
+    // gets a clean shot. 600 gives it comfortable room either way.
+    for (let i = 0; i < 600 && !hurt; i++) {
       const events = sim.tick([]);
       for (const o of events) {
         if (o.event.type === "entity_spawned" && o.event.kind === "arrow") arrowSeen = true;

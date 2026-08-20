@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parseEnchant } from "../src/enchants.js";
+import { enchantDef } from "../src/enchants.js";
 import { allContentTypeIds, contentTypeDecl, registerContentType, validateContentInstance } from "../src/registry/generic.js";
-import sharpnessJson from "../src/data/enchants/sharpness.json";
-import efficiencyJson from "../src/data/enchants/efficiency.json";
+import sharpnessJson from "../../../content/flatcraft/enchants/sharpness.json";
+import efficiencyJson from "../../../content/flatcraft/enchants/efficiency.json";
 
 describe("generic content-type engine", () => {
   it("registers a type and rejects a duplicate id", () => {
@@ -100,26 +100,22 @@ describe("generic content-type engine", () => {
   });
 });
 
-// Type declaration ids are plain snake_case for now, same as every other
-// registry in this codebase today - the full `<pkg>:<type>:<name>`
-// namespacing scheme is a later stage's concern (it needs this generic
-// engine to exist first, since `<type>` only becomes resolvable once
-// there's an open type registry to resolve it against).
-//
-// enchants.ts registers "enchant" for real at module load (imported
-// above via parseEnchant) - this is no longer a side-by-side pilot but
-// the actual production path, so this just confirms parseEnchant (now
-// backed by the generic engine) still produces the right values for the
-// real enchant JSON files.
-describe("enchants.ts's parseEnchant, now backed by the generic engine", () => {
+// enchants.ts's registerEnchantJson is backed by this same generic engine
+// (see enchants.ts) and is the actual production path - test/setup.ts
+// already loaded content/flatcraft/enchants/*.json for real before this
+// file's tests run, so this just confirms the generic validator produces
+// the same fields the already-registered EnchantDef holds, for the real
+// enchant JSON files (re-registering here would throw "already
+// registered").
+describe("enchants.ts's registerEnchantJson, backed by the generic engine", () => {
   it.each([
     ["flatcraft:enchant:sharpness", sharpnessJson],
     ["flatcraft:enchant:efficiency", efficiencyJson],
-  ])("produces the same fields as parseEnchant for %s", (id, json) => {
+  ])("produces the same fields as the registered EnchantDef for %s", (id, json) => {
     const generic = validateContentInstance("enchant", json, `flatcraft/enchants/${id}.json`);
-    const handWritten = parseEnchant(id, json);
-    expect(generic["id"]).toBe(handWritten.id);
-    expect(generic["effect"]).toBe(handWritten.effect);
-    expect(generic["per_level"]).toBe(handWritten.perLevel);
+    const registered = enchantDef(id)!;
+    expect(generic["id"]).toBe(registered.id);
+    expect(generic["effect"]).toBe(registered.effect);
+    expect(generic["per_level"]).toBe(registered.perLevel);
   });
 });
