@@ -9,5 +9,16 @@
     "amount": 1
   },
   "tall": true,
-  "toggle_to": "spruce_door"
+  "toggle_to": "spruce_door",
+  "visual": {
+    "fallback": {
+      "base": [
+        116,
+        86,
+        50
+      ],
+      "noise": 0.07,
+      "shape": "door_open"
+    }
+  }
 }

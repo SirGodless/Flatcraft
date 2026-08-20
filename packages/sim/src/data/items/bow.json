@@ -2,7 +2,12 @@
   "id": "bow",
   "name": "Bow",
   "max_stack": 1,
-  "ranged": { "damage": 6, "cooldown_ticks": 20, "arrow_speed": 0.8, "ammo": "arrow" },
+  "ranged": {
+    "damage": 6,
+    "cooldown_ticks": 20,
+    "arrow_speed": 0.8,
+    "ammo": "arrow"
+  },
   "recipes": [
     {
       "station": "crafting_table",
@@ -17,5 +22,23 @@
         "b": "item:string"
       }
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "..WW....",
+        ".W..W...",
+        "W....W..",
+        "S.....W.",
+        "S.....W.",
+        "W....W..",
+        ".W..W...",
+        "..WW...."
+      ],
+      "palette": {
+        "W": "#8a6234",
+        "S": "#e8e8e0"
+      }
+    }
+  }
 }

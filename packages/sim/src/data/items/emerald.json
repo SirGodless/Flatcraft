@@ -1,4 +1,21 @@
 {
   "id": "emerald",
-  "name": "Emerald"
+  "name": "Emerald",
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "...X....",
+        "..XXX...",
+        ".XXXXX..",
+        "..XXX...",
+        "...X....",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#30c85e"
+      }
+    }
+  }
 }

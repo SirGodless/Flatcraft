@@ -8,5 +8,23 @@
   "drops": {
     "item": "coal",
     "amount": 1
+  },
+  "visual": {
+    "fallback": {
+      "base": [
+        122,
+        122,
+        128
+      ],
+      "noise": 0.12,
+      "specks": {
+        "color": [
+          44,
+          44,
+          46
+        ],
+        "count": 5
+      }
+    }
   }
 }

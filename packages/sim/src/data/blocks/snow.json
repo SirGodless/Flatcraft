@@ -3,5 +3,15 @@
   "name": "Snow",
   "solid": true,
   "hardness": 6,
-  "tool": "shovel"
+  "tool": "shovel",
+  "visual": {
+    "fallback": {
+      "base": [
+        238,
+        242,
+        248
+      ],
+      "noise": 0.04
+    }
+  }
 }

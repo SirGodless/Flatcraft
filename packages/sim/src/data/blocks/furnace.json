@@ -5,5 +5,24 @@
   "hardness": 35,
   "tool": "pickaxe",
   "required_tier": 1,
-  "furnace": {}
+  "furnace": {},
+  "visual": {
+    "fallback": {
+      "base": [
+        98,
+        98,
+        102
+      ],
+      "top": {
+        "color": [
+          72,
+          72,
+          76
+        ],
+        "rows": 3
+      },
+      "noise": 0.1,
+      "opening": true
+    }
+  }
 }

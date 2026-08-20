@@ -18,7 +18,17 @@ export interface AnimationClipJson {
   loop?: boolean;
 }
 
-export interface VisualJson {
+/**
+ * `F` is the content-type-specific shape of `fallback` - what to draw
+ * client-side when there's no sprite file at all (no datapack asset,
+ * e.g. a fresh mod, or the built-in procedural look before any sprite
+ * was ever drawn). Blocks, items, and mobs each need a different kind
+ * of fallback description (a tileable procedural pattern; an 8x8
+ * pixel-art grid; a handful of colored rectangles), so this is generic
+ * rather than one fixed shape - see BlockFallbackJson/ItemFallbackJson/
+ * MobFallbackJson below and their validators.
+ */
+export interface VisualJson<F = unknown> {
   /** Declared count of numbered sprite variants at the sprite's base
    * path (sprites/<type>/<id>_0.png .. _<variants-1>.png), for visual
    * variety (e.g. ore that doesn't look identical every tile). Default
@@ -31,6 +41,58 @@ export interface VisualJson {
    * simply render with no effect, same as a missing sprite falls back
    * to the procedural shape - never an error. */
   shader?: { id: string; params?: Record<string, number | string | boolean> };
+  /** No-sprite-file fallback look; see the interface doc comment. */
+  fallback?: F;
+}
+
+/** Block fallback: a small tileable procedural pattern, drawn once into a
+ * 16x16 canvas texture (see client/render/textures.ts). Colors are
+ * [r,g,b] triples (0-255) rather than hex strings, matching how this
+ * data was expressed as TS tuples before the client-side STYLES table
+ * moved here - keeping the same encoding made a mechanical, low-risk
+ * migration (every value copied verbatim, no re-encoding to typo). */
+export interface BlockFallbackJson {
+  base: number[];
+  /** Differently-colored strip at the top (e.g. grass). */
+  top?: { color: number[]; rows: number };
+  /** Per-pixel brightness jitter, 0..1. */
+  noise: number;
+  /** Overall opacity (water). */
+  alpha?: number;
+  /** Probability per pixel of being fully transparent (leaves). */
+  holes?: number;
+  /** Darken vertical bands (logs' bark look). */
+  stripe?: boolean;
+  /** Colored 2x2 speckles on top of the base (ores). */
+  specks?: { color: number[]; count: number };
+  /** Dark opening at the bottom center (furnace mouth). */
+  opening?: boolean;
+  /** 1px border in this color (glass pane look). */
+  frame?: number[];
+  /** Draw only the bottom N pixel rows (slabs, partial liquids). */
+  fill_rows?: number;
+  /** Partial-tile silhouette (stairs, fences, opened doors). */
+  shape?: "stairs" | "fence" | "door_open" | "trapdoor_open";
+}
+
+/** Item fallback: hand-drawn 8x8 pixel art (client renders it at 2x).
+ * `rows` are 8 strings of 8 characters; each character indexes `palette`
+ * (hex color), a space means transparent. Same encoding as the
+ * client-side ARTS table this replaces, for the same low-risk-migration
+ * reason as BlockFallbackJson. */
+export interface ItemFallbackJson {
+  rows: string[];
+  palette: Record<string, string>;
+}
+
+/** Mob fallback: a handful of colored rectangles (a body block, a head
+ * block, ...), positioned in tile units (1.0 = one full tile). Covers
+ * every existing hand-drawn mob shape uniformly - humanoids and animals
+ * used small parametrized helpers client-side, but since each species'
+ * numbers were already fixed constants, baking them into absolute rects
+ * here is lossless and keeps this schema to one simple shape. */
+export interface MobFallbackJson {
+  rects: Array<{ x: number; y: number; w: number; h: number; color: string }>;
 }
 
 export interface RecipeJson {
@@ -59,8 +121,8 @@ export interface ItemJson {
   max_stack?: number;
   /** Sprite path override (default sprites/item/<id>.png). */
   sprite?: string;
-  /** Variants/animation/shader - see VisualJson. */
-  visual?: VisualJson;
+  /** Variants/animation/shader/fallback - see VisualJson. */
+  visual?: VisualJson<ItemFallbackJson>;
   /** Block id (string) this item places. */
   places_block?: string;
   tool?: { kind: "pickaxe" | "axe" | "shovel" | "sword" | "hammer"; tier: number; mining_speed: number };
@@ -87,8 +149,8 @@ export interface BlockJson {
   id: string;
   name?: string;
   sprite?: string;
-  /** Variants/animation/shader - see VisualJson. */
-  visual?: VisualJson;
+  /** Variants/animation/shader/fallback - see VisualJson. */
+  visual?: VisualJson<BlockFallbackJson>;
   solid: boolean;
   hardness: number;
   tool?: "pickaxe" | "axe" | "shovel";
@@ -125,8 +187,8 @@ export interface MobJson {
   id: string;
   name?: string;
   sprite?: string;
-  /** Variants/animation/shader - see VisualJson. */
-  visual?: VisualJson;
+  /** Variants/animation/shader/fallback - see VisualJson. */
+  visual?: VisualJson<MobFallbackJson>;
   health: number;
   speed: number;
   size: { width: number; height: number };
@@ -231,12 +293,100 @@ function validateAnimationClipJson(raw: unknown, source: string, path: string): 
   return out;
 }
 
+function validateColorTriple(source: string, path: string, value: unknown): number[] {
+  const arr = need<unknown[]>(source, path, value, "array");
+  if (arr.length !== 3) throw new SchemaError(source, `"${path}" must be a [r,g,b] array`);
+  return arr.map((v, i) => needNumber(source, `${path}[${i}]`, v, 0, 255));
+}
+
+function validateBlockFallbackJson(raw: unknown, source: string): BlockFallbackJson {
+  const value = need<Record<string, unknown>>(source, "visual.fallback", raw, "object");
+  checkKeys(source, "visual.fallback.", value, [
+    "base", "top", "noise", "alpha", "holes", "stripe", "specks", "opening", "frame", "fill_rows", "shape",
+  ]);
+  const out: BlockFallbackJson = {
+    base: validateColorTriple(source, "visual.fallback.base", value["base"]),
+    noise: needNumber(source, "visual.fallback.noise", value["noise"], 0, 1),
+  };
+  if (value["top"] !== undefined) {
+    const top = need<Record<string, unknown>>(source, "visual.fallback.top", value["top"], "object");
+    checkKeys(source, "visual.fallback.top.", top, ["color", "rows"]);
+    out.top = {
+      color: validateColorTriple(source, "visual.fallback.top.color", top["color"]),
+      rows: needNumber(source, "visual.fallback.top.rows", top["rows"], 1, 16),
+    };
+  }
+  if (value["alpha"] !== undefined) out.alpha = needNumber(source, "visual.fallback.alpha", value["alpha"], 0, 1);
+  if (value["holes"] !== undefined) out.holes = needNumber(source, "visual.fallback.holes", value["holes"], 0, 1);
+  if (value["stripe"] !== undefined) {
+    out.stripe = need<boolean>(source, "visual.fallback.stripe", value["stripe"], "boolean");
+  }
+  if (value["specks"] !== undefined) {
+    const specks = need<Record<string, unknown>>(source, "visual.fallback.specks", value["specks"], "object");
+    checkKeys(source, "visual.fallback.specks.", specks, ["color", "count"]);
+    out.specks = {
+      color: validateColorTriple(source, "visual.fallback.specks.color", specks["color"]),
+      count: needNumber(source, "visual.fallback.specks.count", specks["count"], 0, 32),
+    };
+  }
+  if (value["opening"] !== undefined) {
+    out.opening = need<boolean>(source, "visual.fallback.opening", value["opening"], "boolean");
+  }
+  if (value["frame"] !== undefined) out.frame = validateColorTriple(source, "visual.fallback.frame", value["frame"]);
+  if (value["fill_rows"] !== undefined) {
+    out.fill_rows = needNumber(source, "visual.fallback.fill_rows", value["fill_rows"], 1, 16);
+  }
+  if (value["shape"] !== undefined) {
+    out.shape = needOneOf(source, "visual.fallback.shape", value["shape"], ["stairs", "fence", "door_open", "trapdoor_open"] as const);
+  }
+  return out;
+}
+
+function validateItemFallbackJson(raw: unknown, source: string): ItemFallbackJson {
+  const value = need<Record<string, unknown>>(source, "visual.fallback", raw, "object");
+  checkKeys(source, "visual.fallback.", value, ["rows", "palette"]);
+  const rowsRaw = need<unknown[]>(source, "visual.fallback.rows", value["rows"], "array");
+  const rows = rowsRaw.map((r, i) => need<string>(source, `visual.fallback.rows[${i}]`, r, "string"));
+  const paletteRaw = need<Record<string, unknown>>(source, "visual.fallback.palette", value["palette"], "object");
+  const palette: Record<string, string> = {};
+  for (const [ch, color] of Object.entries(paletteRaw)) {
+    palette[ch] = need<string>(source, `visual.fallback.palette.${ch}`, color, "string");
+  }
+  return { rows, palette };
+}
+
+function validateMobFallbackJson(raw: unknown, source: string): MobFallbackJson {
+  const value = need<Record<string, unknown>>(source, "visual.fallback", raw, "object");
+  checkKeys(source, "visual.fallback.", value, ["rects"]);
+  const rectsRaw = need<unknown[]>(source, "visual.fallback.rects", value["rects"], "array");
+  const rects = rectsRaw.map((r, i) => {
+    const path = `visual.fallback.rects[${i}]`;
+    const rv = need<Record<string, unknown>>(source, path, r, "object");
+    checkKeys(source, `${path}.`, rv, ["x", "y", "w", "h", "color"]);
+    return {
+      x: needNumber(source, `${path}.x`, rv["x"], -2, 2),
+      y: needNumber(source, `${path}.y`, rv["y"], -2, 2),
+      w: needNumber(source, `${path}.w`, rv["w"], 0, 2),
+      h: needNumber(source, `${path}.h`, rv["h"], 0, 2),
+      color: need<string>(source, `${path}.color`, rv["color"], "string"),
+    };
+  });
+  return { rects };
+}
+
 /** Shared `visual` sub-validator, called identically from items/blocks/mobs
- * - see VisualJson for field meanings. */
-function validateVisualJson(raw: unknown, source: string): VisualJson {
+ * - see VisualJson for field meanings. `validateFallback` is undefined for
+ * a content type that hasn't defined a fallback shape yet; passing a
+ * "fallback" field without one is a schema error, same as any other
+ * unsupported field. */
+function validateVisualJson<F>(
+  raw: unknown,
+  source: string,
+  validateFallback?: (raw: unknown, source: string) => F,
+): VisualJson<F> {
   const value = need<Record<string, unknown>>(source, "visual", raw, "object");
-  checkKeys(source, "visual.", value, ["variants", "animation", "shader"]);
-  const out: VisualJson = {};
+  checkKeys(source, "visual.", value, ["variants", "animation", "shader", "fallback"]);
+  const out: VisualJson<F> = {};
   if (value["variants"] !== undefined) {
     out.variants = needNumber(source, "visual.variants", value["variants"], 1, 16);
   }
@@ -268,6 +418,10 @@ function validateVisualJson(raw: unknown, source: string): VisualJson {
       }
       out.shader.params = outParams;
     }
+  }
+  if (value["fallback"] !== undefined) {
+    if (!validateFallback) throw new SchemaError(source, `"visual.fallback" is not supported here`);
+    out.fallback = validateFallback(value["fallback"], source);
   }
   return out;
 }
@@ -331,7 +485,7 @@ export function validateItemJson(raw: unknown, source: string): ItemJson {
   if (value["name"] !== undefined) out.name = need<string>(source, "name", value["name"], "string");
   if (value["max_stack"] !== undefined) out.max_stack = needNumber(source, "max_stack", value["max_stack"], 1, 64);
   if (value["sprite"] !== undefined) out.sprite = need<string>(source, "sprite", value["sprite"], "string");
-  if (value["visual"] !== undefined) out.visual = validateVisualJson(value["visual"], source);
+  if (value["visual"] !== undefined) out.visual = validateVisualJson(value["visual"], source, validateItemFallbackJson);
   if (value["places_block"] !== undefined) out.places_block = needId(source, "places_block", value["places_block"]);
   if (value["tool"] !== undefined) {
     const tool = need<Record<string, unknown>>(source, "tool", value["tool"], "object");
@@ -436,7 +590,7 @@ export function validateBlockJson(raw: unknown, source: string): BlockJson {
   };
   if (value["name"] !== undefined) out.name = need<string>(source, "name", value["name"], "string");
   if (value["sprite"] !== undefined) out.sprite = need<string>(source, "sprite", value["sprite"], "string");
-  if (value["visual"] !== undefined) out.visual = validateVisualJson(value["visual"], source);
+  if (value["visual"] !== undefined) out.visual = validateVisualJson(value["visual"], source, validateBlockFallbackJson);
   if (value["tool"] !== undefined) out.tool = needOneOf(source, "tool", value["tool"], ["pickaxe", "axe", "shovel"] as const);
   if (value["required_tier"] !== undefined) out.required_tier = needNumber(source, "required_tier", value["required_tier"], 0, 8);
   if (value["drops"] !== undefined) {
@@ -512,7 +666,7 @@ export function validateMobJson(raw: unknown, source: string): MobJson {
   };
   if (value["name"] !== undefined) out.name = need<string>(source, "name", value["name"], "string");
   if (value["sprite"] !== undefined) out.sprite = need<string>(source, "sprite", value["sprite"], "string");
-  if (value["visual"] !== undefined) out.visual = validateVisualJson(value["visual"], source);
+  if (value["visual"] !== undefined) out.visual = validateVisualJson(value["visual"], source, validateMobFallbackJson);
   if (value["melee"] !== undefined) {
     const melee = need<Record<string, unknown>>(source, "melee", value["melee"], "object");
     checkKeys(source, "melee.", melee, ["damage", "cooldown", "follow_range"]);

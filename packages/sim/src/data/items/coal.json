@@ -1,5 +1,22 @@
 {
   "id": "coal",
   "name": "Coal",
-  "fuel_ticks": 1600
+  "fuel_ticks": 1600,
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "..XXX...",
+        ".XXXXX..",
+        ".XXXXX..",
+        "..XXXX..",
+        "...XX...",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#2c2c2e"
+      }
+    }
+  }
 }

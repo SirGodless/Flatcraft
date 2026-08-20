@@ -18,5 +18,22 @@
         "a": "item:netherite_ingot"
       }
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "XX....XX",
+        "XXXXXXXX",
+        "XXXXXXXX",
+        ".XXXXXX.",
+        ".XXXXXX.",
+        ".XXXXXX.",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#4a4048"
+      }
+    }
+  }
 }

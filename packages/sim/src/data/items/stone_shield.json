@@ -18,5 +18,22 @@
         "a": "item:cobblestone"
       }
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        ".XXXXXX.",
+        ".XXXXXX.",
+        ".XXXXXX.",
+        ".XXXXXX.",
+        "..XXXX..",
+        "...XX...",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#7a7a80"
+      }
+    }
+  }
 }

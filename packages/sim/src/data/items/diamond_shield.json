@@ -19,5 +19,22 @@
         "b": "item:iron_shield"
       }
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        ".XXXXXX.",
+        ".XXXXXX.",
+        ".XXXXXX.",
+        ".XXXXXX.",
+        "..XXXX..",
+        "...XX...",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#5fd8d2"
+      }
+    }
+  }
 }

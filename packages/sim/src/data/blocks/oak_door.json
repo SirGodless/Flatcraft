@@ -5,5 +5,21 @@
   "hardness": 28,
   "tool": "axe",
   "tall": true,
-  "toggle_to": "oak_door_open"
+  "toggle_to": "oak_door_open",
+  "visual": {
+    "fallback": {
+      "base": [
+        166,
+        130,
+        78
+      ],
+      "noise": 0.07,
+      "stripe": true,
+      "frame": [
+        99.6,
+        78,
+        46.8
+      ]
+    }
+  }
 }

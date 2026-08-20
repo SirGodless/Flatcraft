@@ -3,5 +3,15 @@
   "name": "Bedrock",
   "solid": true,
   "hardness": -1,
-  "drops": "none"
+  "drops": "none",
+  "visual": {
+    "fallback": {
+      "base": [
+        58,
+        58,
+        62
+      ],
+      "noise": 0.25
+    }
+  }
 }

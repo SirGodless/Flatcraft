@@ -8,5 +8,23 @@
   "drops": {
     "item": "lapis_lazuli",
     "amount": 6
+  },
+  "visual": {
+    "fallback": {
+      "base": [
+        122,
+        122,
+        128
+      ],
+      "noise": 0.12,
+      "specks": {
+        "color": [
+          42,
+          84,
+          184
+        ],
+        "count": 5
+      }
+    }
   }
 }

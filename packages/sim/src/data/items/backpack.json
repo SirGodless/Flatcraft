@@ -20,5 +20,23 @@
         "item:stick"
       ]
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        ".BBBBBB.",
+        "BBLLLLBB",
+        "B.LBBL.B",
+        "B.BBBB.B",
+        "B.BBBB.B",
+        ".BBBBBB.",
+        "........"
+      ],
+      "palette": {
+        "B": "#8a5a30",
+        "L": "#6b4522"
+      }
+    }
+  }
 }

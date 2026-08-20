@@ -7,5 +7,22 @@
       "input": "item:gold_ore",
       "cooking_ticks": 200
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "........",
+        "..XXXX..",
+        ".XXXXXX.",
+        ".XXXXX..",
+        "........",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#f5d442"
+      }
+    }
+  }
 }

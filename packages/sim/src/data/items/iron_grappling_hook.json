@@ -18,5 +18,23 @@
         "item:copper_grappling_hook"
       ]
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "......S.",
+        "......S.",
+        "......S.",
+        "..HHH.S.",
+        ".H...HS.",
+        ".H....H.",
+        "..HH.H..",
+        "........"
+      ],
+      "palette": {
+        "H": "#d8d8dc",
+        "S": "#e8e8e0"
+      }
+    }
+  }
 }

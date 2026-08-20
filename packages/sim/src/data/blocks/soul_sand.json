@@ -4,5 +4,23 @@
   "solid": true,
   "hardness": 10,
   "tool": "shovel",
-  "movement_slow": 0.4
+  "movement_slow": 0.4,
+  "visual": {
+    "fallback": {
+      "base": [
+        90,
+        70,
+        54
+      ],
+      "noise": 0.18,
+      "specks": {
+        "color": [
+          40,
+          30,
+          24
+        ],
+        "count": 4
+      }
+    }
+  }
 }

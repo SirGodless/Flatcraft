@@ -9,5 +9,23 @@
     "item": "obsidian",
     "amount": 1
   },
-  "side_permeable": true
+  "side_permeable": true,
+  "visual": {
+    "fallback": {
+      "base": [
+        30,
+        20,
+        46
+      ],
+      "noise": 0.15,
+      "specks": {
+        "color": [
+          150,
+          92,
+          220
+        ],
+        "count": 4
+      }
+    }
+  }
 }

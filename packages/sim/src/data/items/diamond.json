@@ -1,4 +1,21 @@
 {
   "id": "diamond",
-  "name": "Diamond"
+  "name": "Diamond",
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "...X....",
+        "..XXX...",
+        ".XXXXX..",
+        "..XXX...",
+        "...X....",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#60dbd5"
+      }
+    }
+  }
 }

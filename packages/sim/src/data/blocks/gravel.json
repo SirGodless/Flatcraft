@@ -4,5 +4,19 @@
   "solid": true,
   "hardness": 9,
   "tool": "shovel",
-  "alt_drop": { "item": "flint", "amount": 1, "chance": 0.25 }
+  "alt_drop": {
+    "item": "flint",
+    "amount": 1,
+    "chance": 0.25
+  },
+  "visual": {
+    "fallback": {
+      "base": [
+        127,
+        124,
+        122
+      ],
+      "noise": 0.3
+    }
+  }
 }

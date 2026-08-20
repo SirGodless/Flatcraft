@@ -974,55 +974,25 @@ export class Renderer {
       }
     }
     const gfx = new Graphics();
-    const humanoid = (body: number, head: number): void => {
-      gfx.rect(0, 0, 0.6 * TILE_PX, 1.8 * TILE_PX).fill({ color: body });
-      gfx.rect(0, 0, 0.6 * TILE_PX, 0.45 * TILE_PX).fill({ color: head });
-    };
-    const animal = (w: number, h: number, body: number, snout: number): void => {
-      gfx.rect(0, 0, w * TILE_PX, h * TILE_PX).fill({ color: body });
-      gfx.rect((w - 0.25) * TILE_PX, 0.25 * TILE_PX, 0.25 * TILE_PX, 0.2 * TILE_PX).fill({ color: snout });
-    };
-    switch (kind) {
-      case "zombie":
-        humanoid(0x4e9e4e, 0x3c7a3c);
-        break;
-      case "skeleton":
-        humanoid(0xd8d8d0, 0xb8b8b0);
-        break;
-      case "zombified_piglin":
-        humanoid(0xd88a8a, 0x8a9e4e);
-        break;
-      case "creeper":
-        gfx.rect(0, 0, 0.6 * TILE_PX, 1.5 * TILE_PX).fill({ color: 0x58c25a });
-        gfx.rect(0.1 * TILE_PX, 0.15 * TILE_PX, 0.12 * TILE_PX, 0.15 * TILE_PX).fill({ color: 0x1a1a1a });
-        gfx.rect(0.38 * TILE_PX, 0.15 * TILE_PX, 0.12 * TILE_PX, 0.15 * TILE_PX).fill({ color: 0x1a1a1a });
-        gfx.rect(0.22 * TILE_PX, 0.3 * TILE_PX, 0.16 * TILE_PX, 0.25 * TILE_PX).fill({ color: 0x1a1a1a });
-        break;
-      case "pig":
-        animal(0.9, 0.9, 0xefa4a8, 0xd98488);
-        break;
-      case "cow":
-        animal(0.9, 1.2, 0x6b4a34, 0xe8e8e0);
-        break;
-      case "sheep":
-        animal(0.9, 1.1, 0xe8e8e2, 0xd0b8a8);
-        break;
-      case "chicken":
-        animal(0.5, 0.6, 0xf0f0e8, 0xe8a030);
-        break;
-      case "villager":
-        gfx.rect(0, 0, 0.6 * TILE_PX, 1.9 * TILE_PX).fill({ color: 0x8a6a4a });
-        gfx.rect(0, 0, 0.6 * TILE_PX, 0.5 * TILE_PX).fill({ color: 0xc8a078 });
-        gfx.rect(0.22 * TILE_PX, 0.3 * TILE_PX, 0.16 * TILE_PX, 0.25 * TILE_PX).fill({ color: 0xb08858 });
-        break;
-      case "arrow":
-        // Centered on the local origin (not top-left, like everything
-        // else here) so it can rotate in place to face its flight
-        // direction - see the per-frame update loop.
-        gfx.rect(-0.15 * TILE_PX, -0.06 * TILE_PX, 0.3 * TILE_PX, 0.12 * TILE_PX).fill({ color: 0x9a9a9a });
-        break;
-      default:
+    // "arrow" is a projectile, not a mob - it has no MobDef to read a
+    // fallback from (see entities.ts's NON_MOB_SIZES for the same
+    // item/arrow special case) so it keeps its own hardcoded shape.
+    if (kind === "arrow") {
+      // Centered on the local origin (not top-left, like everything else
+      // here) so it can rotate in place to face its flight direction -
+      // see the per-frame update loop.
+      gfx.rect(-0.15 * TILE_PX, -0.06 * TILE_PX, 0.3 * TILE_PX, 0.12 * TILE_PX).fill({ color: 0x9a9a9a });
+    } else {
+      const rects = mobDef(kind)?.visual?.fallback?.rects;
+      if (rects) {
+        for (const r of rects) {
+          gfx.rect(r.x * TILE_PX, r.y * TILE_PX, r.w * TILE_PX, r.h * TILE_PX).fill({ color: hexToNumber(r.color) });
+        }
+      } else {
+        // No sprite, no declared fallback (e.g. a datapack mod mob with
+        // neither) - a visible placeholder beats invisible.
         gfx.rect(0, 0, TILE_PX, TILE_PX).fill({ color: 0xff00ff });
+      }
     }
     if (shaderFx) gfx.filters = [shaderFx];
     return { gfx, ...(shaderFx ? { shaderFx } : {}) };

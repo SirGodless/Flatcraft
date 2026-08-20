@@ -4,5 +4,16 @@
   "solid": false,
   "hardness": 25,
   "tool": "axe",
-  "slab": true
+  "slab": true,
+  "visual": {
+    "fallback": {
+      "base": [
+        116,
+        86,
+        50
+      ],
+      "noise": 0.07,
+      "fill_rows": 8
+    }
+  }
 }

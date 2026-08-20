@@ -9,5 +9,13 @@
     { "item": "gold_nugget", "max": 2, "chance": 0.6 },
     { "item": "rotten_flesh", "max": 1, "chance": 0.5 }
   ],
-  "spawn": { "group": "nether_pocket", "weight": 1 }
+  "spawn": { "group": "nether_pocket", "weight": 1 },
+  "visual": {
+    "fallback": {
+      "rects": [
+        { "x": 0, "y": 0, "w": 0.6, "h": 1.8, "color": "#d88a8a" },
+        { "x": 0, "y": 0, "w": 0.6, "h": 0.45, "color": "#8a9e4e" }
+      ]
+    }
+  }
 }

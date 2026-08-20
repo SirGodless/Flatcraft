@@ -8,5 +8,23 @@
   "drops": {
     "item": "redstone",
     "amount": 4
+  },
+  "visual": {
+    "fallback": {
+      "base": [
+        122,
+        122,
+        128
+      ],
+      "noise": 0.12,
+      "specks": {
+        "color": [
+          214,
+          48,
+          40
+        ],
+        "count": 5
+      }
+    }
   }
 }

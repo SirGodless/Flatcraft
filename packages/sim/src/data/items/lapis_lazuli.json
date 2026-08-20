@@ -1,4 +1,21 @@
 {
   "id": "lapis_lazuli",
-  "name": "Lapis Lazuli"
+  "name": "Lapis Lazuli",
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "...X....",
+        "..XXX...",
+        ".XXXXX..",
+        "..XXX...",
+        "...X....",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#2a54b8"
+      }
+    }
+  }
 }

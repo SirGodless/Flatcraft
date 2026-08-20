@@ -3,5 +3,16 @@
   "name": "Oak Leaves",
   "solid": false,
   "hardness": 3,
-  "drops": "none"
+  "drops": "none",
+  "visual": {
+    "fallback": {
+      "base": [
+        64,
+        138,
+        52
+      ],
+      "noise": 0.22,
+      "holes": 0.16
+    }
+  }
 }

@@ -7,5 +7,23 @@
   "liquid": {
     "kind": "lava",
     "level": 8
+  },
+  "visual": {
+    "fallback": {
+      "base": [
+        224,
+        80,
+        16
+      ],
+      "noise": 0.2,
+      "specks": {
+        "color": [
+          255,
+          200,
+          60
+        ],
+        "count": 5
+      }
+    }
   }
 }

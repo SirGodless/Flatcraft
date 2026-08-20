@@ -10,5 +10,13 @@
     { "item": "bone", "max": 2, "chance": 0.9 },
     { "item": "arrow", "max": 2, "chance": 0.6 }
   ],
-  "spawn": { "group": "hostile_surface", "weight": 1 }
+  "spawn": { "group": "hostile_surface", "weight": 1 },
+  "visual": {
+    "fallback": {
+      "rects": [
+        { "x": 0, "y": 0, "w": 0.6, "h": 1.8, "color": "#d8d8d0" },
+        { "x": 0, "y": 0, "w": 0.6, "h": 0.45, "color": "#b8b8b0" }
+      ]
+    }
+  }
 }

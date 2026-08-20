@@ -8,5 +8,15 @@
   "drops": {
     "item": "cobblestone",
     "amount": 1
+  },
+  "visual": {
+    "fallback": {
+      "base": [
+        122,
+        122,
+        128
+      ],
+      "noise": 0.12
+    }
   }
 }

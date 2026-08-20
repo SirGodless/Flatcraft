@@ -8,5 +8,23 @@
   "drops": {
     "item": "emerald",
     "amount": 1
+  },
+  "visual": {
+    "fallback": {
+      "base": [
+        122,
+        122,
+        128
+      ],
+      "noise": 0.12,
+      "specks": {
+        "color": [
+          48,
+          200,
+          94
+        ],
+        "count": 3
+      }
+    }
   }
 }

@@ -3,5 +3,15 @@
   "name": "Clay",
   "solid": true,
   "hardness": 6,
-  "tool": "shovel"
+  "tool": "shovel",
+  "visual": {
+    "fallback": {
+      "base": [
+        156,
+        160,
+        172
+      ],
+      "noise": 0.06
+    }
+  }
 }

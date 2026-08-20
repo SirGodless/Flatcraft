@@ -4,5 +4,20 @@
   "solid": true,
   "hardness": 26,
   "tool": "axe",
-  "toggle_to": "spruce_trapdoor_open"
+  "toggle_to": "spruce_trapdoor_open",
+  "visual": {
+    "fallback": {
+      "base": [
+        116,
+        86,
+        50
+      ],
+      "noise": 0.07,
+      "frame": [
+        69.6,
+        51.6,
+        30
+      ]
+    }
+  }
 }

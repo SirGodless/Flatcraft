@@ -9,5 +9,13 @@
     { "item": "chicken", "max": 1, "chance": 1 },
     { "item": "feather", "max": 2, "chance": 0.7 }
   ],
-  "spawn": { "group": "grass_day", "weight": 1 }
+  "spawn": { "group": "grass_day", "weight": 1 },
+  "visual": {
+    "fallback": {
+      "rects": [
+        { "x": 0, "y": 0, "w": 0.5, "h": 0.6, "color": "#f0f0e8" },
+        { "x": 0.25, "y": 0.25, "w": 0.25, "h": 0.2, "color": "#e8a030" }
+      ]
+    }
+  }
 }

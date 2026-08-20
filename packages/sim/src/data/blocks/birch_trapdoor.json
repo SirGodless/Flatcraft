@@ -4,5 +4,20 @@
   "solid": true,
   "hardness": 26,
   "tool": "axe",
-  "toggle_to": "birch_trapdoor_open"
+  "toggle_to": "birch_trapdoor_open",
+  "visual": {
+    "fallback": {
+      "base": [
+        198,
+        180,
+        130
+      ],
+      "noise": 0.07,
+      "frame": [
+        118.8,
+        108,
+        78
+      ]
+    }
+  }
 }

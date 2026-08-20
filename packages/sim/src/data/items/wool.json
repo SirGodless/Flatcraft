@@ -1,4 +1,21 @@
 {
   "id": "wool",
-  "name": "Wool"
+  "name": "Wool",
+  "visual": {
+    "fallback": {
+      "rows": [
+        "........",
+        "..XXX...",
+        ".XXXXX..",
+        ".XXXXX..",
+        "..XXXX..",
+        "...XX...",
+        "........",
+        "........"
+      ],
+      "palette": {
+        "X": "#ececec"
+      }
+    }
+  }
 }

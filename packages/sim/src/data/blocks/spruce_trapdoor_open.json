@@ -8,5 +8,16 @@
     "item": "spruce_trapdoor",
     "amount": 1
   },
-  "toggle_to": "spruce_trapdoor"
+  "toggle_to": "spruce_trapdoor",
+  "visual": {
+    "fallback": {
+      "base": [
+        116,
+        86,
+        50
+      ],
+      "noise": 0.07,
+      "shape": "trapdoor_open"
+    }
+  }
 }

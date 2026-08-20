@@ -6,5 +6,28 @@
   "tool": "axe",
   "container": {
     "slots": 27
+  },
+  "visual": {
+    "fallback": {
+      "base": [
+        158,
+        110,
+        54
+      ],
+      "top": {
+        "color": [
+          130,
+          90,
+          44
+        ],
+        "rows": 5
+      },
+      "noise": 0.08,
+      "frame": [
+        96,
+        66,
+        32
+      ]
+    }
   }
 }

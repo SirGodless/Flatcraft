@@ -1,6 +1,6 @@
 import { ITEM_JSONS } from "./data/items/index.js";
 import { validateItemJson, type RecipeJson } from "./registry/schema.js";
-import type { VisualDef } from "./registry/visual.js";
+import type { ItemVisualDef } from "./registry/visual.js";
 import { blockByName, BlockId } from "./world/block.js";
 
 /**
@@ -89,7 +89,7 @@ export interface ItemDef {
   /** Sprite path override (default sprites/item/<id>.png). */
   readonly sprite?: string | undefined;
   /** Sprite variants/animation/shader. */
-  readonly visual?: VisualDef | undefined;
+  readonly visual?: ItemVisualDef | undefined;
 }
 
 const defs = new Map<string, ItemDef>();

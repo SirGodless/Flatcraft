@@ -4,5 +4,15 @@
   "solid": true,
   "hardness": 32,
   "tool": "pickaxe",
-  "required_tier": 1
+  "required_tier": 1,
+  "visual": {
+    "fallback": {
+      "base": [
+        110,
+        110,
+        114
+      ],
+      "noise": 0.22
+    }
+  }
 }

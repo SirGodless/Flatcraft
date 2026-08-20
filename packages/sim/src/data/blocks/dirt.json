@@ -3,5 +3,15 @@
   "name": "Dirt",
   "solid": true,
   "hardness": 10,
-  "tool": "shovel"
+  "tool": "shovel",
+  "visual": {
+    "fallback": {
+      "base": [
+        134,
+        96,
+        60
+      ],
+      "noise": 0.14
+    }
+  }
 }

@@ -6,5 +6,14 @@
   "size": { "width": 0.6, "height": 1.9 },
   "wanders": true,
   "trades": true,
-  "spawn": { "near_structure": "house", "weight": 1 }
+  "spawn": { "near_structure": "house", "weight": 1 },
+  "visual": {
+    "fallback": {
+      "rects": [
+        { "x": 0, "y": 0, "w": 0.6, "h": 1.9, "color": "#8a6a4a" },
+        { "x": 0, "y": 0, "w": 0.6, "h": 0.5, "color": "#c8a078" },
+        { "x": 0.22, "y": 0.3, "w": 0.16, "h": 0.25, "color": "#b08858" }
+      ]
+    }
+  }
 }

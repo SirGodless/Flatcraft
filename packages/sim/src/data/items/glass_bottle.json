@@ -14,5 +14,24 @@
       },
       "amount": 3
     }
-  ]
+  ],
+  "visual": {
+    "fallback": {
+      "rows": [
+        "...CC...",
+        "...CC...",
+        "..GLLG..",
+        ".GLLLLG.",
+        ".GLLLLG.",
+        ".GLLLLG.",
+        "..GGGG..",
+        "........"
+      ],
+      "palette": {
+        "C": "#c8c8d0",
+        "G": "#dce8f0",
+        "L": "#e8f4fa"
+      }
+    }
+  }
 }

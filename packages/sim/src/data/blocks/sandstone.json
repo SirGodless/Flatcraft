@@ -4,5 +4,23 @@
   "solid": true,
   "hardness": 24,
   "tool": "pickaxe",
-  "required_tier": 1
+  "required_tier": 1,
+  "visual": {
+    "fallback": {
+      "base": [
+        206,
+        189,
+        136
+      ],
+      "top": {
+        "color": [
+          214,
+          198,
+          146
+        ],
+        "rows": 3
+      },
+      "noise": 0.06
+    }
+  }
 }

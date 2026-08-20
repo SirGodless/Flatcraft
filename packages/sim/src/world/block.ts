@@ -1,6 +1,6 @@
 import { BLOCK_JSONS } from "../data/blocks/index.js";
 import { validateBlockJson } from "../registry/schema.js";
-import type { VisualDef } from "../registry/visual.js";
+import type { BlockVisualDef } from "../registry/visual.js";
 
 /**
  * Block registry. The canonical identity of a block is its string id
@@ -147,7 +147,7 @@ export interface BlockDef {
   /** Sprite path override (default sprites/block/<name>.png). */
   readonly sprite?: string;
   /** Sprite variants/animation/shader. */
-  readonly visual?: VisualDef;
+  readonly visual?: BlockVisualDef;
 }
 
 const defs = new Map<BlockId, BlockDef>();

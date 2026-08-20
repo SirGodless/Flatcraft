@@ -4,5 +4,23 @@
   "solid": true,
   "hardness": 250,
   "tool": "pickaxe",
-  "required_tier": 4
+  "required_tier": 4,
+  "visual": {
+    "fallback": {
+      "base": [
+        26,
+        16,
+        38
+      ],
+      "noise": 0.15,
+      "specks": {
+        "color": [
+          80,
+          50,
+          120
+        ],
+        "count": 3
+      }
+    }
+  }
 }

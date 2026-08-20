@@ -8,5 +8,23 @@
   "drops": {
     "item": "diamond",
     "amount": 1
+  },
+  "visual": {
+    "fallback": {
+      "base": [
+        122,
+        122,
+        128
+      ],
+      "noise": 0.12,
+      "specks": {
+        "color": [
+          96,
+          219,
+          213
+        ],
+        "count": 4
+      }
+    }
   }
 }

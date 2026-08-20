@@ -6,5 +6,23 @@
   "drops": {
     "item": "glowstone_dust",
     "amount": 3
+  },
+  "visual": {
+    "fallback": {
+      "base": [
+        244,
+        208,
+        96
+      ],
+      "noise": 0.15,
+      "specks": {
+        "color": [
+          255,
+          240,
+          180
+        ],
+        "count": 6
+      }
+    }
   }
 }
