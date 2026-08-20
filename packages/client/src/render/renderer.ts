@@ -22,6 +22,7 @@ import {
   type SlotRef,
 } from "@flatcraft/sim";
 import { Camera } from "./camera.js";
+import { hexToNumber } from "./color.js";
 import { FogOfWar } from "./fog.js";
 import { itemTexture } from "./icons.js";
 import { entityAnimationStates, entityTexture } from "./entitySprites.js";
@@ -136,11 +137,6 @@ interface BlockOverlayView {
  * that's a pure addition later, not a schema change. */
 const ANIM_PRIORITY: Record<string, number> = { idle: 0, walk: 0, attack: 1, hurt: 2, death: 3 };
 const ANIM_ONE_SHOT = new Set(["attack", "hurt", "death"]);
-
-/** "#2a0f0f" -> 0x2a0f0f, for a DimensionSky's CSS hex colors. */
-function hexToNumber(hex: string): number {
-  return Number.parseInt(hex.replace("#", ""), 16);
-}
 
 /**
  * Rendering layer. Consumes SimEvents and draws; it never mutates game

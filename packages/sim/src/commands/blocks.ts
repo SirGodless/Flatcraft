@@ -1,4 +1,5 @@
 import { itemDef } from "../items.js";
+import { liquidDef } from "../liquids.js";
 import { tryActivateMultiblock } from "../multiblock.js";
 import { MAX_CHUNK_COORD } from "../simulation.js";
 import { blockDef, BlockId, liquidBlock } from "../world/block.js";
@@ -290,9 +291,9 @@ registerCommandHandler("use_bucket", {
       world.setBlock(x, y, sourceBlock);
       broadcast({ type: "block_changed", dim: p.dimension, x, y, block: sourceBlock });
       sim.wakeLiquids(p.dimension, x, y);
-      // Clay dissolves the moment it pours lava - every other tier
-      // survives (copper and up don't melt).
-      if (!p.creative && stack.item === "clay_bucket" && heldLiquid === "lava") {
+      // Clay dissolves the moment it pours a bucket-melting liquid -
+      // every other tier survives (copper and up don't melt).
+      if (!p.creative && stack.item === "clay_bucket" && liquidDef(heldLiquid)?.meltsBuckets) {
         p.inventory[p.selected] = null;
       } else {
         const remaining = heldAmount - 1;

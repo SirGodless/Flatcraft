@@ -7,6 +7,7 @@ import {
   ingredientLabel,
   ingredientOptions,
   itemDef,
+  liquidDef,
   matchGrid,
   RECIPES,
   SMALL_GRID_INDICES,
@@ -16,6 +17,7 @@ import {
   type Recipe,
   type SlotRef,
 } from "@flatcraft/sim";
+import { hexToNumber } from "./color.js";
 import { itemTexture } from "./icons.js";
 
 const SLOT = 40;
@@ -56,9 +58,9 @@ function tooltipFor(stack: ItemStack): string {
 }
 
 /** Tints a bucket icon to show what it's carrying (undefined = empty). */
-const LIQUID_TINT: Record<string, number> = { water: 0x6fb0ff, lava: 0xff8a3c };
 export function liquidTint(stack: ItemStack): number | undefined {
-  return stack.data?.liquid !== undefined ? LIQUID_TINT[stack.data.liquid] : undefined;
+  const tint = stack.data?.liquid !== undefined ? liquidDef(stack.data.liquid)?.tint : undefined;
+  return tint !== undefined ? hexToNumber(tint) : undefined;
 }
 
 function buttonOf(e: FederatedPointerEvent): "left" | "right" | null {

@@ -1,0 +1,8 @@
+{
+  "id": "water",
+  "swim_speed": 0.6,
+  "sink_accel": 0.03,
+  "sink_cap": 0.15,
+  "swim_up_velocity": -0.22,
+  "tint": "#6fb0ff"
+}

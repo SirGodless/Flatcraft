@@ -1,0 +1,9 @@
+{
+  "id": "lava",
+  "swim_speed": 0.35,
+  "sink_accel": 0.02,
+  "sink_cap": 0.08,
+  "swim_up_velocity": -0.1,
+  "melts_buckets": true,
+  "tint": "#ff8a3c"
+}

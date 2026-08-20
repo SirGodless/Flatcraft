@@ -49,6 +49,7 @@ import {
   type ItemStack,
 } from "./inventory.js";
 import { itemDef } from "./items.js";
+import { liquidDef } from "./liquids.js";
 import {
   EFFECT_DURATION_TICKS,
   ENCHANT_LAPIS_COST,
@@ -1079,10 +1080,12 @@ export class Simulation {
         if (playerSlow !== undefined) p.vx *= playerSlow;
         if (swimming) {
           // Liquids slow and carry: gentle sinking, holding jump swims up.
-          const lava = feetBlock.liquid!.kind === "lava";
-          p.vx *= lava ? 0.35 : 0.6;
-          p.vy = Math.min(p.vy + (lava ? 0.02 : 0.03), lava ? 0.08 : 0.15);
-          if (p.input.jump) p.vy = lava ? -0.1 : -0.22;
+          const liquid = liquidDef(feetBlock.liquid!.kind);
+          if (liquid) {
+            p.vx *= liquid.swimSpeed;
+            p.vy = Math.min(p.vy + liquid.sinkAccel, liquid.sinkCap);
+            if (p.input.jump) p.vy = liquid.swimUpVelocity;
+          }
           p.fallDistance = 0;
         } else {
           if (p.input.jump && p.onGround) {

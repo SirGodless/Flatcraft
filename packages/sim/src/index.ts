@@ -30,6 +30,8 @@ export * from "./inventory.js";
 export * from "./items.js";
 export * from "./enchants.js";
 export * from "./data/enchants/index.js";
+export * from "./liquids.js";
+export * from "./data/liquids/index.js";
 export * from "./simulation.js";
 export * from "./math/noise.js";
 export * from "./mining.js";
