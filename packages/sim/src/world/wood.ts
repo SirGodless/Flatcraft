@@ -1,3 +1,4 @@
+import { registerContentType, validateContentInstance } from "../registry/generic.js";
 import { blockByName, type BlockId } from "./block.js";
 
 /**
@@ -29,16 +30,30 @@ export interface WoodDef {
   canopyShape: CanopyShape;
 }
 
+registerContentType(
+  {
+    id: "wood",
+    fields: {
+      id: { kind: "id", required: true },
+      log: { kind: "ref", ref_type: "block", required: true },
+      leaves: { kind: "ref", ref_type: "block", required: true },
+      extra_height: { kind: "number", min: -1000, max: 1000 },
+      canopy_shape: { kind: "enum", values: ["round", "narrow"] },
+    },
+  },
+  "engine/types/wood",
+);
+
 export function parseWood(id: string, json: WoodJson): WoodDef {
-  const log = blockByName(json.log);
-  if (log === undefined) throw new Error(`wood "${id}": unknown log block "${json.log}"`);
-  const leaves = blockByName(json.leaves);
-  if (leaves === undefined) throw new Error(`wood "${id}": unknown leaves block "${json.leaves}"`);
-  const canopyShape = json.canopy_shape ?? "round";
-  if (canopyShape !== "round" && canopyShape !== "narrow") {
-    throw new Error(`wood "${id}": canopy_shape must be "round" or "narrow"`);
-  }
-  return { id, log, leaves, extraHeight: json.extra_height ?? 0, canopyShape };
+  const v = validateContentInstance("wood", json, `wood "${id}"`);
+  const logName = v["log"] as string;
+  const log = blockByName(logName);
+  if (log === undefined) throw new Error(`wood "${id}": unknown log block "${logName}"`);
+  const leavesName = v["leaves"] as string;
+  const leaves = blockByName(leavesName);
+  if (leaves === undefined) throw new Error(`wood "${id}": unknown leaves block "${leavesName}"`);
+  const canopyShape = (v["canopy_shape"] as "round" | "narrow" | undefined) ?? "round";
+  return { id, log, leaves, extraHeight: (v["extra_height"] as number | undefined) ?? 0, canopyShape };
 }
 
 const DEFS = new Map<string, WoodDef>();

@@ -77,19 +77,13 @@ describe("generic content-type engine", () => {
 // namespacing scheme is a later stage's concern (it needs this generic
 // engine to exist first, since `<type>` only becomes resolvable once
 // there's an open type registry to resolve it against).
-describe("generic engine pilot: a content-declared 'enchant' type matches the hand-written enchants.ts validator", () => {
-  registerContentType(
-    {
-      id: "enchant",
-      fields: {
-        id: { kind: "id", required: true },
-        effect: { kind: "enum", values: ["damage_bonus", "mining_speed"], required: true },
-        per_level: { kind: "number", min: -1000, max: 1000, required: true },
-      },
-    },
-    "flatcraft/types/enchant.json",
-  );
-
+//
+// enchants.ts registers "enchant" for real at module load (imported
+// above via parseEnchant) - this is no longer a side-by-side pilot but
+// the actual production path, so this just confirms parseEnchant (now
+// backed by the generic engine) still produces the right values for the
+// real enchant JSON files.
+describe("enchants.ts's parseEnchant, now backed by the generic engine", () => {
   it.each([
     ["sharpness", sharpnessJson],
     ["efficiency", efficiencyJson],

@@ -1,19 +1,26 @@
 import type { ItemStack } from "./inventory.js";
+import { registerContentType, validateContentInstance } from "./registry/generic.js";
 
 /**
  * Enchantment effects: what an enchant id (referenced from an item's
  * "enchants" list, see items.ts) actually does, as data rather than a
  * string-gated special case in combat.ts/mining.ts. Same registry
  * pattern as veins/woods - a JSON file per enchant, registered by id.
+ *
+ * Validation itself runs through the generic content-type engine
+ * (registry/generic.ts) rather than hand-rolled if-checks - this is the
+ * first type migrated onto it for real (see genericContent.test.ts for
+ * the pilot that proved the design). EnchantJson/EnchantDef stay as
+ * hand-written TS types purely for ergonomics elsewhere in the engine
+ * (enchantBonus() below reads def.effect/def.perLevel with real
+ * autocomplete/type-checking) - they're a convenience layer over the
+ * generic engine's validated output, not a second validation path.
  */
 
 export type EnchantEffect = "damage_bonus" | "mining_speed";
 
 export interface EnchantJson {
   id: string;
-  /** Not typed as the literal union here - imported JSON modules widen
-   * string literals to `string`, so the union only exists on the parsed
-   * EnchantDef, checked at runtime in parseEnchant. */
   effect: string;
   per_level: number;
 }
@@ -24,14 +31,21 @@ export interface EnchantDef {
   perLevel: number;
 }
 
+registerContentType(
+  {
+    id: "enchant",
+    fields: {
+      id: { kind: "id", required: true },
+      effect: { kind: "enum", values: ["damage_bonus", "mining_speed"], required: true },
+      per_level: { kind: "number", min: -1000, max: 1000, required: true },
+    },
+  },
+  "engine/types/enchant",
+);
+
 export function parseEnchant(id: string, json: EnchantJson): EnchantDef {
-  if (json.effect !== "damage_bonus" && json.effect !== "mining_speed") {
-    throw new Error(`enchant "${id}": effect must be "damage_bonus" or "mining_speed"`);
-  }
-  if (typeof json.per_level !== "number") {
-    throw new Error(`enchant "${id}": "per_level" is required`);
-  }
-  return { id, effect: json.effect, perLevel: json.per_level };
+  const validated = validateContentInstance("enchant", json, `enchant "${id}"`);
+  return { id, effect: validated["effect"] as EnchantEffect, perLevel: validated["per_level"] as number };
 }
 
 const DEFS = new Map<string, EnchantDef>();

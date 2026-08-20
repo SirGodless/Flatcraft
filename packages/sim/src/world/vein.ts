@@ -1,3 +1,4 @@
+import { registerContentType, validateContentInstance } from "../registry/generic.js";
 import { blockByName, BlockId } from "./block.js";
 
 /**
@@ -32,19 +33,39 @@ export interface VeinDef {
   host: BlockId;
 }
 
+registerContentType(
+  {
+    id: "vein",
+    fields: {
+      id: { kind: "id", required: true },
+      block: { kind: "ref", ref_type: "block", required: true },
+      attempts: { kind: "number", min: 0, max: 100000, required: true },
+      size_min: { kind: "number", min: 0, max: 100000, required: true },
+      size_max: { kind: "number", min: 0, max: 100000, required: true },
+      min_y: { kind: "number", min: -100000, max: 100000, required: true },
+      max_y: { kind: "number", min: -100000, max: 100000, required: true },
+      host: { kind: "ref", ref_type: "block" },
+    },
+  },
+  "engine/types/vein",
+);
+
 export function parseVein(id: string, json: VeinJson): VeinDef {
-  const block = blockByName(json.block);
-  if (block === undefined) throw new Error(`vein "${id}": unknown block "${json.block}"`);
-  const host = json.host !== undefined ? blockByName(json.host) : BlockId.Stone;
-  if (host === undefined) throw new Error(`vein "${id}": unknown host block "${json.host}"`);
+  const v = validateContentInstance("vein", json, `vein "${id}"`);
+  const blockName = v["block"] as string;
+  const block = blockByName(blockName);
+  if (block === undefined) throw new Error(`vein "${id}": unknown block "${blockName}"`);
+  const hostName = v["host"] as string | undefined;
+  const host = hostName !== undefined ? blockByName(hostName) : BlockId.Stone;
+  if (host === undefined) throw new Error(`vein "${id}": unknown host block "${hostName}"`);
   return {
     id,
     block,
-    attempts: json.attempts,
-    sizeMin: json.size_min,
-    sizeMax: json.size_max,
-    minY: json.min_y,
-    maxY: json.max_y,
+    attempts: v["attempts"] as number,
+    sizeMin: v["size_min"] as number,
+    sizeMax: v["size_max"] as number,
+    minY: v["min_y"] as number,
+    maxY: v["max_y"] as number,
     host,
   };
 }
