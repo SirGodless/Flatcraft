@@ -1,0 +1,9 @@
+{
+  "id": "ancient_debris",
+  "block": "ancient_debris",
+  "y_greater_than": 40,
+  "noise": "hash01",
+  "seed_offset": 59157,
+  "threshold": 0.005,
+  "above_threshold": false
+}

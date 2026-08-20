@@ -50,5 +50,7 @@ export * from "./validate.js";
 export * from "./world/block.js";
 export * from "./world/chunk.js";
 export * from "./world/gen.js";
+export * from "./world/netherLayer.js";
+export * from "./data/nether_layers/index.js";
 export * from "./world/nether.js";
 export * from "./world/world.js";

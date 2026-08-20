@@ -1,0 +1,11 @@
+{
+  "id": "basalt",
+  "block": "basalt",
+  "y_greater_than": 36,
+  "noise": "fbm2",
+  "seed_offset": 59156,
+  "period": 20,
+  "octaves": 2,
+  "threshold": 0.74,
+  "above_threshold": true
+}

@@ -1,0 +1,11 @@
+{
+  "id": "soul_sand",
+  "block": "soul_sand",
+  "y_greater_than": 42,
+  "noise": "fbm2",
+  "seed_offset": 59155,
+  "period": 24,
+  "octaves": 2,
+  "threshold": 0.7,
+  "above_threshold": true
+}

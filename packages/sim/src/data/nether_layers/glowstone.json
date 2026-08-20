@@ -1,0 +1,11 @@
+{
+  "id": "glowstone",
+  "block": "glowstone",
+  "y_less_than": -20,
+  "noise": "fbm2",
+  "seed_offset": 59154,
+  "period": 14,
+  "octaves": 2,
+  "threshold": 0.66,
+  "above_threshold": true
+}
