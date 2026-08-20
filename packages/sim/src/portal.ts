@@ -21,7 +21,6 @@ export const PORTAL_TICKS = 60;
 export const PORTAL_RANGE = 2.0;
 /** Ticks after arrival before the return trip can start. */
 export const PORTAL_COOLDOWN = 100;
-export const NETHER_SCALE = 8;
 
 export interface PortalInterior {
   /** Interior bounds (inclusive), all air/portal blocks. */

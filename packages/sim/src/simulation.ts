@@ -1375,7 +1375,7 @@ export class Simulation {
   private explode(creeper: MobEntity, def: ExplodesDef, out: OutboundEvent[]): void {
     const world = this.worldOf(creeper.dimension);
     const cx = creeper.x;
-    const cy = creeper.y - sizeOf("creeper").height / 2;
+    const cy = creeper.y - sizeOf(creeper.kind).height / 2;
     out.push({ event: { type: "entity_died", id: creeper.id, kind: creeper.kind } });
     this.removeEntity(creeper.id, out);
 

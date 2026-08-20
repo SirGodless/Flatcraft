@@ -73,47 +73,6 @@ export interface ItemDef {
   readonly visual?: VisualDef | undefined;
 }
 
-/**
- * The eight material tiers, in upgrade order (used by the design doc's
- * binary availability codes: wood stone copper iron gold diamond
- * emerald netherite).
- */
-export const TIER_ORDER = [
-  "wooden",
-  "stone",
-  "copper",
-  "iron",
-  "golden",
-  "diamond",
-  "emerald",
-  "netherite",
-] as const;
-export type TierId = (typeof TIER_ORDER)[number];
-
-/** Crafting material per tier ("#planks" = any planks via the tag). */
-export const TIER_MATERIAL: Record<TierId, string> = {
-  wooden: "#planks",
-  stone: "cobblestone",
-  copper: "copper_ingot",
-  iron: "iron_ingot",
-  golden: "gold_ingot",
-  diamond: "diamond",
-  emerald: "emerald",
-  netherite: "netherite_ingot",
-};
-
-/** Mining speed per tier (matches the tools where they exist). */
-export const TIER_SPEED: Record<TierId, number> = {
-  wooden: 2,
-  stone: 4,
-  copper: 5,
-  iron: 6,
-  golden: 12,
-  diamond: 8,
-  emerald: 9,
-  netherite: 10,
-};
-
 const defs = new Map<string, ItemDef>();
 /** Recipes embedded in item files, collected for the recipe registry. */
 const recipeSources: Array<{ result: string; json: RecipeJson; source: string }> = [];

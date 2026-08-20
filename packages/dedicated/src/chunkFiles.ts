@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { Chunk, decodeChunk, type Dimension, type FurnaceState, type ItemStack } from "@flatcraft/sim";
+import { allDimensionIds, Chunk, decodeChunk, type Dimension, type FurnaceState, type ItemStack } from "@flatcraft/sim";
 
 /**
  * Chunk terrain storage: one small binary file per *modified* chunk
@@ -142,13 +142,15 @@ export class ChunkFileStore {
     return decodeChunk(cx, cy, decoded.tileRuns, decoded.wallRuns, remap);
   }
 
-  /** Reads every chunk file across both dimensions once, for the boot-
-   * time chest/furnace hydration - see the class doc comment. Returns
-   * each file's dimension/coordinates/extra state; terrain itself isn't
-   * decoded into a Chunk here (that stays lazy, via load()). */
+  /** Reads every chunk file across every registered dimension once, for
+   * the boot-time chest/furnace hydration - see the class doc comment.
+   * Returns each file's dimension/coordinates/extra state; terrain
+   * itself isn't decoded into a Chunk here (that stays lazy, via
+   * load()). Iterates allDimensionIds() rather than a hardcoded pair so
+   * a mod-registered dimension's containers get hydrated too. */
   scanAll(): Array<{ dim: Dimension; cx: number; cy: number; extra: ChunkExtra }> {
     const results: Array<{ dim: Dimension; cx: number; cy: number; extra: ChunkExtra }> = [];
-    for (const dim of ["overworld", "nether"] as const) {
+    for (const dim of allDimensionIds()) {
       const dir = join(this.worldDir, dim);
       if (!existsSync(dir)) continue;
       for (const entry of readdirSync(dir)) {
