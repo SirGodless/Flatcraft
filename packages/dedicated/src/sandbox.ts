@@ -109,6 +109,15 @@ function stableBridgeFns(getSim: () => Simulation, log: (message: string) => voi
       const world = worldOrThrow(dimension);
       return world ? world.setWall(x, y, blockNameToId(block) as never) : false;
     },
+    // Stage 10's sim-changing/cosmetic split: this is the sim-changing
+    // track (it can read/write live world state), so its rng is
+    // ALWAYS the engine's own deterministic Simulation.rng() - never
+    // Date.now()/Math.random(). Two independent servers replaying the
+    // same seed and the same script must reach the same result; a real-
+    // randomness source here would make that impossible. See
+    // sandbox.test.ts's own determinism regression test, and contrast
+    // with the client's worker.ts, whose bridge is cosmetic-only (no
+    // world access at all) and uses real Math.random() on purpose.
     __rng: (): number => getSim().rng(),
     __spawnItem: (dimension: string, x: number, y: number, item: string, count: number): void => {
       const world = worldOrThrow(dimension);
