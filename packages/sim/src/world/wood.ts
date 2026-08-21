@@ -1,4 +1,4 @@
-import { registerContentType, validateContentInstance } from "../registry/generic.js";
+import { createInstanceStore, registerContentType, validateContentInstance } from "../registry/generic.js";
 import { blockByName, type BlockId } from "./block.js";
 
 /**
@@ -43,7 +43,7 @@ registerContentType(
   "engine/types/wood",
 );
 
-const DEFS = new Map<string, WoodDef>();
+const DEFS = createInstanceStore<WoodDef>("wood");
 
 /** Register a wood type from datapack JSON (content package files or
  * server mods). */
@@ -58,11 +58,7 @@ export function registerWoodJson(raw: unknown, source = "content"): WoodDef {
   if (leaves === undefined) throw new Error(`wood "${id}": unknown leaves block "${leavesName}"`);
   const canopyShape = (v["canopy_shape"] as "round" | "narrow" | undefined) ?? "round";
   const def: WoodDef = { id, log, leaves, extraHeight: (v["extra_height"] as number | undefined) ?? 0, canopyShape };
-  if (DEFS.has(def.id)) {
-    throw new Error(`wood "${def.id}" is already registered`);
-  }
-  DEFS.set(def.id, def);
-  return def;
+  return DEFS.register(def);
 }
 
 export function woodDef(id: string): WoodDef | undefined {

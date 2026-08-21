@@ -1,6 +1,5 @@
 import { itemDef } from "../items.js";
-import { registerContentType, validateContentInstance } from "../registry/generic.js";
-import { allDimensionIds } from "../world/dimension.js";
+import { createInstanceStore, registerContentType, validateContentInstance } from "../registry/generic.js";
 import { blockByName, type BlockId } from "../world/block.js";
 import type { Dimension } from "../world/world.js";
 
@@ -113,7 +112,7 @@ registerContentType(
   "engine/types/structure",
 );
 
-const DEFS = new Map<string, Structure>();
+const DEFS = createInstanceStore<Structure>("structure");
 
 /** Register a structure from datapack JSON (content package files or
  * server mods). Building the actual cell grid from pattern+key is real
@@ -174,23 +173,15 @@ export function registerStructureJson(raw: unknown, source = "content"): Structu
     width,
     height: cells.length,
   };
-  if (DEFS.has(def.id)) {
-    throw new Error(`structure "${def.id}" is already registered`);
-  }
-  DEFS.set(def.id, def);
-  return def;
+  return DEFS.register(def);
 }
 
 export function allStructures(): Iterable<Structure> {
   return DEFS.values();
 }
 
-/** Every structure's `dimension` must name an actually registered
- * dimension - same exhaustive-collect-all pattern as
- * validateMultiblockHandlers. */
-export function validateStructureDimensions(): string[] {
-  const known = new Set(allDimensionIds());
-  return [...DEFS.values()]
-    .filter((s) => !known.has(s.dimension))
-    .map((s) => `structure "${s.id}" references unknown dimension "${s.dimension}"`);
-}
+// A structure's `dimension` field is declared as a `ref` field (see the
+// registerContentType call above), so its existence is checked
+// generically by registry/generic.ts's validateAllRefs (see
+// validate.ts) - no bespoke validateStructureDimensions() needed here
+// anymore.

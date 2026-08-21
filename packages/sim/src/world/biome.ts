@@ -1,7 +1,5 @@
-import { registerContentType, validateContentInstance } from "../registry/generic.js";
+import { createInstanceStore, registerContentType, validateContentInstance } from "../registry/generic.js";
 import { blockByName, BlockId } from "./block.js";
-import { veinDef } from "./vein.js";
-import { woodDef } from "./wood.js";
 
 /**
  * Biomes: which surface/underground layers a column gets, whether it
@@ -17,8 +15,8 @@ import { woodDef } from "./wood.js";
  * registry/load.ts's DIR_ORDER). tree_woods/extra_veins reference the
  * wood/vein registries instead; those load in the same pass and aren't
  * given a guaranteed order relative to biomes, so those stay unresolved
- * strings here and are checked exhaustively by validateBiomeReferences
- * (see validate.ts).
+ * strings here and are checked exhaustively later, once everything has
+ * loaded, by registry/generic.ts's validateAllRefs (see validate.ts).
  */
 
 export interface BiomeLayerJson {
@@ -63,9 +61,9 @@ export interface BiomeDef {
   beachFloor?: BlockId;
   snow?: { atOrBelowSurface: number; block: BlockId };
   treeChance: number;
-  /** Wood ids, still unresolved strings - see validateBiomeReferences. */
+  /** Wood ids, still unresolved strings - see validateAllRefs. */
   treeWoods: TreeWoodJson[];
-  /** Vein ids, still unresolved strings - see validateBiomeReferences. */
+  /** Vein ids, still unresolved strings - see validateAllRefs. */
   extraVeins: string[];
 }
 
@@ -112,13 +110,12 @@ registerContentType(
   "engine/types/biome",
 );
 
-const DEFS = new Map<string, BiomeDef>();
+const DEFS = createInstanceStore<BiomeDef>("biome");
 
 /** Register a biome from datapack JSON (content package files or server
  * mods). tree_woods'/extra_veins' wood/vein ids stay unresolved strings
- * after validation (ref fields are syntax-only, see registry/generic.ts)
- * - validateBiomeReferences below still does the exhaustive existence
- * check, unchanged. */
+ * after validation - registry/generic.ts's validateAllRefs does the
+ * exhaustive existence check later, once every type has loaded. */
 export function registerBiomeJson(raw: unknown, source = "content"): BiomeDef {
   const v = validateContentInstance("biome", raw, source) as {
     id: string;
@@ -162,11 +159,7 @@ export function registerBiomeJson(raw: unknown, source = "content"): BiomeDef {
     treeWoods: v.tree_woods ?? [],
     extraVeins: v.extra_veins ?? [],
   };
-  if (DEFS.has(def.id)) {
-    throw new Error(`biome "${def.id}" is already registered`);
-  }
-  DEFS.set(def.id, def);
-  return def;
+  return DEFS.register(def);
 }
 
 export function biomeDef(id: string): BiomeDef | undefined {
@@ -192,18 +185,8 @@ export function biomeForNoise(b: number): BiomeDef {
   return sorted[sorted.length - 1]!;
 }
 
-/** Every registered biome's tree-wood and extra-vein references must
- * resolve - collected exhaustively, same pattern as
- * validateDimensionGenerators/validateStructureDimensions. */
-export function validateBiomeReferences(): string[] {
-  const problems: string[] = [];
-  for (const def of DEFS.values()) {
-    for (const tw of def.treeWoods) {
-      if (!woodDef(tw.wood)) problems.push(`biome "${def.id}" references unknown wood "${tw.wood}"`);
-    }
-    for (const veinId of def.extraVeins) {
-      if (!veinDef(veinId)) problems.push(`biome "${def.id}" references unknown vein "${veinId}"`);
-    }
-  }
-  return problems;
-}
+// A biome's tree_woods[].wood and extra_veins[] fields are declared as
+// `ref` fields (see the registerContentType call above), so their
+// existence is checked generically by registry/generic.ts's
+// validateAllRefs (see validate.ts) - no bespoke validateBiomeReferences()
+// needed here anymore.

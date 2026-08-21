@@ -1,4 +1,4 @@
-import { registerContentType, validateContentInstance } from "../registry/generic.js";
+import { registerContentType, registerRefResolver, validateContentInstance } from "../registry/generic.js";
 import { validateVisualJson, validateBlockFallbackJson, localName, type BlockJson } from "../registry/schema.js";
 import type { BlockVisualDef } from "../registry/visual.js";
 
@@ -152,6 +152,11 @@ export interface BlockDef {
 
 const defs = new Map<BlockId, BlockDef>();
 const byName = new Map<string, BlockId>();
+// The one type not built on createInstanceStore (see registerBlockJson's
+// own doc comment for why), so it doesn't get a `ref_type: "block"`
+// resolver for free the way every other type does - registered here by
+// hand instead, same effect.
+registerRefResolver("block", (id) => byName.has(id));
 /** Named station (e.g. "crafting_table") -> the block providing it. */
 const stations = new Map<string, BlockId>();
 /** toggle_to targets may be registered later; resolved in a second pass. */
@@ -224,14 +229,27 @@ registerContentType(
 );
 
 /** Register a block from datapack JSON. Known names keep their enum id;
- * new names get a dynamic id. Call resolveBlockLinks() after a batch. */
+ * new names get a dynamic id. Call resolveBlockLinks() after a batch.
+ *
+ * Not built on registry/generic.ts's createInstanceStore, unlike every
+ * other content type: block identity is split across two maps (`defs`
+ * keyed by the dense numeric BlockId, `byName` keyed by the qualified
+ * string id) plus dynamic-id allocation, none of which the generic
+ * store's plain `Map<string, T>` shape models. The duplicate-id
+ * guarantee that store gives every other type is preserved here by hand
+ * instead, checked against `byName` (the one map that's only ever
+ * populated by a *completed* registration, unlike `BUILTIN_IDS`, which
+ * merely reserves a number ahead of time). */
 export function registerBlockJson(raw: unknown, source = "datapack"): BlockDef {
   const v = validateContentInstance("block", raw, source) as unknown as BlockJson;
   const json: BlockJson = {
     ...v,
     ...(v.visual !== undefined ? { visual: validateVisualJson(v.visual, source, validateBlockFallbackJson) } : {}),
   };
-  const id = byName.get(json.id) ?? BUILTIN_IDS.get(json.id) ?? (nextDynamicId++ as BlockId);
+  if (byName.has(json.id)) {
+    throw new Error(`block "${json.id}" is already registered`);
+  }
+  const id = BUILTIN_IDS.get(json.id) ?? (nextDynamicId++ as BlockId);
   const def: BlockDef = {
     id,
     name: json.id,

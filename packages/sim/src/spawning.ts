@@ -1,6 +1,6 @@
 import type { MobKind, PlayerEntity } from "./entities.js";
 import type { OutboundEvent } from "./events.js";
-import { getHandler, hasHandler, registerHandler } from "./registry/handlers.js";
+import { getHandler, registerHandler } from "./registry/handlers.js";
 import type { Simulation } from "./simulation.js";
 import type { World } from "./world/world.js";
 
@@ -40,18 +40,8 @@ export function spawnGenerator(id: string): SpawnGenerator | undefined {
   return getHandler("spawn_generator", id);
 }
 
-/** Every registered dimension's spawn generator must resolve - checked
- * from world/dimension.ts's DEFS via the id it hands back, same
- * exhaustive-collect-all pattern as the other content validators. This
- * takes the (id, dimId) pairs as input rather than importing
- * world/dimension.ts itself, for the same dependency-direction reason
- * described above. */
-export function validateSpawnGenerators(dimensions: Iterable<{ id: string; spawns: string }>): string[] {
-  const problems: string[] = [];
-  for (const dim of dimensions) {
-    if (!hasHandler("spawn_generator", dim.spawns)) {
-      problems.push(`dimension "${dim.id}" references unknown spawn generator "${dim.spawns}"`);
-    }
-  }
-  return problems;
-}
+// A dimension's `spawns` field is declared as a `ref` field (ref_kind:
+// "handler", ref_type: "spawn_generator" - see world/dimension.ts's
+// registerContentType call), so its existence is checked generically by
+// registry/generic.ts's validateAllRefs (see validate.ts) - no bespoke
+// validateSpawnGenerators() needed here anymore.

@@ -1,5 +1,5 @@
 import type { ItemStack } from "./inventory.js";
-import { registerContentType, validateContentInstance } from "./registry/generic.js";
+import { createInstanceStore, registerContentType, validateContentInstance } from "./registry/generic.js";
 
 /**
  * Enchantment effects: what an enchant id (referenced from an item's
@@ -43,18 +43,14 @@ registerContentType(
   "engine/types/enchant",
 );
 
-const DEFS = new Map<string, EnchantDef>();
+const DEFS = createInstanceStore<EnchantDef>("enchant");
 
 /** Register an enchant from datapack JSON (content package files or
  * server mods). */
 export function registerEnchantJson(raw: unknown, source = "content"): EnchantDef {
   const v = validateContentInstance("enchant", raw, source);
   const def: EnchantDef = { id: v["id"] as string, effect: v["effect"] as EnchantEffect, perLevel: v["per_level"] as number };
-  if (DEFS.has(def.id)) {
-    throw new Error(`enchant "${def.id}" is already registered`);
-  }
-  DEFS.set(def.id, def);
-  return def;
+  return DEFS.register(def);
 }
 
 export function enchantDef(id: string): EnchantDef | undefined {
@@ -79,19 +75,7 @@ export function enchantBonus(stack: ItemStack | null, effect: EnchantEffect): nu
   return total;
 }
 
-/** Every item's "enchants" list must reference registered enchant ids -
- * takes the item defs as a parameter (rather than importing items.ts)
- * to avoid coupling this registry to that one; called from validate.ts
- * with allItems(). Same exhaustive-collect-all pattern as
- * validateSpawnGenerators. */
-export function validateItemEnchants(items: Iterable<{ id: string; enchants?: readonly string[] | undefined }>): string[] {
-  const problems: string[] = [];
-  for (const item of items) {
-    for (const id of item.enchants ?? []) {
-      if (!DEFS.has(id)) {
-        problems.push(`item "${item.id}" references unknown enchant "${id}"`);
-      }
-    }
-  }
-  return problems;
-}
+// An item's `enchants` field is declared as a `ref` array (ref_type:
+// "enchant" - see items.ts's registerContentType call), so its existence
+// is checked generically by registry/generic.ts's validateAllRefs (see
+// validate.ts) - no bespoke validateItemEnchants() needed here anymore.

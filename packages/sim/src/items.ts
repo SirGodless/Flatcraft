@@ -1,4 +1,4 @@
-import { registerContentType, validateContentInstance } from "./registry/generic.js";
+import { createInstanceStore, registerContentType, validateContentInstance } from "./registry/generic.js";
 import { validateRecipeJson, validateVisualJson, validateItemFallbackJson, localName, type ItemJson, type RecipeJson } from "./registry/schema.js";
 import type { ItemVisualDef } from "./registry/visual.js";
 import { blockByName, BlockId } from "./world/block.js";
@@ -92,7 +92,7 @@ export interface ItemDef {
   readonly visual?: ItemVisualDef | undefined;
 }
 
-const defs = new Map<string, ItemDef>();
+const defs = createInstanceStore<ItemDef>("item");
 /** Recipes embedded in item files, collected for the recipe registry. */
 const recipeSources: Array<{ result: string; json: RecipeJson; source: string }> = [];
 
@@ -240,7 +240,7 @@ export function registerItemJson(raw: unknown, source = "datapack"): ItemDef {
     ...(json.sprite !== undefined ? { sprite: json.sprite } : {}),
     ...(json.visual !== undefined ? { visual: json.visual } : {}),
   };
-  defs.set(def.id, def);
+  defs.register(def);
   for (const recipe of json.recipes ?? []) {
     recipeSources.push({ result: def.id, json: recipe, source });
   }
