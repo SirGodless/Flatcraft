@@ -1,12 +1,11 @@
 import { CHUNK_HEIGHT, CHUNK_WIDTH } from "../constants.js";
-import { GLOBAL_VEIN_IDS } from "../data/veins/index.js";
 import { fbm2, hash01, smoothstep01, valueNoise1, valueNoise2 } from "../math/noise.js";
 import { createRng, hashSeed } from "../math/rng.js";
 import { biomeForNoise, type BiomeDef } from "./biome.js";
 import { BlockId } from "./block.js";
 import { Chunk } from "./chunk.js";
 import { registerArrivalGenerator, registerDimensionGenerator, registerSpawnPointGenerator } from "./dimension.js";
-import { veinDef, type VeinDef } from "./vein.js";
+import { GLOBAL_VEIN_IDS, veinDef, type VeinDef } from "./vein.js";
 import { woodDef } from "./wood.js";
 import type { World } from "./world.js";
 

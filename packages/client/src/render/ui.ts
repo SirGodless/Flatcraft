@@ -11,7 +11,7 @@ import {
   matchGrid,
   RECIPES,
   SMALL_GRID_INDICES,
-  TRADES,
+  allTrades,
   type InventorySlots,
   type ItemStack,
   type Recipe,
@@ -765,7 +765,7 @@ export class TradePanelUI {
     this.container.removeChildren().forEach((c) => c.destroy({ children: true }));
     const rowH = 28;
     const width = 340;
-    const height = TRADES.length * rowH + 36;
+    const height = allTrades().length * rowH + 36;
     const background = new Graphics()
       .rect(0, 0, width, height)
       .fill({ color: 0x1a1a22, alpha: 0.92 })
@@ -780,7 +780,7 @@ export class TradePanelUI {
     title.position.set(PAD * 2, 8);
     this.container.addChild(title);
 
-    TRADES.forEach((trade, index) => {
+    allTrades().forEach((trade, index) => {
       const affordable = countInInventory(this.slots, trade.cost.item) >= trade.cost.count;
       const row = new Container();
       row.position.set(PAD * 2, 30 + index * rowH);

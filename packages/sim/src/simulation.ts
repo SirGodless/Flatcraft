@@ -5,7 +5,7 @@ import type { OutboundEvent, SimEvent } from "./events.js";
 import { CHUNK_HEIGHT, CHUNK_IDLE_EVICT_TICKS, CHUNK_WIDTH } from "./constants.js";
 import { CRAFT_GRID_SIZE, matchGrid, SMALL_GRID_INDICES } from "./crafting/match.js";
 import { DEFAULT_COOK_TICKS, fuelTicks, ingredientOptions } from "./crafting/recipe.js";
-import { RECIPES } from "./data/recipes/index.js";
+import { RECIPES } from "./crafting/registry.js";
 import { createFurnace, furnaceIdle, furnaceKey, stepFurnace, type FurnaceState } from "./furnace.js";
 import {
   ARROW_TTL,
@@ -89,7 +89,6 @@ import type { SimSave } from "./save.js";
 import { clickStack } from "./slots.js";
 import { structureLootAt } from "./structures/place.js";
 import { spawnGenerator } from "./spawning.js";
-import { TRADES } from "./data/trades/index.js";
 import { DAY_LENGTH, daylightFactor } from "./time.js";
 import {
   allBlocks,

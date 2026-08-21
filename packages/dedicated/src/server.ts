@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { extname, join, normalize, relative, resolve } from "node:path";
+import { dirname, extname, join, normalize, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { discoverContentDir, type ContentPackage } from "@flatcraft/content";
 import { GameServer, INFO_PATH, WS_PATH } from "@flatcraft/server";
 import type { AuthRequest, ClientMessage, ServerConnection, ServerInfo, ServerMessage } from "@flatcraft/server";
 import {
@@ -8,6 +10,7 @@ import {
   CHUNK_HEIGHT,
   CHUNK_WIDTH,
   furnaceKey,
+  loadContentPackage,
   registerBlockJson,
   registerItemJson,
   registerMobJson,
@@ -24,6 +27,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { Accounts } from "./accounts.js";
 import { type ChunkExtra, ChunkFileStore } from "./chunkFiles.js";
 import { OidcLogin, type OidcConfig } from "./oidc.js";
+import { compileContentScripts, runCompiledScripts } from "./sandbox.js";
 
 /**
  * The dedicated server: one Node process, one port.
@@ -42,6 +46,11 @@ export interface DedicatedOptions {
   dataDir: string;
   /** Built client to serve; omit to run headless (API/WS only). */
   clientDir?: string | undefined;
+  /** The `content/` directory holding `flatcraft/` (and any other
+   * installed content packages) - discovered and registered before
+   * anything else touches the block/item/mob/... registries. Defaults
+   * to the repo-root `content/` directory next to this build. */
+  contentDir?: string | undefined;
   seed?: number | undefined;
   serverName?: string | undefined;
   saveIntervalMs?: number | undefined;
@@ -85,8 +94,69 @@ const MIME_TYPES: Record<string, string> = {
   ".wasm": "application/wasm",
 };
 
+/** Repo-root `content/` lives 3 levels above this file whether it's
+ * running unbundled (packages/dedicated/src) or as the esbuild-bundled
+ * dist/server.mjs (packages/dedicated/dist) - "src"/"dist" sit at the
+ * same depth, so the same relative path resolves correctly either way. */
+const here = dirname(fileURLToPath(import.meta.url));
+
+/** Every content package under contentDir (block/item/mob/... registries,
+ * flatcraft's own vanilla content included - no privileged shortcut)
+ * loads exactly once per process - a second startDedicatedServer() call
+ * in the same process (every test file that spins up its own server)
+ * must not try to register "flatcraft:block:stone" a second time.
+ * Cached as a promise, not a boolean, so concurrent callers await the
+ * same load rather than racing a second one. */
+let baseContentLoaded: Promise<readonly ContentPackage[]> | null = null;
+
+function ensureBaseContentLoaded(contentDir: string): Promise<readonly ContentPackage[]> {
+  if (!baseContentLoaded) {
+    baseContentLoaded = (async () => {
+      const packages = discoverContentDir(contentDir);
+      const flatcraft = packages.find((p) => p.id === "flatcraft");
+      if (!flatcraft) {
+        throw new Error(`no "flatcraft" content package found under "${contentDir}"`);
+      }
+      // flatcraft first - every other package's content may reference
+      // flatcraft-namespaced ids (a mod item that places a vanilla
+      // block, a mod block that drops a vanilla item), and
+      // loadContentPackage resolves cross-references eagerly as each
+      // package's own directories drain rather than deferring to the
+      // end, so load order here has to match that assumption.
+      await loadContentPackage(flatcraft);
+      for (const pkg of packages) {
+        if (pkg.id === "flatcraft") continue;
+        await loadContentPackage(pkg);
+      }
+      return packages;
+    })();
+  }
+  return baseContentLoaded;
+}
+
 export async function startDedicatedServer(options: DedicatedOptions): Promise<DedicatedServer> {
   const log = options.log ?? ((message: string) => console.log(message));
+  const contentDir = resolve(options.contentDir ?? join(here, "../../../content"));
+  const contentPackages = await ensureBaseContentLoaded(contentDir);
+
+  // Declared before the Simulation itself exists (its construction below
+  // depends on world-load/reset options resolved later in boot) so
+  // content-package scripts can be loaded - and their registrations
+  // validated by validateAllContent below - ahead of the Simulation that
+  // their bridge calls (world/rng/spawnItem) ultimately act on. Those
+  // bridge calls only ever run from a later tick hook or handler
+  // invocation, never from a script's own top-level load, so `simulation`
+  // is always assigned by the time getSim() is actually called.
+  let simulation: Simulation | undefined;
+  const getSim = (): Simulation => {
+    if (!simulation) {
+      throw new Error(
+        "a content-package script touched the live simulation before it exists - bridge calls are only valid from a tick hook or handler invoked after boot completes, not from a script's own top-level code",
+      );
+    }
+    return simulation;
+  };
+
   const dataDir = resolve(options.dataDir);
   mkdirSync(dataDir, { recursive: true });
   const worldFile = join(dataDir, "world.json");
@@ -128,6 +198,22 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   if (packBlocks.length > 0 || packItems.length > 0 || packMobs.length > 0) {
     log(`datapack loaded: ${packBlocks.length} blocks, ${packItems.length} items, ${packMobs.length} mobs`);
   }
+
+  // Content-package scripts (content/<pkg>/scripts/*.ts) compile once
+  // here - the resulting JS is reused both to run them server-side
+  // (isolated-vm, below) and to serve them to connecting clients'
+  // Worker+iframe sandbox via /api/scripts (Stage 9 - the client never
+  // transpiles TS itself, same asymmetry as /api/datapack already
+  // serving pre-parsed JSON rather than making the client parse
+  // anything mod-shaped on its own). Compiling before validateAllContent
+  // runs so a multiblock/dimension JSON referencing a script-registered
+  // handler id resolves during that same validation pass instead of
+  // looking like a dangling reference. A script that fails to compile or
+  // throws at top-level load is a hard boot failure (propagates out of
+  // these calls), matching validateAllContent's own "refuse to start
+  // rather than run with broken content" rule.
+  const scriptBundles = compileContentScripts(contentPackages);
+  runCompiledScripts(scriptBundles, getSim, log);
 
   // Hard stop, not a warning: every content reference (currently
   // multiblock handlers) must resolve to something actually registered,
@@ -185,7 +271,6 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
       log(`RESET_WORLD set: previous world terrain moved to ${backup}`);
     }
   }
-  let simulation: Simulation;
   /** The palette a freshly-loaded meta file's chunk remap is based on -
    * undefined when there was no save to load from, or the meta file was
    * corrupt (see the catch branch below). Either way buildBlockRemap
@@ -332,6 +417,20 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
     if (urlPath === "/api/datapack") {
       response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
       response.end(JSON.stringify({ blocks: packBlocks, items: packItems, mobs: packMobs, sprites: spriteEntries }));
+      return;
+    }
+    if (urlPath === "/api/scripts") {
+      // { [packageId]: string[] } - already-compiled JS (see
+      // compileContentScripts above), in load order, one entry per
+      // content package that has a scripts/ directory. The client's
+      // Worker+iframe sandbox (Stage 9) evals these directly; it never
+      // sees or transpiles the original TypeScript.
+      const scripts: Record<string, string[]> = {};
+      for (const [packageId, files] of scriptBundles) {
+        scripts[packageId] = files.map((f) => f.code);
+      }
+      response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      response.end(JSON.stringify(scripts));
       return;
     }
     if (urlPath === "/sprites/manifest.json") {
@@ -501,6 +600,18 @@ function serveFile(baseDir: string, relativePath: string, response: ServerRespon
     response.writeHead(200, {
       "content-type": MIME_TYPES[extname(filePath)] ?? "application/octet-stream",
       "cache-control": relativePath.startsWith("assets/") ? "public, max-age=31536000, immutable" : "no-cache",
+      // sandbox.html's own bootstrap module script (and the module
+      // Worker it spawns - see client/src/sandbox/host.ts) load from
+      // inside a deliberately opaque-origin iframe (sandbox="allow-
+      // scripts", no allow-same-origin). A module script/worker always
+      // enforces a CORS check, even for what's nominally "the same
+      // server" - an opaque origin is never same-origin with anything,
+      // itself included, so without this header the sandbox's own
+      // harness code fails to load at all. Every file served here is
+      // public static content already (the whole client bundle,
+      // sprites) with no per-user/cookie-gated access to protect, so a
+      // permissive origin is the correct answer, not a workaround.
+      "access-control-allow-origin": "*",
     });
     response.end(content);
   } catch {

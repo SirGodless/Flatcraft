@@ -2,6 +2,7 @@ import { CHUNK_HEIGHT, CHUNK_WIDTH } from "./constants.js";
 import type { SimEvent } from "./events.js";
 import { itemDef } from "./items.js";
 import { registerContentType, validateContentInstance } from "./registry/generic.js";
+import { getHandler, hasHandler, registerHandler } from "./registry/handlers.js";
 import type { Simulation } from "./simulation.js";
 import { blockByName, type BlockId } from "./world/block.js";
 import type { Dimension, World } from "./world/world.js";
@@ -252,8 +253,11 @@ function parseTrigger(id: string, json: { type: "place_block" | "use_block"; ite
  * hand-written - the generic engine (registered above) only confirms
  * the raw shape is sound before this function does anything with it,
  * same split as structures.ts/biome.ts. */
-export function parseMultiblock(id: string, json: MultiblockJson): MultiblockDef {
-  const v = validateContentInstance("multiblock", json, `multiblock "${id}"`) as {
+/** Register a multiblock from datapack JSON (content package files or
+ * server mods). */
+export function registerMultiblockJson(raw: unknown, source = "content"): MultiblockDef {
+  const v = validateContentInstance("multiblock", raw, source) as {
+    id: string;
     handler: string;
     trigger_on: { type: "place_block" | "use_block"; item?: string };
     states?: Record<string, MultiblockStateJson>;
@@ -261,6 +265,7 @@ export function parseMultiblock(id: string, json: MultiblockJson): MultiblockDef
     build_pattern?: MultiblockBuildPatternJson;
     config?: Record<string, unknown>;
   };
+  const id = v.id;
   let states: Record<string, MultiblockState> | undefined;
   if (v.states) {
     states = {};
@@ -269,7 +274,7 @@ export function parseMultiblock(id: string, json: MultiblockJson): MultiblockDef
     }
     if (Object.keys(states).length === 0) states = undefined;
   }
-  return {
+  const def: MultiblockDef = {
     id,
     handler: v.handler,
     ...(states ? { states } : {}),
@@ -278,6 +283,11 @@ export function parseMultiblock(id: string, json: MultiblockJson): MultiblockDef
     ...(v.build_pattern ? { buildPattern: parseBuildPattern(id, v.build_pattern) } : {}),
     ...(v.config ? { config: v.config } : {}),
   };
+  if (DEFS.has(def.id)) {
+    throw new Error(`multiblock "${def.id}" is already registered - ids must be unique (use a modname: prefix)`);
+  }
+  DEFS.set(def.id, def);
+  return def;
 }
 
 /**
@@ -350,13 +360,6 @@ function matchesAt(world: World, state: MultiblockState, originX: number, origin
 
 const DEFS = new Map<string, MultiblockDef>();
 
-export function registerMultiblock(def: MultiblockDef): void {
-  if (DEFS.has(def.id)) {
-    throw new Error(`multiblock "${def.id}" is already registered - ids must be unique (use a modname: prefix)`);
-  }
-  DEFS.set(def.id, def);
-}
-
 export function multiblockDef(id: string): MultiblockDef | undefined {
   return DEFS.get(id);
 }
@@ -382,7 +385,7 @@ export function allMultiblocks(): Iterable<MultiblockDef> {
 export function validateMultiblockHandlers(): string[] {
   const problems: string[] = [];
   for (const def of DEFS.values()) {
-    if (!HANDLERS.has(def.handler)) {
+    if (!hasHandler("multiblock_handler", def.handler)) {
       problems.push(`multiblock "${def.id}" references unknown behavior "${def.handler}"`);
     }
   }
@@ -417,13 +420,8 @@ export interface MultiblockHandler {
   activate(ctx: MultiblockActivateContext): boolean;
 }
 
-const HANDLERS = new Map<string, MultiblockHandler>();
-
 export function registerMultiblockHandler(id: string, handler: MultiblockHandler): void {
-  if (HANDLERS.has(id)) {
-    throw new Error(`multiblock handler "${id}" is already registered - ids must be unique (use a modname: prefix)`);
-  }
-  HANDLERS.set(id, handler);
+  registerHandler("multiblock_handler", id, handler);
 }
 
 function triggerMatches(defTrigger: MultiblockTrigger, actual: MultiblockTrigger): boolean {
@@ -462,7 +460,7 @@ export function tryActivateMultiblock(
 ): MultiblockAttemptResult {
   for (const def of DEFS.values()) {
     if (!triggerMatches(def.triggerOn, trigger)) continue;
-    const handler = HANDLERS.get(def.handler);
+    const handler = getHandler<MultiblockHandler>("multiblock_handler", def.handler);
     if (!handler) continue; // no registered behavior for this id - skip, never crash
     let match: MultiblockMatch | undefined;
     if (def.states) {

@@ -12,19 +12,13 @@ import { woodDef } from "./wood.js";
  * registered noise_max also catches everything above its own threshold,
  * so there's always exactly one match.
  *
- * Not namespaced ("flatcraft:desert" etc.) - unlike a multiblock/command/
- * dimension id, biome ids already appear as plain content references in
- * structure placement data (data/structures/house.json's "biomes" list),
- * the same category as block/item names, not a behavior reference.
- *
  * Block references (layers, floor, wall_layer, snow) resolve eagerly
- * here, same reasoning as world/wood.ts and world/vein.ts: blocks are a
- * self-contained registry, always fully loaded first. tree_woods/
- * extra_veins reference the wood/vein registries instead, which - like
- * dimensions/structures - are independently populated by their own
- * data-directory index.ts modules with no guaranteed load order
- * relative to biomes, so those stay unresolved strings here and are checked
- * exhaustively by validateBiomeReferences (see validate.ts).
+ * here (the content loader registers blocks before biomes - see
+ * registry/load.ts's DIR_ORDER). tree_woods/extra_veins reference the
+ * wood/vein registries instead; those load in the same pass and aren't
+ * given a guaranteed order relative to biomes, so those stay unresolved
+ * strings here and are checked exhaustively by validateBiomeReferences
+ * (see validate.ts).
  */
 
 export interface BiomeLayerJson {
@@ -118,12 +112,16 @@ registerContentType(
   "engine/types/biome",
 );
 
-/** tree_woods'/extra_veins' wood/vein ids stay unresolved strings after
- * validation (ref fields are syntax-only, see registry/generic.ts) -
- * validateBiomeReferences below still does the exhaustive existence
+const DEFS = new Map<string, BiomeDef>();
+
+/** Register a biome from datapack JSON (content package files or server
+ * mods). tree_woods'/extra_veins' wood/vein ids stay unresolved strings
+ * after validation (ref fields are syntax-only, see registry/generic.ts)
+ * - validateBiomeReferences below still does the exhaustive existence
  * check, unchanged. */
-export function parseBiome(id: string, json: BiomeJson): BiomeDef {
-  const v = validateContentInstance("biome", json, `biome "${id}"`) as {
+export function registerBiomeJson(raw: unknown, source = "content"): BiomeDef {
+  const v = validateContentInstance("biome", raw, source) as {
+    id: string;
     noise_max: number;
     layers: Array<{ to_depth: number; block: string }>;
     floor: string;
@@ -135,6 +133,7 @@ export function parseBiome(id: string, json: BiomeJson): BiomeDef {
     tree_woods?: TreeWoodJson[];
     extra_veins?: string[];
   };
+  const id = v.id;
   const floor = blockByName(v.floor);
   if (floor === undefined) throw new Error(`biome "${id}": unknown floor block "${v.floor}"`);
   let beachFloor: BlockId | undefined;
@@ -142,7 +141,7 @@ export function parseBiome(id: string, json: BiomeJson): BiomeDef {
     beachFloor = v.beach_floor ? blockByName(v.beach_floor) : BlockId.Stone;
     if (beachFloor === undefined) throw new Error(`biome "${id}": unknown beach_floor block "${v.beach_floor}"`);
   }
-  return {
+  const def: BiomeDef = {
     id,
     noiseMax: v.noise_max,
     layers: v.layers.map((l) => parseLayer(`biome "${id}"`, l)),
@@ -163,15 +162,11 @@ export function parseBiome(id: string, json: BiomeJson): BiomeDef {
     treeWoods: v.tree_woods ?? [],
     extraVeins: v.extra_veins ?? [],
   };
-}
-
-const DEFS = new Map<string, BiomeDef>();
-
-export function registerBiome(def: BiomeDef): void {
   if (DEFS.has(def.id)) {
     throw new Error(`biome "${def.id}" is already registered`);
   }
   DEFS.set(def.id, def);
+  return def;
 }
 
 export function biomeDef(id: string): BiomeDef | undefined {

@@ -8,6 +8,7 @@ import { startDedicatedServer } from "./server.js";
  *   PORT              listen port                  (default 8080)
  *   DATA_DIR          world + accounts directory   (default ./data)
  *   CLIENT_DIR        built client to serve        (default: sibling packages/client/dist)
+ *   CONTENT_DIR       content/ directory (flatcraft + installed mods)  (default: repo-root content/)
  *   SEED              world seed for new worlds    (default 1337)
  *   SERVER_NAME       name shown to clients        (default FlatCraft)
  *   OIDC_ISSUER       anfall-auth issuer URL, e.g. https://auth.anfall.net
@@ -49,6 +50,7 @@ const server = await startDedicatedServer({
   port: Number(process.env["PORT"] ?? 8080),
   dataDir: process.env["DATA_DIR"] ?? "./data",
   clientDir,
+  contentDir: process.env["CONTENT_DIR"],
   seed: process.env["SEED"] !== undefined ? Number(process.env["SEED"]) : undefined,
   serverName: process.env["SERVER_NAME"],
   resetWorld: process.env["RESET_WORLD"] === "true",

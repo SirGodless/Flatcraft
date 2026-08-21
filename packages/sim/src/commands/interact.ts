@@ -1,5 +1,4 @@
 import { CHUNK_HEIGHT, CHUNK_WIDTH } from "../constants.js";
-import { TRADES } from "../data/trades/index.js";
 import { ATTACK_REACH } from "../entities.js";
 import { ENCHANT_LAPIS_COST, ENCHANT_MAX_LEVEL, enchantFor } from "../effects.js";
 import { createFurnace, furnaceKey } from "../furnace.js";
@@ -7,6 +6,7 @@ import { PLAYER_MAX_HUNGER } from "../hunger.js";
 import { addToInventory, cloneInventory, removeFromInventory } from "../inventory.js";
 import { itemDef } from "../items.js";
 import { mobDef } from "../mobs.js";
+import { allTrades } from "../trading.js";
 import { blockDef, stationBlock } from "../world/block.js";
 import { registerCommandHandler } from "./registry.js";
 
@@ -26,7 +26,7 @@ registerCommandHandler("trade", {
       reject("out of reach");
       return;
     }
-    const trade = TRADES[command.trade];
+    const trade = allTrades()[command.trade];
     if (!trade) {
       reject("unknown trade");
       return;

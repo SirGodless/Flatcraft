@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@flatcraft/content": "*",
     "vitest": "^2.1.0"
   }
 }

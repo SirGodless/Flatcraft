@@ -3,7 +3,7 @@ import { itemDef } from "./items.js";
 import { registerContentType, validateContentInstance } from "./registry/generic.js";
 
 /**
- * Villager trades, defined in JSON (src/data/trades/villager.json):
+ * Villager trades, defined in JSON (content/flatcraft/trades/villager.json):
  * a flat list of { cost, result } item stacks. Emeralds are the
  * currency by convention, but any item works.
  */
@@ -52,12 +52,25 @@ function toItemStack(raw: { item: string; count: number }, index: number, field:
   return { item: raw.item, count: raw.count };
 }
 
-export function parseTrades(json: TradeJson): Trade[] {
-  const validated = validateContentInstance("trade_list", json, "trades") as {
+/** Trades collected from every registered trade_list, in registration
+ * order (a trade's index into this array is a stable id - see
+ * commands/interact.ts's SlotRef-style `trade` index). */
+const TRADES: Trade[] = [];
+
+/** Register a trade_list from datapack JSON (content package files or
+ * server mods) - appends its trades to the flat TRADES list. */
+export function registerTradesJson(raw: unknown, source = "content"): Trade[] {
+  const validated = validateContentInstance("trade_list", raw, source) as {
     trades: Array<{ cost: { item: string; count: number }; result: { item: string; count: number } }>;
   };
-  return validated.trades.map((t, i) => ({
+  const added = validated.trades.map((t, i) => ({
     cost: toItemStack(t.cost, i, "cost"),
     result: toItemStack(t.result, i, "result"),
   }));
+  TRADES.push(...added);
+  return added;
+}
+
+export function allTrades(): readonly Trade[] {
+  return TRADES;
 }

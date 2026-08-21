@@ -1,4 +1,5 @@
 import { registerContentType, validateContentInstance } from "../registry/generic.js";
+import { getHandler, hasHandler, registerHandler } from "../registry/handlers.js";
 import type { World } from "./world.js";
 import type { Chunk } from "./chunk.js";
 
@@ -137,8 +138,11 @@ registerContentType(
   "engine/types/dimension",
 );
 
-export function parseDimension(id: string, json: DimensionJson): DimensionDef {
-  const v = validateContentInstance("dimension", json, `dimension "${id}"`) as {
+/** Register a dimension from datapack JSON (content package files or
+ * server mods). */
+export function registerDimensionJson(raw: unknown, source = "content"): DimensionDef {
+  const v = validateContentInstance("dimension", raw, source) as {
+    id: string;
     generator: string;
     spawns: string;
     arrival: string;
@@ -148,12 +152,13 @@ export function parseDimension(id: string, json: DimensionJson): DimensionDef {
     portal?: { to: string; scale: number };
     sky?: { type: "cycle" | "fixed"; background?: string; veil_color?: string; veil_alpha?: number };
   };
+  const id = v.id;
   // Cross-field rule the DSL doesn't express yet (see nether_layer's
   // fbm2 check for the same pattern) - kept as a small residual check.
   if (v.sky?.type === "fixed" && v.sky.background === undefined) {
     throw new Error(`dimension "${id}": sky type "fixed" requires "background"`);
   }
-  return {
+  const def: DimensionDef = {
     id,
     generator: v.generator,
     spawns: v.spawns,
@@ -173,39 +178,25 @@ export function parseDimension(id: string, json: DimensionJson): DimensionDef {
         }
       : {}),
   };
-}
-
-const DEFS = new Map<string, DimensionDef>();
-const GENERATORS = new Map<string, DimensionGenerator>();
-const ARRIVAL_GENERATORS = new Map<string, ArrivalGenerator>();
-const SPAWN_POINT_GENERATORS = new Map<string, SpawnPointGenerator>();
-
-export function registerDimension(def: DimensionDef): void {
   if (DEFS.has(def.id)) {
     throw new Error(`dimension "${def.id}" is already registered`);
   }
   DEFS.set(def.id, def);
+  return def;
 }
 
+const DEFS = new Map<string, DimensionDef>();
+
 export function registerDimensionGenerator(id: string, generator: DimensionGenerator): void {
-  if (GENERATORS.has(id)) {
-    throw new Error(`dimension generator "${id}" is already registered`);
-  }
-  GENERATORS.set(id, generator);
+  registerHandler("dimension_generator", id, generator);
 }
 
 export function registerArrivalGenerator(id: string, generator: ArrivalGenerator): void {
-  if (ARRIVAL_GENERATORS.has(id)) {
-    throw new Error(`arrival generator "${id}" is already registered`);
-  }
-  ARRIVAL_GENERATORS.set(id, generator);
+  registerHandler("arrival_generator", id, generator);
 }
 
 export function registerSpawnPointGenerator(id: string, generator: SpawnPointGenerator): void {
-  if (SPAWN_POINT_GENERATORS.has(id)) {
-    throw new Error(`spawn point generator "${id}" is already registered`);
-  }
-  SPAWN_POINT_GENERATORS.set(id, generator);
+  registerHandler("spawn_point_generator", id, generator);
 }
 
 export function dimensionDef(id: string): DimensionDef | undefined {
@@ -232,7 +223,7 @@ export function allDimensionIds(): readonly string[] {
 export function generateDimensionChunk(dim: string, seed: number, cx: number, cy: number): Chunk {
   const def = dimensionDef(dim);
   if (!def) throw new Error(`unknown dimension "${dim}"`);
-  const generator = GENERATORS.get(def.generator);
+  const generator = getHandler<DimensionGenerator>("dimension_generator", def.generator);
   if (!generator) throw new Error(`dimension "${dim}" references unknown generator "${def.generator}"`);
   return generator(seed, cx, cy);
 }
@@ -243,7 +234,7 @@ export function generateDimensionChunk(dim: string, seed: number, cx: number, cy
 export function generateArrival(dim: string, world: World, xt: number): number {
   const def = dimensionDef(dim);
   if (!def) throw new Error(`unknown dimension "${dim}"`);
-  const generator = ARRIVAL_GENERATORS.get(def.arrival);
+  const generator = getHandler<ArrivalGenerator>("arrival_generator", def.arrival);
   if (!generator) throw new Error(`dimension "${dim}" references unknown arrival generator "${def.arrival}"`);
   return generator(world, xt);
 }
@@ -263,7 +254,7 @@ export function generateDefaultSpawnPoint(seed: number): { x: number; y: number 
   const id = defaultDimensionId();
   const def = dimensionDef(id)!;
   const generatorId = def.spawnPoint;
-  const generator = generatorId ? SPAWN_POINT_GENERATORS.get(generatorId) : undefined;
+  const generator = generatorId ? getHandler<SpawnPointGenerator>("spawn_point_generator", generatorId) : undefined;
   if (!generator) {
     throw new Error(`dimension "${id}" is the default respawn dimension but has no working "spawn_point"`);
   }
@@ -276,13 +267,13 @@ export function generateDefaultSpawnPoint(seed: number): { x: number; y: number 
 export function validateDimensionGenerators(): string[] {
   const problems: string[] = [];
   for (const def of DEFS.values()) {
-    if (!GENERATORS.has(def.generator)) {
+    if (!hasHandler("dimension_generator", def.generator)) {
       problems.push(`dimension "${def.id}" references unknown generator "${def.generator}"`);
     }
-    if (!ARRIVAL_GENERATORS.has(def.arrival)) {
+    if (!hasHandler("arrival_generator", def.arrival)) {
       problems.push(`dimension "${def.id}" references unknown arrival generator "${def.arrival}"`);
     }
-    if (def.spawnPoint !== undefined && !SPAWN_POINT_GENERATORS.has(def.spawnPoint)) {
+    if (def.spawnPoint !== undefined && !hasHandler("spawn_point_generator", def.spawnPoint)) {
       problems.push(`dimension "${def.id}" references unknown spawn point generator "${def.spawnPoint}"`);
     }
   }

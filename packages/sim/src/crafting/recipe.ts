@@ -1,4 +1,4 @@
-import { TAGS } from "../data/tags.js";
+import { TAGS } from "./tags.js";
 import { fuelTicksOf, itemDef } from "../items.js";
 import type { ItemStack } from "../inventory.js";
 import type { RecipeJson } from "../registry/schema.js";

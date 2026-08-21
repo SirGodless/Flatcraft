@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "esbuild": "^0.24.0",
     "fflate": "^0.8.2"
   },
   "devDependencies": {

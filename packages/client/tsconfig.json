@@ -4,5 +4,10 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  // src/sandbox/worker.ts runs in a Worker realm, not a Window - it needs
+  // the WebWorker lib instead of DOM (the two aren't mixable in one
+  // program: both declare a conflicting global `self`/postMessage/etc.),
+  // so it's typechecked separately via tsconfig.worker.json instead.
+  "exclude": ["src/sandbox/worker.ts"]
 }

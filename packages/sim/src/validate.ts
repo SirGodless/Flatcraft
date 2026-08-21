@@ -1,9 +1,9 @@
 import { validateCommandHandlers } from "./commands/registry.js";
-import { validateStructureDimensions } from "./data/structures/index.js";
 import { validateItemEnchants } from "./enchants.js";
 import { allItems } from "./items.js";
 import { validateMultiblockHandlers } from "./multiblock.js";
 import { validateSpawnGenerators } from "./spawning.js";
+import { validateStructureDimensions } from "./structures/structure.js";
 import { validateBiomeReferences } from "./world/biome.js";
 import {
   allDimensions,

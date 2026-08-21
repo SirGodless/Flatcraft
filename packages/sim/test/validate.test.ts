@@ -4,13 +4,10 @@ import {
   allDimensionIds,
   allItems,
   defaultDimensionId,
-  parseBiome,
-  parseDimension,
-  parseMultiblock,
-  registerBiome,
+  registerBiomeJson,
   registerCommandHandler,
-  registerDimension,
-  registerMultiblock,
+  registerDimensionJson,
+  registerMultiblockJson,
   validateAllContent,
   validateBiomeReferences,
   validateCommandHandlers,
@@ -43,20 +40,16 @@ describe("content dependency validation", () => {
   });
 
   it("reports every multiblock with a missing handler, not just the first", () => {
-    registerMultiblock(
-      parseMultiblock("flatcraft:multiblock:test_validate_missing_1", {
-        id: "flatcraft:multiblock:test_validate_missing_1",
-        handler: "flatcraft:multiblock_handler:nobody_registered_this_1",
-        trigger_on: { type: "place_block", item: "flatcraft:item:coal" },
-      }),
-    );
-    registerMultiblock(
-      parseMultiblock("flatcraft:multiblock:test_validate_missing_2", {
-        id: "flatcraft:multiblock:test_validate_missing_2",
-        handler: "flatcraft:multiblock_handler:nobody_registered_this_2",
-        trigger_on: { type: "place_block", item: "flatcraft:item:bone" },
-      }),
-    );
+    registerMultiblockJson({
+      id: "flatcraft:multiblock:test_validate_missing_1",
+      handler: "flatcraft:multiblock_handler:nobody_registered_this_1",
+      trigger_on: { type: "place_block", item: "flatcraft:item:coal" },
+    });
+    registerMultiblockJson({
+      id: "flatcraft:multiblock:test_validate_missing_2",
+      handler: "flatcraft:multiblock_handler:nobody_registered_this_2",
+      trigger_on: { type: "place_block", item: "flatcraft:item:bone" },
+    });
 
     const problems = validateMultiblockHandlers();
     expect(problems).toContain(
@@ -87,15 +80,13 @@ describe("dimension registry", () => {
   });
 
   it("reports a dimension referencing an unregistered generator", () => {
-    registerDimension(
-      parseDimension("flatcraft:dimension:test_validate_dim_missing", {
-        id: "flatcraft:dimension:test_validate_dim_missing",
-        generator: "flatcraft:dimension_generator:nobody_registered_this_generator",
-        spawns: "flatcraft:spawn_generator:overworld_spawns",
-        arrival: "flatcraft:arrival_generator:overworld_arrival",
-        has_sky: true,
-      }),
-    );
+    registerDimensionJson({
+      id: "flatcraft:dimension:test_validate_dim_missing",
+      generator: "flatcraft:dimension_generator:nobody_registered_this_generator",
+      spawns: "flatcraft:spawn_generator:overworld_spawns",
+      arrival: "flatcraft:arrival_generator:overworld_arrival",
+      has_sky: true,
+    });
     expect(validateDimensionGenerators()).toContain(
       'dimension "flatcraft:dimension:test_validate_dim_missing" references unknown generator "flatcraft:dimension_generator:nobody_registered_this_generator"',
     );
@@ -103,15 +94,13 @@ describe("dimension registry", () => {
 
   it("rejects registering a dimension id that's already taken", () => {
     expect(() =>
-      registerDimension(
-        parseDimension("flatcraft:dimension:overworld", {
-          id: "flatcraft:dimension:overworld",
-          generator: "flatcraft:dimension_generator:overworld",
-          spawns: "flatcraft:spawn_generator:overworld_spawns",
-          arrival: "flatcraft:arrival_generator:overworld_arrival",
-          has_sky: true,
-        }),
-      ),
+      registerDimensionJson({
+        id: "flatcraft:dimension:overworld",
+        generator: "flatcraft:dimension_generator:overworld",
+        spawns: "flatcraft:spawn_generator:overworld_spawns",
+        arrival: "flatcraft:arrival_generator:overworld_arrival",
+        has_sky: true,
+      }),
     ).toThrow(/already registered/);
   });
 
@@ -143,17 +132,15 @@ describe("biome registry", () => {
   });
 
   it("reports a biome referencing an unregistered wood or vein", () => {
-    registerBiome(
-      parseBiome("flatcraft:biome:test_validate_biome_missing", {
-        id: "flatcraft:biome:test_validate_biome_missing",
-        noise_max: 0.01,
-        layers: [],
-        floor: "flatcraft:block:stone",
-        tree_chance: 0.1,
-        tree_woods: [{ wood: "flatcraft:wood:nobody_registered_this_wood", weight: 1 }],
-        extra_veins: ["flatcraft:vein:nobody_registered_this_vein"],
-      }),
-    );
+    registerBiomeJson({
+      id: "flatcraft:biome:test_validate_biome_missing",
+      noise_max: 0.01,
+      layers: [],
+      floor: "flatcraft:block:stone",
+      tree_chance: 0.1,
+      tree_woods: [{ wood: "flatcraft:wood:nobody_registered_this_wood", weight: 1 }],
+      extra_veins: ["flatcraft:vein:nobody_registered_this_vein"],
+    });
     const problems = validateBiomeReferences();
     expect(problems).toContain(
       'biome "flatcraft:biome:test_validate_biome_missing" references unknown wood "flatcraft:wood:nobody_registered_this_wood"',
@@ -166,21 +153,19 @@ describe("biome registry", () => {
 
   it("rejects registering a biome id that's already taken", () => {
     expect(() =>
-      registerBiome(
-        parseBiome("flatcraft:biome:plains", {
-          id: "flatcraft:biome:plains",
-          noise_max: 0.55,
-          layers: [],
-          floor: "flatcraft:block:stone",
-          tree_chance: 0,
-        }),
-      ),
+      registerBiomeJson({
+        id: "flatcraft:biome:plains",
+        noise_max: 0.55,
+        layers: [],
+        floor: "flatcraft:block:stone",
+        tree_chance: 0,
+      }),
     ).toThrow(/already registered/);
   });
 
   it("rejects a biome layer/floor/wall/snow block name that doesn't exist", () => {
     expect(() =>
-      parseBiome("flatcraft:biome:test_validate_biome_badblock", {
+      registerBiomeJson({
         id: "flatcraft:biome:test_validate_biome_badblock",
         noise_max: 0.01,
         layers: [],

@@ -11,6 +11,7 @@ import {
   mobDef,
   PLAYER_HEIGHT,
   registerBlockJson,
+  registerContentInstanceByType,
   registerItemJson,
   registerMobJson,
   resolveBlockLinks,
@@ -20,10 +21,12 @@ import {
   type OutboundEvent,
   type PlayerId,
 } from "@flatcraft/sim";
+import { loadBundledFlatcraftContent } from "./content.js";
 import { attachInput } from "./input/input.js";
 import { connectWebSocket, type OnlineSession } from "./net/wsConnection.js";
 import { Renderer } from "./render/renderer.js";
 import { loadSpriteOverrides } from "./render/sprites.js";
+import { createScriptSandbox } from "./sandbox/index.js";
 import { deleteWorld, loadExplored, loadWorld, saveExplored, saveWorld } from "./save.js";
 import {
   disconnectOverlay,
@@ -47,6 +50,7 @@ const CHUNK_REQUESTS_PER_FRAME = 12;
  * point of the transport abstraction.
  */
 async function start(): Promise<void> {
+  await loadBundledFlatcraftContent();
   const info = await detectServer();
   if (info) {
     await startOnline(info);
@@ -253,9 +257,51 @@ async function applyServerDatapack(): Promise<void> {
   }
 }
 
+/** How often the sandbox's registered cosmetic tick hooks fire - a
+ * client-only cadence with no relation to the authoritative simulation's
+ * own tick rate (see @flatcraft/sim's TICK_MS), since nothing running in
+ * the sandbox can observe or affect that simulation anyway (see
+ * sandbox/worker.ts's own doc comment on why). */
+const SANDBOX_TICK_MS = 200;
+
+/** A content package's scripts (already compiled server-side - see
+ * @flatcraft/dedicated's /api/scripts, and @flatcraft/content's
+ * transpileScript for why the client never does this itself) run inside
+ * the Stage 9 Worker+iframe sandbox (see ./sandbox/index.ts), never on
+ * this page directly - connecting to any server, trusted or not, must
+ * not be able to run arbitrary code with access to this page's DOM,
+ * cookies, or storage. A script that fails to load or a hook that throws
+ * is logged and otherwise ignored, not fatal to the client - the server
+ * already refused to boot at all over the exact same failures (see
+ * runContentScripts's own doc comment), so a client-side failure here is
+ * necessarily a *different* problem (a browser-only API gap, say), not
+ * evidence of genuinely broken content. */
+async function loadServerScripts(): Promise<void> {
+  try {
+    const response = await fetch("/api/scripts", { headers: { accept: "application/json" } });
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!response.ok || !contentType.includes("application/json")) return;
+    const bundles = (await response.json()) as Record<string, string[]>;
+    if (Object.keys(bundles).length === 0) return;
+    const sandbox = await createScriptSandbox({
+      onRegister: (typeId, instance) => registerContentInstanceByType(typeId, instance, "server script"),
+      onLoadError: (packageId, message) => console.warn(`content package "${packageId}": script failed to load in sandbox: ${message}`),
+      onHookError: (hookId, message) => console.warn(`sandbox tick hook "${hookId}" failed: ${message}`),
+    });
+    for (const [packageId, scripts] of Object.entries(bundles)) {
+      sandbox.loadPackage(packageId, scripts);
+    }
+    console.info(`sandbox: loaded scripts from ${Object.keys(bundles).length} content package(s)`);
+    setInterval(() => sandbox.tick(), SANDBOX_TICK_MS);
+  } catch (error) {
+    console.warn("server scripts failed to load:", error);
+  }
+}
+
 /** Online mode: login screen, then WebSocket to the serving host. */
 async function startOnline(info: ServerInfo): Promise<void> {
   await applyServerDatapack();
+  await loadServerScripts();
   const session = await login(info);
   const renderer = await runGame({
     connection: session.connection,
