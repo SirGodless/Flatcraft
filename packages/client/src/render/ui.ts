@@ -8,6 +8,7 @@ import {
   ingredientOptions,
   itemDef,
   liquidDef,
+  localName,
   matchGrid,
   RECIPES,
   SMALL_GRID_INDICES,
@@ -36,17 +37,28 @@ export function currentTooltip(): string | null {
   return tooltipText;
 }
 
-/** "cooked_beef" -> "Cooked Beef" */
+/** "flatcraft:item:cooked_beef" -> "Cooked Beef" - a last-resort fallback
+ * for when itemDef(id)?.name is somehow missing (every registered item
+ * has one; this only guards against that never actually being empty),
+ * and for ids with no display-name field at all (enchants - see
+ * itemName's own doc comment). */
 function prettyName(id: string): string {
-  return id
+  return localName(id)
     .split("_")
     .map((word) => (word[0] ?? "").toUpperCase() + word.slice(1))
     .join(" ");
 }
 
+/** An item's display name (itemDef's own "Golden Shovel", not the raw
+ * qualified id "flatcraft:item:golden_shovel") - every UI label showing
+ * an item id should go through this rather than interpolating the id
+ * directly. */
+function itemName(id: string): string {
+  return itemDef(id)?.name ?? prettyName(id);
+}
+
 function tooltipFor(stack: ItemStack): string {
-  // The datapack display name, falling back to the prettified id.
-  const lines = [itemDef(stack.item)?.name ?? prettyName(stack.item)];
+  const lines = [itemName(stack.item)];
   if (stack.data?.liquid !== undefined) {
     const capacity = itemDef(stack.item)?.bucket ?? stack.data.amount ?? 0;
     lines.push(`${prettyName(stack.data.liquid)} ${stack.data.amount ?? 0}/${capacity}`);
@@ -606,7 +618,7 @@ export class CraftingPanelUI {
       .join(", ");
     const suffix = smelting ? " [furnace]" : recipe.gridSize === 3 ? " [table]" : "";
     const label = new Text({
-      text: `${recipe.result.count}x ${recipe.result.item}  <-  ${needs}${suffix}`,
+      text: `${recipe.result.count}x ${itemName(recipe.result.item)}  <-  ${needs}${suffix}`,
       style: {
         fill: craftable ? "#ffffff" : "#8a8a8a",
         fontSize: 12,
@@ -797,7 +809,7 @@ export class TradePanelUI {
         }
       }
       const label = new Text({
-        text: `${trade.cost.count}x ${trade.cost.item}  ->  ${trade.result.count}x ${trade.result.item}`,
+        text: `${trade.cost.count}x ${itemName(trade.cost.item)}  ->  ${trade.result.count}x ${itemName(trade.result.item)}`,
         style: { fill: affordable ? "#ffffff" : "#8a8a8a", fontSize: 12, fontFamily: "monospace" },
       });
       label.position.set(28, 6);
@@ -858,9 +870,12 @@ export class EnchantPanelUI {
     this.container.addChild(background);
 
     const held = this.slots[this.selected];
-    const enchText = held?.ench?.map((e) => `${e.id} ${e.level}`).join(", ") ?? "none";
+    // Enchants have no display-name field of their own (just an id/effect/
+    // level - see enchants.ts's EnchantDef), so this falls all the way to
+    // prettyName rather than itemName's itemDef lookup.
+    const enchText = held?.ench?.map((e) => `${prettyName(e.id)} ${e.level}`).join(", ") ?? "none";
     const title = new Text({
-      text: `Enchanting\nHeld: ${held?.item ?? "nothing"}\nEnchants: ${enchText}`,
+      text: `Enchanting\nHeld: ${held ? itemName(held.item) : "nothing"}\nEnchants: ${enchText}`,
       style: { fill: "#cccccc", fontSize: 12, fontFamily: "monospace" },
     });
     title.position.set(10, 8);
@@ -876,7 +891,7 @@ export class EnchantPanelUI {
     });
     row.addChild(bg);
     const label = new Text({
-      text: `Enchant held tool (8x lapis_lazuli, have ${lapis})`,
+      text: `Enchant held tool (8x ${itemName("flatcraft:item:lapis_lazuli")}, have ${lapis})`,
       style: { fill: affordable ? "#ffffff" : "#8a8a8a", fontSize: 12, fontFamily: "monospace" },
     });
     label.position.set(6, 5);

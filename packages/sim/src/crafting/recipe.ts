@@ -82,9 +82,11 @@ export function ingredientMatches(key: string, item: string): boolean {
   return key.startsWith("#") ? (TAGS[key.slice(1)] ?? []).includes(item) : key === item;
 }
 
-/** Display name for an ingredient key ("#planks" -> "any planks"). */
+/** Display name for an ingredient key ("#planks" -> "any planks", a
+ * plain item key -> its own display name, e.g. "Gold Ingot" rather than
+ * the raw qualified id "flatcraft:item:gold_ingot"). */
 export function ingredientLabel(key: string): string {
-  return key.startsWith("#") ? `any ${key.slice(1)}` : key;
+  return key.startsWith("#") ? `any ${key.slice(1)}` : (itemDef(key)?.name ?? key);
 }
 
 /** Parse a (schema-validated) station recipe into the runtime Recipe. */
