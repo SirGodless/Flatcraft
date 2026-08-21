@@ -13,10 +13,11 @@ import {
 
 /**
  * Chest and furnace behavior is driven by block components ("container",
- * "furnace"), not by BlockId identity - a datapack block should get the
+ * "furnace"), not by BlockId identity - a modded block should get the
  * exact same screens/mechanics the built-in Chest and Furnace get. Block
  * registration is a process-global singleton, so this lives in its own
- * test file (matches the dedicated package's datapack.test.ts convention).
+ * test file (matches the dedicated package's own-file-per-registering-
+ * test convention, e.g. contentPackageModding.test.ts).
  */
 
 registerBlockJson({

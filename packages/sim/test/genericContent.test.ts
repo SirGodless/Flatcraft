@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { enchantDef } from "../src/enchants.js";
-import { allContentTypeIds, contentTypeDecl, registerContentType, validateContentInstance } from "../src/registry/generic.js";
+import { allContentTypeIds, contentTypeDecl, registerContentType, validateAllRefs, validateContentInstance } from "../src/registry/generic.js";
 import sharpnessJson from "../../../content/flatcraft/enchants/sharpness.json";
 import efficiencyJson from "../../../content/flatcraft/enchants/efficiency.json";
 
@@ -97,6 +97,65 @@ describe("generic content-type engine", () => {
 
   it("rejects an unregistered type id", () => {
     expect(() => validateContentInstance("nonexistent:type", { id: "x" }, "test")).toThrow(/is not registered/);
+  });
+});
+
+/**
+ * validate.ts's validateAllContent() used to fold in a hand-written
+ * validateXReferences() per relationship (multiblock handlers, dimension
+ * generators, biome wood/vein refs, item enchants, ...) - one generic
+ * validateAllRefs() pass replaces all of them now (see that function's
+ * own doc comment for the full history: a full-codebase audit found the
+ * "ref" field kind had shipped as a syntax-only check with existence-
+ * checking left explicitly deferred, and the deferred half never
+ * actually got wired up as more types migrated onto this engine). These
+ * tests exercise validateAllRefs directly against synthetic types, so
+ * they can't collide with anything real flatcraft content declares.
+ */
+describe("validateAllRefs", () => {
+  it("reports an instance-kind ref that doesn't resolve", () => {
+    registerContentType(
+      { id: "test_ref_missing_instance", fields: { thing: { kind: "ref", ref_type: "item", required: true } } },
+      "test",
+    );
+    validateContentInstance(
+      "test_ref_missing_instance",
+      { thing: "flatcraft:item:nobody_registered_this_item_xyz" },
+      "test:source:a",
+    );
+    expect(validateAllRefs().some((p) => p.includes("flatcraft:item:nobody_registered_this_item_xyz"))).toBe(true);
+  });
+
+  it("reports a handler-kind ref that doesn't resolve", () => {
+    registerContentType(
+      {
+        id: "test_ref_missing_handler",
+        fields: { thing: { kind: "ref", ref_type: "test_unregistered_handler_kind", ref_kind: "handler", required: true } },
+      },
+      "test",
+    );
+    validateContentInstance(
+      "test_ref_missing_handler",
+      { thing: "flatcraft:test_unregistered_handler_kind:nobody" },
+      "test:source:b",
+    );
+    expect(validateAllRefs().some((p) => p.includes("flatcraft:test_unregistered_handler_kind:nobody"))).toBe(true);
+  });
+
+  it("reports a ref_type with no registered resolver as its own problem, not a silent pass", () => {
+    registerContentType(
+      { id: "test_ref_no_resolver", fields: { thing: { kind: "ref", ref_type: "test_totally_unknown_ref_type_xyz", required: true } } },
+      "test",
+    );
+    validateContentInstance(
+      "test_ref_no_resolver",
+      { thing: "flatcraft:test_totally_unknown_ref_type_xyz:whatever" },
+      "test:source:c",
+    );
+    const problems = validateAllRefs();
+    expect(
+      problems.some((p) => p.includes('"test_totally_unknown_ref_type_xyz"') && p.includes("no registered existence check")),
+    ).toBe(true);
   });
 });
 

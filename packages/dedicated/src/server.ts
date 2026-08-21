@@ -11,12 +11,7 @@ import {
   CHUNK_WIDTH,
   furnaceKey,
   loadContentPackage,
-  registerBlockJson,
-  registerItemJson,
-  registerMobJson,
-  resolveBlockLinks,
   Simulation,
-  syncItemRecipes,
   TICK_MS,
   validateAllContent,
   type Command,
@@ -165,45 +160,11 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   const serverName = options.serverName ?? "FlatCraft";
   const clientDir = options.clientDir ? resolve(options.clientDir) : null;
 
-  // --- Server datapack (mods): DATA_DIR/datapack/{blocks,items,mobs,sprites} ---
-  // Loaded before the world, so modded blocks resolve in the save palette;
-  // the raw JSONs are re-served to clients via /api/datapack.
-  const datapackDir = join(dataDir, "datapack");
-  const packBlocks: unknown[] = [];
-  const packItems: unknown[] = [];
-  const packMobs: unknown[] = [];
-  const spritesDir = join(datapackDir, "sprites");
-  const readPackDir = (sub: string, into: unknown[]): void => {
-    const dir = join(datapackDir, sub);
-    if (!existsSync(dir)) return;
-    for (const file of readdirSync(dir).sort()) {
-      if (!file.endsWith(".json")) continue;
-      into.push(JSON.parse(readFileSync(join(dir, file), "utf8")));
-    }
-  };
-  readPackDir("blocks", packBlocks);
-  readPackDir("items", packItems);
-  readPackDir("mobs", packMobs);
-  for (const raw of packBlocks) {
-    registerBlockJson(raw, "datapack/blocks");
-  }
-  resolveBlockLinks();
-  for (const raw of packItems) {
-    registerItemJson(raw, "datapack/items");
-  }
-  syncItemRecipes();
-  for (const raw of packMobs) {
-    registerMobJson(raw, "datapack/mobs");
-  }
-  if (packBlocks.length > 0 || packItems.length > 0 || packMobs.length > 0) {
-    log(`datapack loaded: ${packBlocks.length} blocks, ${packItems.length} items, ${packMobs.length} mobs`);
-  }
-
   // Content-package scripts (content/<pkg>/scripts/*.ts) compile once
   // here - the resulting JS is reused both to run them server-side
   // (isolated-vm, below) and to serve them to connecting clients'
   // Worker+iframe sandbox via /api/scripts (Stage 9 - the client never
-  // transpiles TS itself, same asymmetry as /api/datapack already
+  // transpiles TS itself, same asymmetry as /api/content already
   // serving pre-parsed JSON rather than making the client parse
   // anything mod-shaped on its own). Compiling before validateAllContent
   // runs so a multiblock/dimension JSON referencing a script-registered
@@ -228,20 +189,34 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
   }
 
   // Sprites come from two places: the repo (shipped inside the client
-  // build, dist/sprites) and the server datapack; the datapack wins on
-  // conflicts. The manifest is the union of both.
+  // build, dist/sprites) and any discovered content package's own
+  // sprites/ directory (already sitting in memory as part of pkg.files -
+  // discoverContentDir walks every file under a package, not just its
+  // JSON) - a content package overrides the repo default on conflict,
+  // later-loaded packages override earlier ones. The manifest is the
+  // union of both; a content-package sprite is served straight from
+  // memory (no disk read), the repo-shipped fallback still reads from
+  // clientDir/sprites since that side of the client build isn't loaded
+  // into memory here.
   const clientSpritesDir = clientDir ? join(clientDir, "sprites") : null;
-  const spriteSet = new Set<string>();
-  const collectSprites = (base: string, dir = base): void => {
+  const contentSprites = new Map<string, Uint8Array>();
+  for (const pkg of contentPackages) {
+    for (const [path, bytes] of pkg.files) {
+      if (path.startsWith("sprites/") && path.endsWith(".png")) {
+        contentSprites.set(path.slice("sprites/".length), bytes);
+      }
+    }
+  }
+  const spriteSet = new Set<string>(contentSprites.keys());
+  const collectClientSprites = (base: string, dir = base): void => {
     if (!existsSync(dir)) return;
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const full = join(dir, entry.name);
-      if (entry.isDirectory()) collectSprites(base, full);
+      if (entry.isDirectory()) collectClientSprites(base, full);
       else if (entry.name.endsWith(".png")) spriteSet.add(relative(base, full).replaceAll("\\", "/"));
     }
   };
-  if (clientSpritesDir) collectSprites(clientSpritesDir);
-  collectSprites(spritesDir);
+  if (clientSpritesDir) collectClientSprites(clientSpritesDir);
   const spriteEntries = [...spriteSet];
 
   // --- World: load from disk or start fresh ---
@@ -414,9 +389,30 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
       response.end(JSON.stringify(info));
       return;
     }
-    if (urlPath === "/api/datapack") {
+    if (urlPath === "/api/content") {
+      // { [packageId]: { [path]: json } } - every discovered content
+      // package except "flatcraft" (the client already has that one
+      // bundled at build time - see client/src/content.ts's
+      // loadBundledFlatcraftContent) and every JSON file under it
+      // (content.json's own manifest and anything non-JSON, e.g.
+      // sprites/, excluded - only what loadContentPackage wants). The
+      // client re-encodes each value back to bytes and hands the whole
+      // thing to the exact same loadContentPackage() this server
+      // itself calls at boot - no separate client-side content format,
+      // no privileged shortcut for whichever host does the I/O.
+      const packages: Record<string, Record<string, unknown>> = {};
+      const jsonDecoder = new TextDecoder();
+      for (const pkg of contentPackages) {
+        if (pkg.id === "flatcraft") continue;
+        const files: Record<string, unknown> = {};
+        for (const [path, bytes] of pkg.files) {
+          if (path === "content.json" || !path.endsWith(".json")) continue;
+          files[path] = JSON.parse(jsonDecoder.decode(bytes));
+        }
+        packages[pkg.id] = files;
+      }
       response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-      response.end(JSON.stringify({ blocks: packBlocks, items: packItems, mobs: packMobs, sprites: spriteEntries }));
+      response.end(JSON.stringify(packages));
       return;
     }
     if (urlPath === "/api/scripts") {
@@ -440,9 +436,10 @@ export async function startDedicatedServer(options: DedicatedOptions): Promise<D
     }
     if (urlPath.startsWith("/sprites/")) {
       const spritePath = urlPath.slice("/sprites/".length);
-      // Datapack sprites override the repo-shipped ones.
-      if (existsSync(join(spritesDir, spritePath))) {
-        serveFile(spritesDir, spritePath, response);
+      // A content package's own sprite overrides the repo-shipped one.
+      const contentBytes = contentSprites.get(spritePath);
+      if (contentBytes) {
+        serveBytes(spritePath, contentBytes, response);
       } else if (clientSpritesDir) {
         serveFile(clientSpritesDir, spritePath, response);
       } else {
@@ -618,6 +615,19 @@ function serveFile(baseDir: string, relativePath: string, response: ServerRespon
     response.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
     response.end("read error");
   }
+}
+
+/** Serve one file's bytes already held in memory (a content package's
+ * own sprites/ file - see discoverContentDir/pkg.files) - same headers
+ * as serveFile, just no disk read since there's nothing to read from. */
+function serveBytes(path: string, bytes: Uint8Array, response: ServerResponse): void {
+  response.writeHead(200, {
+    "content-type": MIME_TYPES[extname(path)] ?? "application/octet-stream",
+    "cache-control": "no-cache",
+    // Same opaque-origin/CORS reasoning as serveFile above.
+    "access-control-allow-origin": "*",
+  });
+  response.end(Buffer.from(bytes));
 }
 
 function serveStatic(

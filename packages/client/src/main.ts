@@ -10,18 +10,13 @@ import {
   itemDef,
   mobDef,
   PLAYER_HEIGHT,
-  registerBlockJson,
   registerContentInstanceByType,
-  registerItemJson,
-  registerMobJson,
-  resolveBlockLinks,
   Simulation,
   surfaceHeight,
-  syncItemRecipes,
   type OutboundEvent,
   type PlayerId,
 } from "@flatcraft/sim";
-import { loadBundledFlatcraftContent } from "./content.js";
+import { loadBundledFlatcraftContent, loadServerContentPackages } from "./content.js";
 import { attachInput } from "./input/input.js";
 import { connectWebSocket, type OnlineSession } from "./net/wsConnection.js";
 import { Renderer } from "./render/renderer.js";
@@ -233,30 +228,6 @@ async function runGame(options: GameOptions): Promise<Renderer> {
   return renderer;
 }
 
-/** The server's datapack (mod items/blocks): register before joining,
- * so both sides agree on the registries. */
-async function applyServerDatapack(): Promise<void> {
-  try {
-    const response = await fetch("/api/datapack", { headers: { accept: "application/json" } });
-    const contentType = response.headers.get("content-type") ?? "";
-    if (!response.ok || !contentType.includes("application/json")) return;
-    const pack = (await response.json()) as { blocks?: unknown[]; items?: unknown[]; mobs?: unknown[] };
-    for (const raw of pack.blocks ?? []) {
-      registerBlockJson(raw, "server datapack");
-    }
-    resolveBlockLinks();
-    for (const raw of pack.items ?? []) {
-      registerItemJson(raw, "server datapack");
-    }
-    syncItemRecipes();
-    for (const raw of pack.mobs ?? []) {
-      registerMobJson(raw, "server datapack");
-    }
-  } catch (error) {
-    console.warn("server datapack failed to load:", error);
-  }
-}
-
 /** How often the sandbox's registered cosmetic tick hooks fire - a
  * client-only cadence with no relation to the authoritative simulation's
  * own tick rate (see @flatcraft/sim's TICK_MS), since nothing running in
@@ -300,7 +271,7 @@ async function loadServerScripts(): Promise<void> {
 
 /** Online mode: login screen, then WebSocket to the serving host. */
 async function startOnline(info: ServerInfo): Promise<void> {
-  await applyServerDatapack();
+  await loadServerContentPackages();
   await loadServerScripts();
   const session = await login(info);
   const renderer = await runGame({

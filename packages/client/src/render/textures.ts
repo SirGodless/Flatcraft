@@ -1,99 +1,33 @@
 import { Texture } from "pixi.js";
 import { allBlocks, blockDef, BlockId, hash01, localName, type BlockFallbackJson } from "@flatcraft/sim";
 import { spriteKey, SPRITE_OVERRIDES } from "./sprites.js";
+import { renderBlockPixels, TILE_PX } from "./blockPixels.js";
 
-/** On-screen size of one tile at zoom 1, and texture resolution per block. */
-export const TILE_PX = 16;
+export { TILE_PX };
 
-/** [r,g,b] triples come from BlockFallbackJson as `number[]` (JSON has no
- * fixed-length array type) but are validated to have exactly 3 entries at
- * content-load time (registry/schema.ts's validateColorTriple) - safe to
- * assert here rather than re-check on every pixel. */
-function rgb(triple: number[]): [number, number, number] {
-  return [triple[0]!, triple[1]!, triple[2]!];
-}
-
-function shapeMask(shape: NonNullable<BlockFallbackJson["shape"]>, x: number, y: number): boolean {
-  switch (shape) {
-    case "stairs": {
-      // Steps descending to the left, 4px each.
-      const step = Math.floor(x / 4);
-      return y >= TILE_PX - (step + 1) * 4;
-    }
-    case "fence":
-      return (x >= 2 && x <= 4) || (x >= 11 && x <= 13) || y === 4 || y === 5 || y === 10 || y === 11;
-    case "door_open":
-      return x <= 3; // swung against the left edge
-    case "trapdoor_open":
-      return x >= TILE_PX - 4; // folded against the right edge
-  }
-}
-
-/** Tiny deterministic PRNG so textures look identical on every load. */
-function lcg(seed: number): () => number {
-  let s = seed >>> 0;
-  return () => {
-    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
-    return s / 4294967296;
-  };
-}
+/** Solid magenta, the classic "missing texture" convention - shown (with
+ * a console warning) for any content instance with neither a real
+ * sprite file nor a declared procedural fallback, across every content
+ * type that can reach this state (blocks here; items in icons.ts; mobs
+ * already drew their own literal magenta rect in renderer.ts's
+ * buildEntityGfx before this constant existed - not migrated onto it,
+ * since that path draws with pixi's Graphics API directly rather than a
+ * canvas, but same color, same intent). */
+export const MISSING_TEXTURE_STYLE: BlockFallbackJson = { base: [255, 0, 255], noise: 0 };
 
 /** `variant` picks a distinct-but-still-deterministic noise seed, so a
  * block with declared visual.variants gets free procedural variety
- * even without any sprite files (createBlockTextureVariants below). */
+ * even without any sprite files (createBlockTextureVariants below). The
+ * actual pixel math lives in blockPixels.ts (no DOM dependency), shared
+ * verbatim with scripts/bake-block-sprites.ts so a baked PNG is always
+ * pixel-identical to what this would draw live. */
 function makeBlockTexture(id: BlockId, style: BlockFallbackJson, variant = 0): Texture {
   const canvas = document.createElement("canvas");
   canvas.width = TILE_PX;
   canvas.height = TILE_PX;
   const ctx = canvas.getContext("2d")!;
-  const rand = lcg(0xf1a7 + id * 7919 + variant * 104729);
-  ctx.globalAlpha = style.alpha ?? 1;
-
-  for (let y = 0; y < TILE_PX; y++) {
-    for (let x = 0; x < TILE_PX; x++) {
-      if (style.holes !== undefined && rand() < style.holes) continue;
-      if (style.fill_rows !== undefined && y < TILE_PX - style.fill_rows) continue;
-      if (style.shape !== undefined && !shapeMask(style.shape, x, y)) continue;
-      const inTop = style.top !== undefined && y < style.top.rows;
-      let [r, g, b] = inTop ? rgb(style.top!.color) : rgb(style.base);
-      if (style.stripe && x % 4 < 2) {
-        r *= 0.82;
-        g *= 0.82;
-        b *= 0.82;
-      }
-      const jitter = 1 - style.noise + rand() * style.noise * 2;
-      ctx.fillStyle = `rgb(${Math.round(r * jitter)},${Math.round(g * jitter)},${Math.round(b * jitter)})`;
-      ctx.fillRect(x, y, 1, 1);
-    }
-  }
-
-  if (style.specks) {
-    const [r, g, b] = rgb(style.specks.color);
-    for (let i = 0; i < style.specks.count; i++) {
-      const sx = 1 + Math.floor(rand() * (TILE_PX - 3));
-      const sy = 1 + Math.floor(rand() * (TILE_PX - 3));
-      const jitter = 0.9 + rand() * 0.2;
-      ctx.fillStyle = `rgb(${Math.round(r * jitter)},${Math.round(g * jitter)},${Math.round(b * jitter)})`;
-      ctx.fillRect(sx, sy, 2, 2);
-    }
-  }
-
-  if (style.opening) {
-    ctx.fillStyle = "rgb(24,22,20)";
-    ctx.fillRect(4, 9, 8, 5);
-    ctx.fillStyle = "rgb(230,140,40)";
-    ctx.fillRect(6, 12, 4, 2);
-  }
-
-  if (style.frame) {
-    const [r, g, b] = rgb(style.frame);
-    ctx.fillStyle = `rgb(${r},${g},${b})`;
-    ctx.fillRect(0, 0, TILE_PX, 1);
-    ctx.fillRect(0, TILE_PX - 1, TILE_PX, 1);
-    ctx.fillRect(0, 0, 1, TILE_PX);
-    ctx.fillRect(TILE_PX - 1, 0, 1, TILE_PX);
-  }
-
+  const pixels = renderBlockPixels(id, style, variant);
+  ctx.putImageData(new ImageData(pixels, TILE_PX, TILE_PX), 0, 0);
   const texture = Texture.from(canvas);
   texture.source.scaleMode = "nearest";
   return texture;
@@ -101,10 +35,12 @@ function makeBlockTexture(id: BlockId, style: BlockFallbackJson, variant = 0): T
 
 export function createBlockTextures(): Map<BlockId, Texture> {
   const textures = new Map<BlockId, Texture>();
-  // Sprite files beat a declared procedural fallback; blocks with neither
-  // (e.g. datapack blocks from a server mod that ships no visual at all)
-  // get a generic texture colored from their name, so nothing ever
-  // renders invisible.
+  // Sprite files beat a declared procedural fallback; a block with
+  // neither is genuinely broken content (a mod block that shipped no
+  // visual at all), not a case to quietly paper over - it gets the same
+  // loud magenta missing-texture placeholder + console warning every
+  // other content type uses for the same situation (see icons.ts's
+  // itemTexture, renderer.ts's buildEntityGfx).
   for (const def of allBlocks()) {
     if (def.id === BlockId.Air) continue;
     const key = def.sprite
@@ -116,10 +52,8 @@ export function createBlockTextures(): Map<BlockId, Texture> {
     } else if (def.visual?.fallback) {
       textures.set(def.id, makeBlockTexture(def.id, def.visual.fallback));
     } else {
-      let hash = 0;
-      for (const ch of def.name) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-      const base = [80 + (hash % 120), 80 + ((hash >> 7) % 120), 80 + ((hash >> 14) % 120)];
-      textures.set(def.id, makeBlockTexture(def.id, { base, noise: 0.12 }));
+      console.warn(`block "${def.name}" has no sprite and no declared visual.fallback - showing a missing-texture placeholder`);
+      textures.set(def.id, makeBlockTexture(def.id, MISSING_TEXTURE_STYLE));
     }
   }
   return textures;

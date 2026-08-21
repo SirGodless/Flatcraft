@@ -11,13 +11,22 @@ import { loadContentPackage } from "@flatcraft/sim";
  * ensureBaseContentLoaded) - but a test that touches @flatcraft/sim's
  * registries directly (e.g. chunkFiles.test.ts's ChunkFileStore.scanAll,
  * which walks allDimensionIds()) needs it loaded too, so every test file
- * gets it unconditionally here rather than depending on which path each
- * test happens to take.
+ * gets every discovered content package loaded unconditionally here
+ * rather than depending on which path each test happens to take.
+ * flatcraft loads first - see server.ts's ensureBaseContentLoaded for
+ * why (other packages' content may reference flatcraft-namespaced ids,
+ * and loadContentPackage resolves cross-references eagerly, not
+ * deferred).
  */
 const here = dirname(fileURLToPath(import.meta.url));
 const contentDir = join(here, "../../../content");
-const [flatcraft] = discoverContentDir(contentDir);
-if (!flatcraft || flatcraft.id !== "flatcraft") {
+const packages = discoverContentDir(contentDir);
+const flatcraft = packages.find((p) => p.id === "flatcraft");
+if (!flatcraft) {
   throw new Error(`expected a "flatcraft" content package under ${contentDir}`);
 }
 await loadContentPackage(flatcraft);
+for (const pkg of packages) {
+  if (pkg.id === "flatcraft") continue;
+  await loadContentPackage(pkg);
+}

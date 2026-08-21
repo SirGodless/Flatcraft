@@ -1,5 +1,5 @@
-import { registerContentType, validateContentInstance } from "../registry/generic.js";
-import { getHandler, hasHandler, registerHandler } from "../registry/handlers.js";
+import { createInstanceStore, registerContentType, validateContentInstance } from "../registry/generic.js";
+import { getHandler, registerHandler } from "../registry/handlers.js";
 import type { World } from "./world.js";
 import type { Chunk } from "./chunk.js";
 
@@ -178,14 +178,10 @@ export function registerDimensionJson(raw: unknown, source = "content"): Dimensi
         }
       : {}),
   };
-  if (DEFS.has(def.id)) {
-    throw new Error(`dimension "${def.id}" is already registered`);
-  }
-  DEFS.set(def.id, def);
-  return def;
+  return DEFS.register(def);
 }
 
-const DEFS = new Map<string, DimensionDef>();
+const DEFS = createInstanceStore<DimensionDef>("dimension");
 
 export function registerDimensionGenerator(id: string, generator: DimensionGenerator): void {
   registerHandler("dimension_generator", id, generator);
@@ -216,10 +212,11 @@ export function allDimensionIds(): readonly string[] {
  * unlike a multiblock's runtime handler lookup (which skips safely, so
  * one broken interaction doesn't take down a live game), there is no
  * sane soft-fallback for "can't generate this terrain at all", and
- * validateDimensionGenerators (see validateAllContent) already
- * guarantees this can't happen on a server that passed boot validation -
- * hitting it here means something registered a dimension without ever
- * validating, which is a coding error worth failing loudly on. */
+ * validateAllContent's ref-existence pass (registry/generic.ts's
+ * validateAllRefs) already guarantees this can't happen on a server that
+ * passed boot validation - hitting it here means something registered a
+ * dimension without ever validating, which is a coding error worth
+ * failing loudly on. */
 export function generateDimensionChunk(dim: string, seed: number, cx: number, cy: number): Chunk {
   const def = dimensionDef(dim);
   if (!def) throw new Error(`unknown dimension "${dim}"`);
@@ -261,35 +258,12 @@ export function generateDefaultSpawnPoint(seed: number): { x: number; y: number 
   return generator(seed);
 }
 
-/** Every registered dimension's generator/arrival references must
- * resolve to something actually registered - same exhaustive-collect-
- * all pattern as validateMultiblockHandlers/validateCommandHandlers. */
-export function validateDimensionGenerators(): string[] {
-  const problems: string[] = [];
-  for (const def of DEFS.values()) {
-    if (!hasHandler("dimension_generator", def.generator)) {
-      problems.push(`dimension "${def.id}" references unknown generator "${def.generator}"`);
-    }
-    if (!hasHandler("arrival_generator", def.arrival)) {
-      problems.push(`dimension "${def.id}" references unknown arrival generator "${def.arrival}"`);
-    }
-    if (def.spawnPoint !== undefined && !hasHandler("spawn_point_generator", def.spawnPoint)) {
-      problems.push(`dimension "${def.id}" references unknown spawn point generator "${def.spawnPoint}"`);
-    }
-  }
-  return problems;
-}
-
-/** A dimension's portal must lead somewhere registered. */
-export function validatePortalLinks(): string[] {
-  const problems: string[] = [];
-  for (const def of DEFS.values()) {
-    if (def.portal && !DEFS.has(def.portal.to)) {
-      problems.push(`dimension "${def.id}" has a portal to unregistered dimension "${def.portal.to}"`);
-    }
-  }
-  return problems;
-}
+// A dimension's generator/spawns/arrival/spawn_point fields and its
+// portal.to are all declared as `ref` fields (see the registerContentType
+// call above), so their existence is checked generically by
+// registry/generic.ts's validateAllRefs (see validate.ts) - no bespoke
+// validateDimensionGenerators()/validatePortalLinks() needed here
+// anymore.
 
 /** Exactly one dimension must be the default respawn target, and it
  * must actually be able to produce a spawn point. */

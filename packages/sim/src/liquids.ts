@@ -14,7 +14,7 @@
  * out of engine code and into data.
  */
 
-import { registerContentType, validateContentInstance } from "./registry/generic.js";
+import { createInstanceStore, registerContentType, validateContentInstance } from "./registry/generic.js";
 
 export interface LiquidJson {
   id: string;
@@ -64,7 +64,7 @@ registerContentType(
  * do no validation at all beyond field access, so a malformed liquid
  * JSON (e.g. a string where a number belongs) previously produced silent
  * NaNs at runtime instead of failing loudly at boot. */
-const DEFS = new Map<string, LiquidDef>();
+const DEFS = createInstanceStore<LiquidDef>("liquid");
 
 /** Register a liquid from datapack JSON (content package files or
  * server mods). */
@@ -79,11 +79,7 @@ export function registerLiquidJson(raw: unknown, source = "content"): LiquidDef 
     meltsBuckets: v["melts_buckets"] === true,
     ...(v["tint"] !== undefined ? { tint: v["tint"] as string } : {}),
   };
-  if (DEFS.has(def.id)) {
-    throw new Error(`liquid "${def.id}" is already registered`);
-  }
-  DEFS.set(def.id, def);
-  return def;
+  return DEFS.register(def);
 }
 
 export function liquidDef(id: string): LiquidDef | undefined {

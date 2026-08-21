@@ -1,14 +1,27 @@
 import { Texture } from "pixi.js";
+import { TILE_PX } from "./textures.js";
 
 /**
  * Sprite overrides: real image files replacing the procedural graphics.
  * Convention: sprites/<type>/<id>.png (e.g. sprites/item/golden_shovel.png,
  * sprites/block/stone.png, sprites/mob/zombie.png, sprites/entity/arrow.png),
- * listed in /sprites/manifest.json - served by
- * the dedicated server from its datapack directory, or from the static
- * public/ directory in singleplayer. Rules: PNG, 8 bit per channel,
- * dimensions a multiple of 2, at most 128x128. Missing manifest or files
- * simply mean: procedural fallback, never an error.
+ * listed in /sprites/manifest.json - served by the dedicated server from
+ * a discovered content package's own sprites/ directory (a mod's sprite
+ * override, in memory - see server.ts's contentSprites) or the repo-
+ * shipped client build, or from the static public/ directory in
+ * singleplayer. Rules: PNG, 8 bit per channel, dimensions a multiple of
+ * 2 (odd dimensions put pixel-art rows/columns at a half-pixel offset
+ * once nearest-neighbor-scaled to a tile size that's itself even - a
+ * real, visible seam/blur, not just a style nitpick) - no upper size
+ * limit. Items/mobs/entities may use any aspect ratio (see icons.ts's
+ * fitIconSprite - they're free-standing sprites, sized to fit, never
+ * stretched); blocks must stay square and exactly TILE_PX, since
+ * worldView.ts's bake() sizes a block's Sprite by its raw texture pixels
+ * to tile the world grid - a mismatched block sprite is flagged with a
+ * console warning at load time rather than silently misaligning in-game.
+ * Missing manifest or files simply mean: procedural fallback, never an
+ * error (though a missing fallback too now shows a loud magenta
+ * placeholder + console warning - see textures.ts's MISSING_TEXTURE_STYLE).
  */
 export const SPRITE_OVERRIDES = new Map<string, Texture>();
 
@@ -37,15 +50,21 @@ export async function loadSpriteOverrides(): Promise<void> {
         const image = new Image();
         image.src = `/sprites/${entry}`;
         await image.decode();
-        if (
-          image.width === 0 ||
-          image.width % 2 !== 0 ||
-          image.height % 2 !== 0 ||
-          image.width > 128 ||
-          image.height > 128
-        ) {
-          console.warn(`sprite ${entry}: dimensions must be multiples of 2, max 128x128 - skipped`);
+        if (image.width === 0 || image.width % 2 !== 0 || image.height % 2 !== 0) {
+          console.warn(`sprite ${entry}: dimensions must be multiples of 2 - skipped`);
           return;
+        }
+        // Blocks are pixel-exact-scaled onto the world tile grid (see
+        // worldView.ts's bake(), which sizes a block's Sprite by its raw
+        // texture pixels, never explicitly) - unlike items, a block
+        // sprite that isn't square or doesn't match TILE_PX won't error,
+        // it'll just silently render at the wrong size or stretched
+        // in-world. Warn loudly so a mod author notices at boot instead
+        // of only in-game.
+        if (entry.startsWith("block/") && (image.width !== image.height || image.width !== TILE_PX)) {
+          console.warn(
+            `sprite ${entry}: block sprites must be square and exactly ${TILE_PX}x${TILE_PX} (got ${image.width}x${image.height}) - it will misalign on the world tile grid`,
+          );
         }
         const texture = Texture.from(image);
         texture.source.scaleMode = "nearest";

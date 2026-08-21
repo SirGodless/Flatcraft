@@ -1,3 +1,4 @@
+import { hasHandler } from "./handlers.js";
 import { checkKeys, need, needId, needNumber, needOneOf, needQualifiedId, SchemaError } from "./schema.js";
 
 /**
@@ -154,15 +155,133 @@ export function parseTypeDeclaration(raw: unknown, source: string): TypeDeclarat
   return out;
 }
 
-const TYPES = new Map<string, TypeDeclaration>();
+/**
+ * Every content-*instance* registry in this codebase (block/item/mob/
+ * dimension/biome/vein/wood/nether_layer/multiblock/enchant/liquid/
+ * structure - one Map per type file) used to hand-roll the exact same
+ * three lines: check for a duplicate id, throw if found, else store it.
+ * That duplication is exactly how three of those copies (block/item/mob)
+ * quietly lost the duplicate check during an earlier migration and
+ * nobody noticed - found in a later full-codebase audit. One shared
+ * store instead of N copies makes that whole bug class structurally
+ * impossible to reintroduce: there's no second place left to forget the
+ * check in.
+ *
+ * Deliberately NOT used by world/block.ts: BlockId's dense numeric
+ * storage (uint16-sized, enum-reserved ids, dynamic allocation for
+ * modded blocks - see that file's own doc comment) has no equivalent
+ * here, since every other type here is keyed directly by its qualified
+ * string id with no secondary numeric identity to manage. Block still
+ * gets the same "throw on a duplicate name" guarantee, just via its own
+ * `byName` map directly rather than through this helper.
+ */
+export interface InstanceStore<T extends { id: string }> {
+  /** Throws if `def.id` is already registered - never a silent overwrite. */
+  register(def: T): T;
+  get(id: string): T | undefined;
+  has(id: string): boolean;
+  values(): IterableIterator<T>;
+  keys(): IterableIterator<string>;
+}
+
+/**
+ * "Does an instance of ref_type X with this id actually exist?", one
+ * resolver per instance-bearing type - the missing half of `ref` field
+ * validation (see PENDING_REFS/validateAllRefs below). createInstanceStore
+ * registers one of these automatically using its own kindLabel as the
+ * ref_type, so every type built on it (which is all of them except
+ * world/block.ts - see that function's own doc comment) gets existence-
+ * checking for free, with no separate call to remember. A ref_kind
+ * "handler" field needs no entry here at all - registry/handlers.ts's
+ * hasHandler() is already a single universal check across every handler
+ * kind, with no per-type opt-in.
+ */
+const REF_RESOLVERS = new Map<string, (id: string) => boolean>();
+
+export function registerRefResolver(refType: string, exists: (id: string) => boolean): void {
+  if (REF_RESOLVERS.has(refType)) {
+    throw new Error(`ref resolver for "${refType}" is already registered`);
+  }
+  REF_RESOLVERS.set(refType, exists);
+}
+
+interface PendingRef {
+  refType: string;
+  refKind: "instance" | "handler";
+  value: string;
+  source: string;
+  path: string;
+}
+
+/** Every `ref` field value validateContentInstance has ever seen,
+ * checked for real existence later by validateAllRefs - see that
+ * function's own doc comment for why this can't happen eagerly, right
+ * where each value is first seen. */
+const PENDING_REFS: PendingRef[] = [];
+
+/** Checks every recorded `ref` field value against the actual
+ * registries - the generic replacement for a bespoke validateXReferences()
+ * per relationship. This was always the point of adding `ref` as a
+ * schema primitive (see this module's own history: it shipped as a
+ * syntax-only check with existence-checking explicitly deferred, then
+ * the deferred half was never actually wired up as more types migrated
+ * onto this engine - found by a later full-codebase audit). Call once,
+ * after all content has finished loading (see validate.ts's
+ * validateAllContent) - not incrementally - since load order between two
+ * content types isn't guaranteed (a biome can reference a wood/vein
+ * registered in the same pass but not necessarily before it - see
+ * world/biome.ts's own doc comment on this exact case).
+ *
+ * ref_kind "handler" is always checkable (registry/handlers.ts's
+ * hasHandler is one universal check across every handler kind, no per-
+ * type opt-in needed). ref_kind "instance" needs the referenced type to
+ * have called registerRefResolver - createInstanceStore does this
+ * automatically for every type built on it, so the only way to end up
+ * with no resolver is a `ref_type` that names something with no
+ * instance store at all (a typo, or a mod inventing a new type without
+ * wiring up existence-checking for it) - reported as its own problem
+ * here rather than silently skipped, so that gap can't hide either. */
+export function validateAllRefs(): string[] {
+  const problems: string[] = [];
+  for (const ref of PENDING_REFS) {
+    if (ref.refKind === "handler") {
+      if (!hasHandler(ref.refType, ref.value)) {
+        problems.push(`"${ref.path}" (${ref.source}) references unknown ${ref.refType} "${ref.value}"`);
+      }
+      continue;
+    }
+    const resolver = REF_RESOLVERS.get(ref.refType);
+    if (!resolver) {
+      problems.push(`"${ref.path}" (${ref.source}) declares a ref to type "${ref.refType}", which has no registered existence check`);
+    } else if (!resolver(ref.value)) {
+      problems.push(`"${ref.path}" (${ref.source}) references unknown ${ref.refType} "${ref.value}"`);
+    }
+  }
+  return problems;
+}
+
+export function createInstanceStore<T extends { id: string }>(kindLabel: string): InstanceStore<T> {
+  const defs = new Map<string, T>();
+  registerRefResolver(kindLabel, (id) => defs.has(id));
+  return {
+    register(def: T): T {
+      if (defs.has(def.id)) {
+        throw new Error(`${kindLabel} "${def.id}" is already registered`);
+      }
+      defs.set(def.id, def);
+      return def;
+    },
+    get: (id) => defs.get(id),
+    has: (id) => defs.has(id),
+    values: () => defs.values(),
+    keys: () => defs.keys(),
+  };
+}
+
+const TYPES = createInstanceStore<TypeDeclaration>("content type");
 
 export function registerContentType(raw: unknown, source: string): TypeDeclaration {
-  const decl = parseTypeDeclaration(raw, source);
-  if (TYPES.has(decl.id)) {
-    throw new Error(`content type "${decl.id}" is already registered`);
-  }
-  TYPES.set(decl.id, decl);
-  return decl;
+  return TYPES.register(parseTypeDeclaration(raw, source));
 }
 
 export function contentTypeDecl(id: string): TypeDeclaration | undefined {
@@ -195,14 +314,19 @@ function validateFieldValue(decl: FieldDecl, raw: unknown, source: string, path:
       return s;
     }
     case "ref": {
-      // Syntax only for now - see the module doc comment on why existence
-      // checking is deferred rather than attempted here. Both ref kinds
-      // are fully-qualified "package:type:name" ids under the uniform
-      // namespacing scheme, returned as-is (no stripping) - an instance
-      // ref points at another content instance's own qualified id, a
-      // handler ref points at a registered trusted handler function
-      // (multiblock handlers, dimension generators) keyed the same way.
-      return needQualifiedId(source, path, raw);
+      // Both ref kinds are fully-qualified "package:type:name" ids under
+      // the uniform namespacing scheme, returned as-is (no stripping) -
+      // an instance ref points at another content instance's own
+      // qualified id, a handler ref points at a registered trusted
+      // handler function (multiblock handlers, dimension generators)
+      // keyed the same way. Shape-checked here; existence is checked
+      // later, exhaustively, once every type has finished loading (load
+      // order between two content types isn't guaranteed - see
+      // PENDING_REFS/validateAllRefs below), so every value this engine
+      // ever sees in a `ref` field is recorded for that later pass.
+      const value = needQualifiedId(source, path, raw);
+      PENDING_REFS.push({ refType: decl.refType, refKind: decl.refKind, value, source, path });
+      return value;
     }
     case "array": {
       const arr = need<unknown[]>(source, path, raw, "array");
@@ -242,9 +366,9 @@ function validateFieldValue(decl: FieldDecl, raw: unknown, source: string, path:
 }
 
 /** Validate one instance of an already-registered content type, returning
- * a plain validated object - the generic replacement for calling e.g.
- * `validateBlockJson` directly, for any type declared through
- * registerContentType instead of hand-written TS. */
+ * a plain validated object - the generic replacement for a hand-written
+ * per-type validator, for any type declared through registerContentType
+ * instead of hand-written TS. */
 export function validateContentInstance(typeId: string, raw: unknown, source: string): Record<string, unknown> {
   const decl = TYPES.get(typeId);
   if (!decl) throw new Error(`content type "${typeId}" is not registered (validating "${source}")`);

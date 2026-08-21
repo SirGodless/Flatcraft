@@ -2,22 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   allBiomeIds,
   allDimensionIds,
-  allItems,
   defaultDimensionId,
   registerBiomeJson,
   registerCommandHandler,
   registerDimensionJson,
   registerMultiblockJson,
   validateAllContent,
-  validateBiomeReferences,
+  validateAllRefs,
   validateCommandHandlers,
   validateDefaultDimension,
-  validateDimensionGenerators,
-  validateItemEnchants,
-  validateMultiblockHandlers,
-  validatePortalLinks,
-  validateSpawnGenerators,
-  allDimensions,
 } from "../src/index.js";
 
 /**
@@ -29,13 +22,23 @@ import {
  * assertion if it lived in the same file. A fresh test file gets its own
  * module instance, so this one only ever sees the real, built-in content
  * plus whatever it registers itself.
+ *
+ * validateMultiblockHandlers/validateDimensionGenerators/validatePortalLinks/
+ * validateSpawnGenerators/validateStructureDimensions/
+ * validateBiomeReferences/validateItemEnchants no longer exist as bespoke
+ * functions - every one of them was a hand-written "does this `ref` field's
+ * value actually resolve" check duplicating what registry/generic.ts's
+ * `ref` field declarations already describe. They're all exercised here
+ * through validateAllRefs()/validateAllContent() instead (see validate.ts
+ * and registry/generic.ts's own doc comments for the full story of why
+ * that consolidation happened).
  */
 
-describe("content dependency validation", () => {
-  it("the real, built-in multiblock content has no missing handler references", () => {
+describe("content dependency validation (ref fields)", () => {
+  it("the real, built-in content has no dangling ref", () => {
     // Runs first in this file, before any synthetic bad def below is
     // registered into the same shared (per-file) module instance.
-    expect(validateMultiblockHandlers()).toEqual([]);
+    expect(validateAllRefs()).toEqual([]);
     expect(validateAllContent()).toEqual([]);
   });
 
@@ -51,32 +54,11 @@ describe("content dependency validation", () => {
       trigger_on: { type: "place_block", item: "flatcraft:item:bone" },
     });
 
-    const problems = validateMultiblockHandlers();
-    expect(problems).toContain(
-      'multiblock "flatcraft:multiblock:test_validate_missing_1" references unknown behavior "flatcraft:multiblock_handler:nobody_registered_this_1"',
-    );
-    expect(problems).toContain(
-      'multiblock "flatcraft:multiblock:test_validate_missing_2" references unknown behavior "flatcraft:multiblock_handler:nobody_registered_this_2"',
-    );
+    const problems = validateAllRefs();
+    expect(problems.some((p) => p.includes("flatcraft:multiblock_handler:nobody_registered_this_1"))).toBe(true);
+    expect(problems.some((p) => p.includes("flatcraft:multiblock_handler:nobody_registered_this_2"))).toBe(true);
     // validateAllContent must surface the same problems, not swallow them.
     expect(validateAllContent().length).toBeGreaterThanOrEqual(2);
-  });
-});
-
-describe("command handler validation", () => {
-  it("every literal Command.type has a registered handler - none were forgotten", () => {
-    expect(validateCommandHandlers()).toEqual([]);
-  });
-
-  it("rejects registering a second handler for a command type that already has one", () => {
-    expect(() => registerCommandHandler("leave", { handle: () => {} })).toThrow(/already registered/);
-  });
-});
-
-describe("dimension registry", () => {
-  it("the built-in overworld and nether are registered, with real generators", () => {
-    expect(allDimensionIds()).toEqual(expect.arrayContaining(["flatcraft:dimension:overworld", "flatcraft:dimension:nether"]));
-    expect(validateDimensionGenerators()).toEqual([]);
   });
 
   it("reports a dimension referencing an unregistered generator", () => {
@@ -87,9 +69,9 @@ describe("dimension registry", () => {
       arrival: "flatcraft:arrival_generator:overworld_arrival",
       has_sky: true,
     });
-    expect(validateDimensionGenerators()).toContain(
-      'dimension "flatcraft:dimension:test_validate_dim_missing" references unknown generator "flatcraft:dimension_generator:nobody_registered_this_generator"',
-    );
+    expect(
+      validateAllRefs().some((p) => p.includes("flatcraft:dimension_generator:nobody_registered_this_generator")),
+    ).toBe(true);
   });
 
   it("rejects registering a dimension id that's already taken", () => {
@@ -104,31 +86,31 @@ describe("dimension registry", () => {
     ).toThrow(/already registered/);
   });
 
-  it("the default respawn dimension is exactly one, with a working spawn point", () => {
-    expect(validateDefaultDimension()).toEqual([]);
-    expect(defaultDimensionId()).toBe("flatcraft:dimension:overworld");
+  it("reports a dimension's portal pointing at an unregistered dimension", () => {
+    registerDimensionJson({
+      id: "flatcraft:dimension:test_validate_dim_badportal",
+      generator: "flatcraft:dimension_generator:overworld",
+      spawns: "flatcraft:spawn_generator:overworld_spawns",
+      arrival: "flatcraft:arrival_generator:overworld_arrival",
+      has_sky: true,
+      portal: { to: "flatcraft:dimension:nobody_registered_this_dimension", scale: 8 },
+    });
+    expect(
+      validateAllRefs().some((p) => p.includes("flatcraft:dimension:nobody_registered_this_dimension")),
+    ).toBe(true);
   });
 
-  it("every dimension's portal, if any, links to a registered dimension", () => {
-    expect(validatePortalLinks()).toEqual([]);
-  });
-
-  it("every registered dimension's spawn generator resolves to something registered", () => {
-    expect(validateSpawnGenerators(allDimensions())).toEqual([]);
-  });
-});
-
-describe("biome registry", () => {
-  it("the built-in biomes are registered, with every wood/vein reference resolving", () => {
-    expect(allBiomeIds()).toEqual(
-      expect.arrayContaining([
-        "flatcraft:biome:desert",
-        "flatcraft:biome:plains",
-        "flatcraft:biome:forest",
-        "flatcraft:biome:mountains",
-      ]),
-    );
-    expect(validateBiomeReferences()).toEqual([]);
+  it("reports a dimension referencing an unregistered spawn generator", () => {
+    registerDimensionJson({
+      id: "flatcraft:dimension:test_validate_dim_badspawns",
+      generator: "flatcraft:dimension_generator:overworld",
+      spawns: "flatcraft:spawn_generator:nobody_registered_this_spawn_generator",
+      arrival: "flatcraft:arrival_generator:overworld_arrival",
+      has_sky: true,
+    });
+    expect(
+      validateAllRefs().some((p) => p.includes("flatcraft:spawn_generator:nobody_registered_this_spawn_generator")),
+    ).toBe(true);
   });
 
   it("reports a biome referencing an unregistered wood or vein", () => {
@@ -141,13 +123,9 @@ describe("biome registry", () => {
       tree_woods: [{ wood: "flatcraft:wood:nobody_registered_this_wood", weight: 1 }],
       extra_veins: ["flatcraft:vein:nobody_registered_this_vein"],
     });
-    const problems = validateBiomeReferences();
-    expect(problems).toContain(
-      'biome "flatcraft:biome:test_validate_biome_missing" references unknown wood "flatcraft:wood:nobody_registered_this_wood"',
-    );
-    expect(problems).toContain(
-      'biome "flatcraft:biome:test_validate_biome_missing" references unknown vein "flatcraft:vein:nobody_registered_this_vein"',
-    );
+    const problems = validateAllRefs();
+    expect(problems.some((p) => p.includes("flatcraft:wood:nobody_registered_this_wood"))).toBe(true);
+    expect(problems.some((p) => p.includes("flatcraft:vein:nobody_registered_this_vein"))).toBe(true);
     expect(validateAllContent().length).toBeGreaterThanOrEqual(2);
   });
 
@@ -174,19 +152,36 @@ describe("biome registry", () => {
       }),
     ).toThrow(/unknown floor block/);
   });
-});
 
-describe("enchant references", () => {
-  it("every built-in item's enchants list resolves to a registered enchant", () => {
-    expect(validateItemEnchants(allItems())).toEqual([]);
+  it("the built-in biomes are registered", () => {
+    expect(allBiomeIds()).toEqual(
+      expect.arrayContaining([
+        "flatcraft:biome:desert",
+        "flatcraft:biome:plains",
+        "flatcraft:biome:forest",
+        "flatcraft:biome:mountains",
+      ]),
+    );
   });
 
-  it("reports an item referencing an unregistered enchant", () => {
-    const problems = validateItemEnchants([
-      { id: "flatcraft:item:test_validate_item", enchants: ["flatcraft:enchant:nobody_registered_this_enchant"] },
-    ]);
-    expect(problems).toEqual([
-      'item "flatcraft:item:test_validate_item" references unknown enchant "flatcraft:enchant:nobody_registered_this_enchant"',
-    ]);
+  it("the built-in overworld and nether are registered", () => {
+    expect(allDimensionIds()).toEqual(expect.arrayContaining(["flatcraft:dimension:overworld", "flatcraft:dimension:nether"]));
+  });
+});
+
+describe("command handler validation", () => {
+  it("every literal Command.type has a registered handler - none were forgotten", () => {
+    expect(validateCommandHandlers()).toEqual([]);
+  });
+
+  it("rejects registering a second handler for a command type that already has one", () => {
+    expect(() => registerCommandHandler("leave", { handle: () => {} })).toThrow(/already registered/);
+  });
+});
+
+describe("default dimension validation", () => {
+  it("the default respawn dimension is exactly one, with a working spawn point", () => {
+    expect(validateDefaultDimension()).toEqual([]);
+    expect(defaultDimensionId()).toBe("flatcraft:dimension:overworld");
   });
 });

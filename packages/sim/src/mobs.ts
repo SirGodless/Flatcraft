@@ -1,6 +1,6 @@
 import type { EntitySize } from "./entities.js";
 import { NON_MOB_SIZES } from "./entities.js";
-import { registerContentType, validateContentInstance } from "./registry/generic.js";
+import { createInstanceStore, registerContentType, validateContentInstance } from "./registry/generic.js";
 import { validateVisualJson, validateMobFallbackJson, localName, type MobJson } from "./registry/schema.js";
 import type { MobVisualDef } from "./registry/visual.js";
 
@@ -74,7 +74,7 @@ export interface MobDef {
   readonly visual?: MobVisualDef;
 }
 
-const defs = new Map<string, MobDef>();
+const defs = createInstanceStore<MobDef>("mob");
 
 function pretty(id: string): string {
   return localName(id).split("_").map((word) => (word[0] ?? "").toUpperCase() + word.slice(1)).join(" ");
@@ -214,8 +214,7 @@ export function registerMobJson(raw: unknown, source = "datapack"): MobDef {
     ...(json.sprite !== undefined ? { sprite: json.sprite } : {}),
     ...(json.visual !== undefined ? { visual: json.visual } : {}),
   };
-  defs.set(def.id, def);
-  return def;
+  return defs.register(def);
 }
 
 export function mobDef(id: string): MobDef | undefined {

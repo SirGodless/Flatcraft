@@ -1,4 +1,4 @@
-import { registerContentType, validateContentInstance } from "../registry/generic.js";
+import { createInstanceStore, registerContentType, validateContentInstance } from "../registry/generic.js";
 import { blockByName, BlockId } from "./block.js";
 
 /**
@@ -50,7 +50,7 @@ registerContentType(
   "engine/types/vein",
 );
 
-const DEFS = new Map<string, VeinDef>();
+const DEFS = createInstanceStore<VeinDef>("vein");
 
 /** Register a vein from datapack JSON (content package files or server
  * mods) - the generic content-type engine confirms the raw shape;
@@ -75,11 +75,7 @@ export function registerVeinJson(raw: unknown, source = "content"): VeinDef {
     maxY: v["max_y"] as number,
     host,
   };
-  if (DEFS.has(def.id)) {
-    throw new Error(`vein "${def.id}" is already registered`);
-  }
-  DEFS.set(def.id, def);
-  return def;
+  return DEFS.register(def);
 }
 
 export function veinDef(id: string): VeinDef | undefined {
