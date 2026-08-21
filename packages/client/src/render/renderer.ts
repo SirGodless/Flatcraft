@@ -999,8 +999,13 @@ export class Renderer {
           gfx.rect(r.x * TILE_PX, r.y * TILE_PX, r.w * TILE_PX, r.h * TILE_PX).fill({ color: hexToNumber(r.color) });
         }
       } else {
-        // No sprite, no declared fallback (e.g. a datapack mod mob with
-        // neither) - a visible placeholder beats invisible.
+        // No sprite, no declared fallback (e.g. a mod mob with neither) -
+        // the same loud magenta missing-texture placeholder + console
+        // warning every other content type uses for the same situation
+        // (see textures.ts's MISSING_TEXTURE_STYLE, icons.ts's
+        // itemTexture) - a visible placeholder beats invisible, and a
+        // warning beats a mystery.
+        console.warn(`mob "${kind}" has no sprite and no declared visual.fallback - showing a missing-texture placeholder`);
         gfx.rect(0, 0, TILE_PX, TILE_PX).fill({ color: 0xff00ff });
       }
     }

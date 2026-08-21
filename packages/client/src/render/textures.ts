@@ -5,6 +5,16 @@ import { spriteKey, SPRITE_OVERRIDES } from "./sprites.js";
 /** On-screen size of one tile at zoom 1, and texture resolution per block. */
 export const TILE_PX = 16;
 
+/** Solid magenta, the classic "missing texture" convention - shown (with
+ * a console warning) for any content instance with neither a real
+ * sprite file nor a declared procedural fallback, across every content
+ * type that can reach this state (blocks here; items in icons.ts; mobs
+ * already drew their own literal magenta rect in renderer.ts's
+ * buildEntityGfx before this constant existed - not migrated onto it,
+ * since that path draws with pixi's Graphics API directly rather than a
+ * canvas, but same color, same intent). */
+export const MISSING_TEXTURE_STYLE: BlockFallbackJson = { base: [255, 0, 255], noise: 0 };
+
 /** [r,g,b] triples come from BlockFallbackJson as `number[]` (JSON has no
  * fixed-length array type) but are validated to have exactly 3 entries at
  * content-load time (registry/schema.ts's validateColorTriple) - safe to
@@ -101,10 +111,12 @@ function makeBlockTexture(id: BlockId, style: BlockFallbackJson, variant = 0): T
 
 export function createBlockTextures(): Map<BlockId, Texture> {
   const textures = new Map<BlockId, Texture>();
-  // Sprite files beat a declared procedural fallback; blocks with neither
-  // (e.g. datapack blocks from a server mod that ships no visual at all)
-  // get a generic texture colored from their name, so nothing ever
-  // renders invisible.
+  // Sprite files beat a declared procedural fallback; a block with
+  // neither is genuinely broken content (a mod block that shipped no
+  // visual at all), not a case to quietly paper over - it gets the same
+  // loud magenta missing-texture placeholder + console warning every
+  // other content type uses for the same situation (see icons.ts's
+  // itemTexture, renderer.ts's buildEntityGfx).
   for (const def of allBlocks()) {
     if (def.id === BlockId.Air) continue;
     const key = def.sprite
@@ -116,10 +128,8 @@ export function createBlockTextures(): Map<BlockId, Texture> {
     } else if (def.visual?.fallback) {
       textures.set(def.id, makeBlockTexture(def.id, def.visual.fallback));
     } else {
-      let hash = 0;
-      for (const ch of def.name) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-      const base = [80 + (hash % 120), 80 + ((hash >> 7) % 120), 80 + ((hash >> 14) % 120)];
-      textures.set(def.id, makeBlockTexture(def.id, { base, noise: 0.12 }));
+      console.warn(`block "${def.name}" has no sprite and no declared visual.fallback - showing a missing-texture placeholder`);
+      textures.set(def.id, makeBlockTexture(def.id, MISSING_TEXTURE_STYLE));
     }
   }
   return textures;

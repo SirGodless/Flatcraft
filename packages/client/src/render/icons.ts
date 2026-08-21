@@ -11,6 +11,12 @@ import { TILE_PX } from "./textures.js";
 
 const cache = new Map<string, Texture>();
 
+/** Solid magenta, the classic "missing texture" convention - same intent
+ * and color as textures.ts's MISSING_TEXTURE_STYLE (blocks) and
+ * renderer.ts's buildEntityGfx (mobs), expressed as rows+palette here
+ * since that's this file's own fallback-art format. */
+const MISSING_TEXTURE_ART: ItemFallbackJson = { rows: Array(8).fill("MMMMMMMM"), palette: { M: "#ff00ff" } };
+
 function artTexture(art: ItemFallbackJson): Texture {
   const canvas = document.createElement("canvas");
   canvas.width = TILE_PX;
@@ -57,6 +63,14 @@ export function itemTexture(item: string, blockTextures: Map<BlockId, Texture>, 
       texture = blockTextures.get(def.block);
     } else if (def?.visual?.fallback) {
       texture = artTexture(def.visual.fallback);
+    } else {
+      // No sprite, no block texture to reuse, no declared fallback (or
+      // not even a registered item at all) - the same loud magenta
+      // missing-texture placeholder + console warning every other
+      // content type uses for the same situation (see textures.ts's
+      // MISSING_TEXTURE_STYLE, renderer.ts's buildEntityGfx).
+      console.warn(`item "${item}" has no sprite and no declared visual.fallback - showing a missing-texture placeholder`);
+      texture = artTexture(MISSING_TEXTURE_ART);
     }
   }
   if (texture) cache.set(cacheKey, texture);
