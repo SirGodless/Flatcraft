@@ -2,6 +2,7 @@ import { Sprite, Texture } from "pixi.js";
 import { BlockId, hash01, itemDef, localName, type ItemFallbackJson } from "@flatcraft/sim";
 import { spriteKey, SPRITE_OVERRIDES } from "./sprites.js";
 import { TILE_PX } from "./textures.js";
+import { renderItemPixels } from "./itemPixels.js";
 
 /**
  * Item icons. Block items reuse their block texture; everything else
@@ -22,14 +23,7 @@ function artTexture(art: ItemFallbackJson): Texture {
   canvas.width = TILE_PX;
   canvas.height = TILE_PX;
   const ctx = canvas.getContext("2d")!;
-  art.rows.forEach((row, y) => {
-    [...row].forEach((char, x) => {
-      const color = art.palette[char];
-      if (!color) return;
-      ctx.fillStyle = color;
-      ctx.fillRect(x * 2, y * 2, 2, 2);
-    });
-  });
+  ctx.putImageData(new ImageData(renderItemPixels(art), TILE_PX, TILE_PX), 0, 0);
   const texture = Texture.from(canvas);
   texture.source.scaleMode = "nearest";
   return texture;
