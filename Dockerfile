@@ -30,10 +30,16 @@ RUN npm run build
 # require time) - esbuild has none beyond the @esbuild/<platform> package
 # already copied alongside it.
 FROM node:22-alpine
+# CONTENT_DIR must be explicit here: server.ts's own fallback
+# (../../../content, relative to server.mjs) assumes the file still sits
+# 3 directories deep (packages/dedicated/src or .../dist) - true for the
+# unbundled dev tree and for `npm start`'s dist/server.mjs, but not here,
+# where server.mjs is flattened straight into /app.
 ENV NODE_ENV=production \
     PORT=8080 \
     DATA_DIR=/data \
-    CLIENT_DIR=/app/client
+    CLIENT_DIR=/app/client \
+    CONTENT_DIR=/app/content
 WORKDIR /app
 COPY --from=build /app/node_modules/isolated-vm ./node_modules/isolated-vm
 COPY --from=build /app/node_modules/node-gyp-build ./node_modules/node-gyp-build
@@ -41,6 +47,7 @@ COPY --from=build /app/node_modules/esbuild ./node_modules/esbuild
 COPY --from=build /app/node_modules/@esbuild ./node_modules/@esbuild
 COPY --from=build /app/packages/dedicated/dist/server.mjs ./server.mjs
 COPY --from=build /app/packages/client/dist ./client
+COPY --from=build /app/content ./content
 RUN mkdir -p /data && chown node:node /data
 USER node
 VOLUME /data

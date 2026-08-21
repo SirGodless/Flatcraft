@@ -92,6 +92,7 @@ Configuration via environment variables:
 | `PORT` | `8080` | Listen port (HTTP + WebSocket) |
 | `DATA_DIR` | `./data` | World save + accounts |
 | `CLIENT_DIR` | `packages/client/dist` | Built client to serve |
+| `CONTENT_DIR` | repo-root `content/` | Content packages (flatcraft + installed mods) |
 | `SEED` | `1337` | Seed for freshly generated worlds |
 | `SERVER_NAME` | `FlatCraft` | Name shown on the login screen |
 | `OIDC_ISSUER` | - | anfall-auth issuer URL, e.g. `https://auth.anfall.net` |

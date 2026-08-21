@@ -92,7 +92,11 @@ const MIME_TYPES: Record<string, string> = {
 /** Repo-root `content/` lives 3 levels above this file whether it's
  * running unbundled (packages/dedicated/src) or as the esbuild-bundled
  * dist/server.mjs (packages/dedicated/dist) - "src"/"dist" sit at the
- * same depth, so the same relative path resolves correctly either way. */
+ * same depth, so the same relative path resolves correctly either way.
+ * That assumption breaks once server.mjs is copied somewhere else
+ * entirely (e.g. flattened straight into /app by the Docker image) -
+ * CONTENT_DIR exists precisely for that case; the Dockerfile sets it
+ * explicitly rather than relying on this fallback. */
 const here = dirname(fileURLToPath(import.meta.url));
 
 /** Every content package under contentDir (block/item/mob/... registries,
