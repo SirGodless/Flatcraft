@@ -4,11 +4,15 @@ import { Texture } from "pixi.js";
  * Sprite overrides: real image files replacing the procedural graphics.
  * Convention: sprites/<type>/<id>.png (e.g. sprites/item/golden_shovel.png,
  * sprites/block/stone.png, sprites/mob/zombie.png, sprites/entity/arrow.png),
- * listed in /sprites/manifest.json - served by
- * the dedicated server from its datapack directory, or from the static
- * public/ directory in singleplayer. Rules: PNG, 8 bit per channel,
- * dimensions a multiple of 2, at most 128x128. Missing manifest or files
- * simply mean: procedural fallback, never an error.
+ * listed in /sprites/manifest.json - served by the dedicated server from
+ * a discovered content package's own sprites/ directory (a mod's sprite
+ * override, in memory - see server.ts's contentSprites) or the repo-
+ * shipped client build, or from the static public/ directory in
+ * singleplayer. Rules: PNG, 8 bit per channel, dimensions a multiple of
+ * 2, at most 128x128. Missing manifest or files simply mean: procedural
+ * fallback, never an error (though a missing fallback too now shows a
+ * loud magenta placeholder + console warning - see textures.ts's
+ * MISSING_TEXTURE_STYLE).
  */
 export const SPRITE_OVERRIDES = new Map<string, Texture>();
 

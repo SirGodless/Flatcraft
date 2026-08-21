@@ -117,29 +117,44 @@ docker run -d -p 8080:8080 -v flatcraft-data:/data --name flatcraft flatcraft
 
 ## Datapack & modding
 
-All items, blocks and recipes are data, not code: one JSON file per
-item/block under `packages/sim/src/data/{items,blocks}/` (see
-`packages/sim/src/registry/schema.ts` for every field). Capabilities are
-optional components - `tool`, `weapon`, `food` (hunger/saturation/
-eat_ticks), `armor`, `shield`, `grapple`, `effect`, `fuel_ticks`,
-`places_block`, `enchants` - and recipes live in their result item's
-file under `recipes` (`station` + shaped/shapeless, `tag:planks`
-ingredients accept any wood). Identity is the string id everywhere;
-saves carry an id->name palette, so numeric block ids are never
-load-bearing.
+Every kind of content - blocks, items, mobs, dimensions, biomes,
+multiblocks, enchants, liquids, structures, veins, woods, nether
+layers, trades - is data, not code, validated through one generic
+content-type engine (`packages/sim/src/registry/generic.ts`) rather
+than a hand-written validator per type. Every id is namespaced
+`<package>:<type>:<name>` (e.g. `flatcraft:item:bow`); a `ref` field
+(e.g. a block's `drops.item`) is checked to actually resolve to
+something registered, exhaustively, once at boot - a broken reference
+refuses to start the server rather than failing silently in-game.
+Numeric block ids exist only as a dense in-memory/on-disk storage
+detail (a chunk's tile grid is a `Uint16Array`); saves carry an
+id->name palette, so they're never load-bearing identity.
 
-A dedicated server loads mods from `DATA_DIR/datapack/`:
+`flatcraft`'s own content lives at `content/flatcraft/` (repo root) -
+loaded through the exact same path a third-party content package would
+use, no special case for built-in content. A content package is a
+directory (or `.zip`) under `content/`:
 
 ```
-data/datapack/
+content/my_mod/
+  content.json               # { "id": "my_mod", "version": "0.1.0" }
   blocks/my_block.json
   items/my_item.json
-  sprites/block/my_block.png     # optional, else procedural fallback
+  sprites/block/my_block.png  # optional, else procedural fallback
   sprites/item/my_item.png
+  scripts/main.ts             # optional - see below
 ```
 
-Mod content gets dynamic block ids, is served to every client via
-`/api/datapack` on join, and its sprites via `/sprites/`.
+A content package's data is served to every connecting client via
+`/api/content` on join (already parsed, so the client never needs its
+own JSON-schema-shaped parser), and its sprites via `/sprites/`.
+`scripts/*.ts` files run server-side in a real V8 isolate
+(`isolated-vm`) and register content/behavior through the same engine
+APIs a JSON file would use; the already-compiled JS is then served to
+connecting clients too (`/api/scripts`), which run it in a Worker
+nested inside a sandboxed, opaque-origin iframe (no DOM/cookie/storage
+access, no network) - see `packages/dedicated/src/sandbox.ts` and
+`packages/client/src/sandbox/` for the full story.
 
 **Sprites** normally live in the repo:
 `packages/client/public/sprites/<type>/<id>.png` (e.g.
@@ -147,10 +162,11 @@ Mod content gets dynamic block ids, is served to every client via
 Commit the PNG, rebuild/redeploy, done - the manifest is generated
 automatically and the dedicated server ships them to every client.
 Rules: PNG, 8 bit per channel, dimensions a multiple of 2, at most
-128x128; broken files are skipped with a console warning and the
-procedural art remains. Server-datapack sprites
-(`DATA_DIR/datapack/sprites/`) work the same way and win over the repo
-versions.
+128x128; a block/item/mob with neither a real sprite nor a declared
+procedural fallback shows a loud magenta missing-texture placeholder
+and logs a console warning, rather than silently guessing. A content
+package's own `sprites/<type>/<id>.png` works the same way and wins
+over the repo version.
 
 ## Behind an Apache reverse proxy
 
