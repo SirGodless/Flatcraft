@@ -366,9 +366,9 @@ function validateFieldValue(decl: FieldDecl, raw: unknown, source: string, path:
 }
 
 /** Validate one instance of an already-registered content type, returning
- * a plain validated object - the generic replacement for calling e.g.
- * `validateBlockJson` directly, for any type declared through
- * registerContentType instead of hand-written TS. */
+ * a plain validated object - the generic replacement for a hand-written
+ * per-type validator, for any type declared through registerContentType
+ * instead of hand-written TS. */
 export function validateContentInstance(typeId: string, raw: unknown, source: string): Record<string, unknown> {
   const decl = TYPES.get(typeId);
   if (!decl) throw new Error(`content type "${typeId}" is not registered (validating "${source}")`);
