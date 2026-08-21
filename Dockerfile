@@ -25,7 +25,10 @@ RUN npm run build
 # which means they have to physically exist as real packages at runtime
 # instead - copied here from the build stage rather than reinstalled, so
 # the already-compiled/-fetched binaries (matched to this exact base
-# image) come along unchanged.
+# image) come along unchanged. node-gyp-build is isolated-vm's own only
+# runtime dependency (it locates isolated-vm's compiled .node binary at
+# require time) - esbuild has none beyond the @esbuild/<platform> package
+# already copied alongside it.
 FROM node:22-alpine
 ENV NODE_ENV=production \
     PORT=8080 \
@@ -33,6 +36,7 @@ ENV NODE_ENV=production \
     CLIENT_DIR=/app/client
 WORKDIR /app
 COPY --from=build /app/node_modules/isolated-vm ./node_modules/isolated-vm
+COPY --from=build /app/node_modules/node-gyp-build ./node_modules/node-gyp-build
 COPY --from=build /app/node_modules/esbuild ./node_modules/esbuild
 COPY --from=build /app/node_modules/@esbuild ./node_modules/@esbuild
 COPY --from=build /app/packages/dedicated/dist/server.mjs ./server.mjs
