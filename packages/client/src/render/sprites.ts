@@ -9,10 +9,13 @@ import { Texture } from "pixi.js";
  * override, in memory - see server.ts's contentSprites) or the repo-
  * shipped client build, or from the static public/ directory in
  * singleplayer. Rules: PNG, 8 bit per channel, dimensions a multiple of
- * 2, at most 128x128. Missing manifest or files simply mean: procedural
- * fallback, never an error (though a missing fallback too now shows a
- * loud magenta placeholder + console warning - see textures.ts's
- * MISSING_TEXTURE_STYLE).
+ * 2 (odd dimensions put pixel-art rows/columns at a half-pixel offset
+ * once nearest-neighbor-scaled to a tile size that's itself even - a
+ * real, visible seam/blur, not just a style nitpick) - no upper size
+ * limit, no required aspect ratio. Missing manifest or files simply
+ * mean: procedural fallback, never an error (though a missing fallback
+ * too now shows a loud magenta placeholder + console warning - see
+ * textures.ts's MISSING_TEXTURE_STYLE).
  */
 export const SPRITE_OVERRIDES = new Map<string, Texture>();
 
@@ -41,14 +44,8 @@ export async function loadSpriteOverrides(): Promise<void> {
         const image = new Image();
         image.src = `/sprites/${entry}`;
         await image.decode();
-        if (
-          image.width === 0 ||
-          image.width % 2 !== 0 ||
-          image.height % 2 !== 0 ||
-          image.width > 128 ||
-          image.height > 128
-        ) {
-          console.warn(`sprite ${entry}: dimensions must be multiples of 2, max 128x128 - skipped`);
+        if (image.width === 0 || image.width % 2 !== 0 || image.height % 2 !== 0) {
+          console.warn(`sprite ${entry}: dimensions must be multiples of 2 - skipped`);
           return;
         }
         const texture = Texture.from(image);
