@@ -18,7 +18,7 @@ import {
   type SlotRef,
 } from "@flatcraft/sim";
 import { hexToNumber } from "./color.js";
-import { itemTexture } from "./icons.js";
+import { fitIconSprite, itemTexture } from "./icons.js";
 
 const SLOT = 40;
 const PAD = 4;
@@ -91,9 +91,8 @@ function slotWidget(
     const texture = itemTexture(stack.item, blockTextures);
     if (texture) {
       const sprite = new Sprite(texture);
-      sprite.width = ICON;
-      sprite.height = ICON;
-      sprite.position.set((SLOT - ICON) / 2, (SLOT - ICON) / 2);
+      fitIconSprite(sprite, ICON);
+      sprite.position.set(SLOT / 2, SLOT / 2);
       const tint = liquidTint(stack);
       if (tint !== undefined) sprite.tint = tint;
       else if (stack.ench?.length) sprite.tint = 0xccaaff; // enchanted shimmer
@@ -139,8 +138,8 @@ export function cursorWidget(stack: ItemStack, blockTextures: Map<BlockId, Textu
   const texture = itemTexture(stack.item, blockTextures);
   if (texture) {
     const sprite = new Sprite(texture);
-    sprite.width = ICON;
-    sprite.height = ICON;
+    fitIconSprite(sprite, ICON);
+    sprite.position.set(ICON / 2, ICON / 2);
     const tint = liquidTint(stack);
     if (tint !== undefined) sprite.tint = tint;
     cell.addChild(sprite);
@@ -597,9 +596,8 @@ export class CraftingPanelUI {
     const resultTexture = itemTexture(recipe.result.item, this.blockTextures);
     if (resultTexture) {
       const icon = new Sprite(resultTexture);
-      icon.width = 18;
-      icon.height = 18;
-      icon.position.set(3, (height - 3 - 18) / 2);
+      fitIconSprite(icon, 18);
+      icon.position.set(3 + 9, (height - 3) / 2);
       row.addChild(icon);
     }
 
@@ -793,9 +791,8 @@ export class TradePanelUI {
         const texture = itemTexture(stack.item, this.blockTextures);
         if (texture) {
           const icon = new Sprite(texture);
-          icon.width = 18;
-          icon.height = 18;
-          icon.position.set(4 + i * 150, 3);
+          fitIconSprite(icon, 18);
+          icon.position.set(4 + i * 150 + 9, 3 + 9);
           row.addChild(icon);
         }
       }

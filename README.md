@@ -161,13 +161,19 @@ access, no network) - see `packages/dedicated/src/sandbox.ts` and
 `item/golden_shovel.png`, `block/stone.png` to re-skin a built-in).
 Commit the PNG, rebuild/redeploy, done - the manifest is generated
 automatically and the dedicated server ships them to every client.
-Rules: PNG, 8 bit per channel, dimensions a multiple of 2 (no upper
-size limit, no required aspect ratio); a block/item/mob with neither a
-real sprite nor a declared procedural fallback shows a loud magenta
-missing-texture placeholder and logs a console warning, rather than
-silently guessing. A content
-package's own `sprites/<type>/<id>.png` works the same way and wins
-over the repo version.
+Rules: PNG, 8 bit per channel, dimensions a multiple of 2, no upper
+size limit. Item/mob/entity sprites may use any aspect ratio - they're
+rendered as free-standing icons/entities, fit to size rather than
+stretched (e.g. a tall-and-narrow spear icon stays tall and narrow).
+Block sprites must stay square and exactly `TILE_PX`x`TILE_PX`, since
+they're tiled pixel-for-pixel onto the world grid - a mismatched block
+sprite logs a console warning at load time instead of silently
+misaligning in-game. Separately, a block/item/mob with neither a real
+sprite nor a declared procedural fallback shows a loud magenta
+missing-texture placeholder and logs its own console warning, rather
+than silently guessing. A content package's own
+`sprites/<type>/<id>.png` works the same way and wins over the repo
+version.
 
 ## Behind an Apache reverse proxy
 

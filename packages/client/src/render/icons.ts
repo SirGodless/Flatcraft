@@ -1,4 +1,4 @@
-import { Texture } from "pixi.js";
+import { Sprite, Texture } from "pixi.js";
 import { BlockId, hash01, itemDef, localName, type ItemFallbackJson } from "@flatcraft/sim";
 import { spriteKey, SPRITE_OVERRIDES } from "./sprites.js";
 import { TILE_PX } from "./textures.js";
@@ -75,4 +75,22 @@ export function itemTexture(item: string, blockTextures: Map<BlockId, Texture>, 
   }
   if (texture) cache.set(cacheKey, texture);
   return texture;
+}
+
+/**
+ * Sizes an item icon sprite to fit within a box×box square, preserving
+ * its native aspect ratio (like CSS `object-fit: contain`) instead of
+ * stretching - a spear sprite drawn tall-and-narrow stays tall-and-narrow.
+ * Unlike blocks (pixel-exact to TILE_PX for world tile-grid alignment,
+ * see worldView.ts's bake()), item icons are free-standing UI/world
+ * sprites with no grid constraint, so this is safe for any aspect ratio.
+ * Centers the sprite via a centered anchor - callers position by the
+ * box's center, not its top-left corner.
+ */
+export function fitIconSprite(sprite: Sprite, box: number): void {
+  const tex = sprite.texture;
+  const scale = box / Math.max(tex.width, tex.height);
+  sprite.width = tex.width * scale;
+  sprite.height = tex.height * scale;
+  sprite.anchor.set(0.5, 0.5);
 }

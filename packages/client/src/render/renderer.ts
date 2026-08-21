@@ -24,7 +24,7 @@ import {
 import { Camera } from "./camera.js";
 import { hexToNumber } from "./color.js";
 import { FogOfWar } from "./fog.js";
-import { itemTexture } from "./icons.js";
+import { fitIconSprite, itemTexture } from "./icons.js";
 import { entityAnimationStates, entityTexture } from "./entitySprites.js";
 import { createShaderEffect, type ShaderEffect } from "./shaders.js";
 import { blockAnimationClip, createBlockTextures, createBlockTextureVariants, type BlockAnimationClip, TILE_PX } from "./textures.js";
@@ -870,10 +870,8 @@ export class Renderer {
     const texture = itemTexture(item, this.blockTextures);
     if (!texture) return null;
     const sprite = new Sprite(texture);
-    sprite.anchor.set(0.5, 0.5);
     const size = TILE_PX * 0.55;
-    sprite.width = size;
-    sprite.height = size;
+    fitIconSprite(sprite, size);
     const bodyWidth = PLAYER_WIDTH * TILE_PX;
     const handY = PLAYER_HEIGHT * TILE_PX * 0.42;
     sprite.position.set(onRightSide ? bodyWidth + size * 0.4 : -size * 0.4, handY);
@@ -922,8 +920,9 @@ export class Renderer {
       const texture = itemTexture(stack.item, this.blockTextures, entityId);
       if (texture) {
         const sprite = new Sprite(texture);
-        sprite.width = TILE_PX * 0.5;
-        sprite.height = TILE_PX * 0.5;
+        const box = TILE_PX * 0.5;
+        fitIconSprite(sprite, box);
+        sprite.position.set(box / 2, box / 2);
         const tint = liquidTint(stack);
         if (tint !== undefined) sprite.tint = tint;
         container.addChild(sprite);
